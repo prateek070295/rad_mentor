@@ -7,13 +7,13 @@ import { getAuth } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyC42Uoy5G1dUsBsXgqF26j0SLnuIk_JvWw",
-  authDomain: "radmentor-app.firebaseapp.com",
-  projectId: "radmentor-app",
-  storageBucket: "radmentor-app.appspot.com", // Corrected storage bucket domain
-  messagingSenderId: "544597624961",
-  appId: "1:544597624961:web:ce072a54b46aa1a3972580",
-  measurementId: "G-0F7QQ0FP0E"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
