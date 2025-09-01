@@ -80,9 +80,12 @@ const SetupWizard = ({ organSystems, onFinish, onSkip }) => {
     const handleBackStep = () => setupStep > 1 && setSetupStep(prev => prev - 1);
     const handleRatingChange = (systemName, rating) => setConfidenceRatings(prev => ({ ...prev, [systemName]: rating }));
 
-    const selectedDuration = daysBetween(startDate, examDate);
+    // Calculate the actual number of STUDY days, excluding the exam date.
+    const selectedDuration = (startDate && examDate) ? daysBetween(startDate, examDate) - 1 : 0;
+
     let durationFeedback = { text: '', color: 'text-gray-600' };
     if (examDate && startDate) {
+        // Now compare the actual study days against the requirements
         if (selectedDuration < totalMinDays) {
             durationFeedback = { text: 'Insufficient time for must-know topics.', color: 'text-red-600' };
         } else if (selectedDuration < totalIdealDays) {
