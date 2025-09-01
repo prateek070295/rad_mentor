@@ -27,6 +27,9 @@ const SetupWizard = ({ organSystems, onFinish, onSkip }) => {
     const [totalMinDays, setTotalMinDays] = useState(0);
     const [totalIdealDays, setTotalIdealDays] = useState(0);
 
+    // This state now lives in the wizard to manage the initial configuration
+    const [organSystemConfig, setOrganSystemConfig] = useState([]);
+
     useEffect(() => {
         const fetchWizardInfo = async () => {
             setIsLoadingWizardInfo(true);
@@ -46,6 +49,8 @@ const SetupWizard = ({ organSystems, onFinish, onSkip }) => {
                 info.push({ ...system, mustKnowCount });
             }
             setWizardSystemInfo(info);
+            // Initialize the local config with all system data
+            setOrganSystemConfig(info.map(sys => ({ id: sys.id, name: sys.name, days: sys.defaultDays, defaultDays: sys.defaultDays })));
             
             const minDays = info.reduce((acc, system) => acc + Math.ceil(system.mustKnowCount / maxChaptersPerDay), 0);
             const idealDays = info.reduce((acc, system) => acc + system.defaultDays, 0);
@@ -67,9 +72,9 @@ const SetupWizard = ({ organSystems, onFinish, onSkip }) => {
                 alert("Please select a valid start and exam date.");
                 return;
             }
-            // Final step: pass all collected data back to the parent
-            setSetupStep(3); // Show spinner
-            onFinish({ startDate, examDate, confidenceRatings, maxChaptersPerDay });
+            setSetupStep(3);
+            // Pass the complete config from the wizard's state
+            onFinish({ startDate, examDate, confidenceRatings, maxChaptersPerDay, organSystemConfig });
         }
     };
     const handleBackStep = () => setupStep > 1 && setSetupStep(prev => prev - 1);

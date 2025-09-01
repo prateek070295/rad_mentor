@@ -75,11 +75,11 @@ const PlanTab = ({ organSystems }) => {
 
   // --- Handlers ---
   const handleCreatePlan = async (wizardData) => {
-    const { startDate, examDate, confidenceRatings, maxChaptersPerDay: wizardMaxChapters } = wizardData;
-    if (!user || !studyPlan) return;
+    const { startDate, examDate, confidenceRatings, maxChaptersPerDay: wizardMaxChapters, organSystemConfig: wizardConfig } = wizardData;
+    if (!user) return;
     
-    // FIXED: Use the organSystemConfig from this component's state, not from wizardData.
-    const planDetails = { startDate, examDate, organSystemConfig: studyPlan.organSystemConfig, maxChaptersPerDay: wizardMaxChapters };
+    // Use the config directly from the wizard
+    const planDetails = { startDate, examDate, organSystemConfig: wizardConfig, maxChaptersPerDay: wizardMaxChapters };
     const result = await generateSchedule(planDetails);
     
     if (!result) { 

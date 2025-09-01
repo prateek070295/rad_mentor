@@ -37,7 +37,7 @@ export const daysBetween = (start, end) => {
     const endDate = new Date(`${end}T00:00:00`);
     if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return 0;
     const diffTime = Math.abs(endDate - startDate);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
 };
 
 // --- The main intelligent scheduling algorithm ---
