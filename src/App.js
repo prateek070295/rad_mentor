@@ -1,59 +1,179 @@
-import React, { useState } from 'react';
-// IMPORTANT: Please ensure a file named 'Dashboard.jsx' exists in your 'src/components' folder.
-import Dashboard from './components/Dashboard'; 
-// IMPORTANT: Please ensure a file named 'PlanTab.jsx' exists in your 'src/components' folder.
-import PlanTab from './components/PlanTab';     
-// IMPORTANT: Please ensure a file named 'LearnTab.jsx' exists in your 'src/components' folder.
-import LearnTab from './components/LearnTab'; 
-// IMPORTANT: Please ensure a file named 'TestTab.jsx' exists in your 'src/components' folder.
-import TestTab from './components/TestTab';
+import React, { useState, useEffect } from 'react';
+// --- Firebase Imports ---
+import { db, auth } from './firebase'; 
+import { collection, getDocs, query, orderBy, doc, where, onSnapshot } from 'firebase/firestore'; 
+import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 
+// --- Component Imports ---
+import Dashboard from './components/Dashboard'; 
+import PlanTab from './components/PlanTab';     
+import LearnTab from './components/LearnTab'; 
+import TestTab from './components/TestTab';
 import appLogo from './assets/images/logo 1.PNG';
 
-// Main App component which acts as the entry point for our UI
+// Helper function to get today's date in YYYY-MM-DD format
+const getLocalDate = () => {
+    const todayDate = new Date();
+    const year = todayDate.getFullYear();
+    const month = String(todayDate.getMonth() + 1).padStart(2, '0');
+    const day = String(todayDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+// Helper function to calculate days between two date strings
+const daysBetween = (start, end) => {
+    const startDate = new Date(`${start}T00:00:00`);
+    const endDate = new Date(`${end}T00:00:00`);
+    if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return 'N/A';
+    const diffTime = Math.abs(endDate - startDate);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [showPlanSetup, setShowPlanSetup] = useState(true);
+  
+  const [organSystems, setOrganSystems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const userName = "Dr. Pranoti";
-  const todayFocus = "CNS: Ischemic Stroke & Hemorrhage";
-  const syllabusCompletion = 35;
-  const testScores = [80, 75, 85, 90, 82, 88];
-  const topTopics = ["Breast", "MSK", "GIT"];
-  const bottomTopics = ["Neuroradiology", "Physics", "Cardiac"];
-  const daysUntilExam = 124;
-  const daysUntilWeeklyTest = 5;
+  // --- State for all dashboard-related data ---
+  const [dashboardData, setDashboardData] = useState({
+    userName: "User",
+    todayFocus: "No topic scheduled for today.",
+    syllabusCompletion: 0, // Default to 0
+    testScores: [80, 75, 85, 90, 82, 88], // Placeholder
+    topTopics: ["Breast", "MSK", "GIT"], // Placeholder
+    bottomTopics: ["Neuroradiology", "Physics", "Cardiac"], // Placeholder
+    daysUntilExam: 'N/A',
+    daysUntilWeeklyTest: 5, // Placeholder
+  });
 
-  const organSystems = [
-    "CNS", "GIT", "MSK", "Cardiovascular", "Respiratory",
-    "Genitourinary", "Endocrine", "Breast", "Pediatric", "Physics"
-  ];
+  // --- TEMPORARY: AUTO-LOGIN FOR TESTING ---
+  useEffect(() => {
+    const autoLogin = async () => {
+      try {
+        await signInWithEmailAndPassword(auth, "test@test.com", "123456");
+        console.log("Auto-login successful for testing!");
+      } catch (error) {
+        // This is expected if already logged in, so we can ignore the error.
+      }
+    };
+    autoLogin();
+  }, []);
+
+  // --- Main Data Fetching Effect ---
+  useEffect(() => {
+    let planUnsubscribe = null; 
+
+    const authUnsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (planUnsubscribe) {
+        planUnsubscribe(); 
+      }
+
+      if (user) {
+        try {
+          const sectionsCollectionRef = collection(db, 'sections');
+          const sectionsQuery = query(sectionsCollectionRef, orderBy("title"));
+          const sectionsSnapshot = await getDocs(sectionsQuery);
+
+          const systemsList = [];
+          for (const sectionDoc of sectionsSnapshot.docs) {
+            const sectionData = sectionDoc.data();
+            const nodesRef = collection(db, 'sections', sectionDoc.id, 'nodes');
+            const chaptersQuery = query(nodesRef, where("parentId", "==", null));
+            const chaptersSnapshot = await getDocs(chaptersQuery);
+            
+            systemsList.push({
+              id: sectionDoc.id,
+              name: sectionData.title,
+              defaultDays: chaptersSnapshot.size
+            });
+          }
+          setOrganSystems(systemsList);
+
+          const planRef = doc(db, 'plans', user.uid);
+          planUnsubscribe = onSnapshot(planRef, (planSnap) => {
+            // Use a functional update to ensure we have the latest state
+            setDashboardData(currentDashboardData => {
+                let newDashboardData = { ...currentDashboardData, userName: user.displayName || "Dr. Test" };
+
+                if (planSnap.exists()) {
+                    const planData = planSnap.data();
+                    const today = getLocalDate();
+
+                    if (planData.examDate) {
+                        newDashboardData.daysUntilExam = daysBetween(today, planData.examDate);
+                    }
+                    if (planData.schedule && planData.schedule[today]) {
+                        newDashboardData.todayFocus = planData.schedule[today].topic;
+                    } else {
+                        newDashboardData.todayFocus = "No topic scheduled for today.";
+                    }
+
+                    // --- REAL-TIME SYLLABUS COMPLETION ---
+                    if (planData.schedule) {
+                        const schedule = planData.schedule;
+                        const totalTopics = Object.keys(schedule).length;
+                        const completedTopics = Object.values(schedule).filter(day => day.completed).length;
+                        
+                        if (totalTopics > 0) {
+                            newDashboardData.syllabusCompletion = Math.round((completedTopics / totalTopics) * 100);
+                        } else {
+                            newDashboardData.syllabusCompletion = 0;
+                        }
+                    } else {
+                        newDashboardData.syllabusCompletion = 0;
+                    }
+
+                } else {
+                    newDashboardData.todayFocus = "No plan created yet.";
+                    newDashboardData.daysUntilExam = 'N/A';
+                    newDashboardData.syllabusCompletion = 0;
+                }
+                return newDashboardData;
+            });
+          });
+
+        } catch (error) {
+          console.error("Failed to fetch user data:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setIsLoading(false);
+        setDashboardData({
+            userName: "User",
+            todayFocus: "Please log in.",
+            daysUntilExam: 'N/A',
+            syllabusCompletion: 0,
+            testScores: [80, 75, 85, 90, 82, 88],
+            topTopics: ["Breast", "MSK", "GIT"],
+            bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
+            daysUntilWeeklyTest: 5,
+        });
+      }
+    });
+
+    return () => {
+      authUnsubscribe();
+      if (planUnsubscribe) {
+        planUnsubscribe();
+      }
+    };
+  }, []);
 
   const renderContent = () => {
+    if (isLoading) {
+      return <div className="text-center p-10">Loading Rad Mentor...</div>;
+    }
+
     switch (activeTab) {
       case 'dashboard':
-        return (
-          <Dashboard
-            userName={userName}
-            todayFocus={todayFocus}
-            syllabusCompletion={syllabusCompletion}
-            testScores={testScores}
-            topTopics={topTopics}
-            bottomTopics={bottomTopics}
-            daysUntilExam={daysUntilExam}
-            daysUntilWeeklyTest={daysUntilWeeklyTest}
-          />
-        );
+        return <Dashboard {...dashboardData} />;
       case 'plan':
-        return (
-          <PlanTab
-            showSetup={showPlanSetup}
-            setShowSetup={setShowPlanSetup}
-            organSystems={organSystems}
-          />
-        );
+        return <PlanTab organSystems={organSystems} />;
       case 'learn':
-        return <LearnTab todayFocus={todayFocus} />;
+        return <LearnTab todayFocus={dashboardData.todayFocus} />;
       case 'test':
         return <TestTab />;
       default:
@@ -109,3 +229,4 @@ function App() {
 }
 
 export default App;
+
