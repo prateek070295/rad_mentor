@@ -9,6 +9,8 @@ import Dashboard from './components/Dashboard';
 import PlanTab from './components/PlanTab';     
 import LearnTab from './components/LearnTab'; 
 import TestTab from './components/TestTab';
+import AdminPanel from './components/AdminPanel';
+import PreviewPage from './components/PreviewPage'; // Import the new PreviewPage component
 import appLogo from './assets/images/logo 1.PNG';
 
 // Helper function to get today's date in YYYY-MM-DD format
@@ -162,6 +164,15 @@ function App() {
     };
   }, []);
 
+  // --- NEW: Check the URL to decide what to render ---
+  const isPreviewPage = window.location.pathname === '/preview';
+
+  // If we're on the preview page, render only that component
+  if (isPreviewPage) {
+    return <PreviewPage />;
+  }
+
+  // Otherwise, render the main application
   const renderContent = () => {
     if (isLoading) {
       return <div className="text-center p-10">Loading Rad Mentor...</div>;
@@ -176,6 +187,8 @@ function App() {
         return <LearnTab todayFocus={dashboardData.todayFocus} />;
       case 'test':
         return <TestTab />;
+      case 'admin':
+        return <AdminPanel />; 
       default:
         return null;
     }
@@ -214,6 +227,12 @@ function App() {
             >
               Test
             </button>
+            <button
+              className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+              onClick={() => setActiveTab('admin')}
+            >
+            Admin
+            </button>
           </nav>
           <div className="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-800 font-semibold text-lg">
             S
@@ -229,4 +248,3 @@ function App() {
 }
 
 export default App;
-
