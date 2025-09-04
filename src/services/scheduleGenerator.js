@@ -43,6 +43,10 @@ export const daysBetween = (start, end) => {
 // --- The main intelligent scheduling algorithm ---
 export const generateSchedule = async (planDetails) => {
     const { startDate, examDate, organSystemConfig, maxChaptersPerDay } = planDetails;
+    // If planDetails has a schedule, it's an update.
+    // We only redistribute surplus days on the initial creation.
+    const isUpdate = !!planDetails.schedule;
+    const redistributeSurplus = !isUpdate;
     const messages = [];
     let schedule = {};
     const updatedConfig = JSON.parse(JSON.stringify(organSystemConfig));
@@ -73,7 +77,7 @@ export const generateSchedule = async (planDetails) => {
         const chaptersSnapshot = await getDocs(chaptersQuery);
         const chapters = chaptersSnapshot.docs.map(d => ({...d.data(), category: normalizeCategory(d.data().category)}));
         const defaultDays = system.defaultDays ?? system.days ?? chapters.length;
-        const locked = Number.isFinite(system.days) && system.days !== defaultDays;
+        const locked = isUpdate || system.userLocked === true;
         sectionsData.push({ ...system, id: systemId, chapters, defaultDays, locked, lockedDays: system.days });
     }
 
@@ -105,7 +109,7 @@ export const generateSchedule = async (planDetails) => {
     } else if (freeDays >= sumDefaultUnlocked) { 
         unlockedSections.forEach(s => finalBudgets[s.id] = s.defaultDays);
         let surplusDays = freeDays - sumDefaultUnlocked;
-        if(surplusDays > 0) {
+        if(surplusDays > 0 && redistributeSurplus) { // Add the '&& redistributeSurplus' check
             let scaled = unlockedSections.map(s => ({
                 id: s.id,
                 rawShare: surplusDays * (s.defaultDays / sumDefaultUnlocked),
