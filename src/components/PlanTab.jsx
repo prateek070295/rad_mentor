@@ -137,7 +137,8 @@ const PlanTab = ({ organSystems }) => {
     }
     
     const updatedConfig = studyPlan.organSystemConfig.map(system => 
-      system.name === systemName ? { ...system, days: newDays } : system
+      // Add the userLocked flag here
+      system.name === systemName ? { ...system, days: newDays, userLocked: true } : system
     );
     setStudyPlan(prev => ({...prev, organSystemConfig: updatedConfig}));
   };
