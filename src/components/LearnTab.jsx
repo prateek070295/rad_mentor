@@ -1,129 +1,348 @@
-// src/components/LearnTab.jsx
+import React from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { db, auth } from '../firebase';
+import { collection, doc, getDoc, addDoc, serverTimestamp, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import ReactMarkdown from 'react-markdown';
+import TopicNode from './TopicNode';
+import ContentDisplay from './ContentDisplay';
+import Modal from './Modal';
 
-import React, { useState, useEffect } from 'react';
-// ADDED: Imports for Firebase
-import { db } from '../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+const buildTopicTree = (topics, chapterTopicId) => {
+    const nodeMap = new Map();
+    const tree = [];
+    for (const topic of topics) {
+        topic.children = [];
+        nodeMap.set(topic.topicId, topic);
+    }
+    for (const topic of topics) {
+        if (topic.parentId && topic.parentId !== chapterTopicId && nodeMap.has(topic.parentId)) {
+            nodeMap.get(topic.parentId).children.push(topic);
+        } else {
+            tree.push(topic);
+        }
+    }
+    return tree;
+};
 
-const LearnTab = ({ todayFocus }) => {
-  // --- EXISTING STATE ---
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
-  // ... (all your other existing states)
-  const [chatHistory, setChatHistory] = useState([
-    { role: 'assistant', content: "Hi! I'm Med42, your AI mentor. I'm ready to help you with today's topic!" },
-  ]);
+const LearnTab = ({ todayFocus, userName }) => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [currentChapter, setCurrentChapter] = useState(null);
+  const [chapterTopics, setChapterTopics] = useState([]);
+  const [currentTopic, setCurrentTopic] = useState(null);
+  const [studyMaterial, setStudyMaterial] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isMentorTyping, setIsMentorTyping] = useState(false);
+  const [isLessonComplete, setIsLessonComplete] = useState(false);
+  const chatEndRef = useRef(null);
 
-  // --- ADDED: STATE FOR DYNAMIC CONTENT ---
-  const [topicContent, setTopicContent] = useState({ studyMaterial: '', flashcards: [] });
-  const [isLoadingContent, setIsLoadingContent] = useState(true);
-  const [contentError, setContentError] = useState(null);
+  const parseFocusString = (fullFocusString) => {
+    if (!fullFocusString) return null;
+    const parts = fullFocusString.split(':');
+    if (parts.length < 2) return null;
+    const sectionName = parts[0].trim();
+    const topicWithDay = parts.slice(1).join(':').trim();
+    const chapterName = topicWithDay.replace(/\(Day \d+ of \d+\)/, '').trim();
+    return { sectionName, chapterName };
+  };
 
-
-  // --- ADDED: useEffect TO FETCH DYNAMIC CONTENT FROM FIRESTORE ---
   useEffect(() => {
-    if (!todayFocus) return;
-
-    const fetchTopicContent = async () => {
-      setIsLoadingContent(true);
-      setContentError(null);
+    const focusData = parseFocusString(todayFocus);
+    if (!focusData) {
+      setIsLoading(false);
+      setChapterTopics([]);
+      setCurrentChapter({ name: "No Topic Scheduled" });
+      setCurrentTopic(null);
+      return;
+    }
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        // We need to map the 'todayFocus' string to a document.
-        // This example assumes the main system is before the colon (e.g., "CNS: ...").
-        // You might need to adjust this logic based on your exact topic names.
-        const topicPrefix = todayFocus.split(':')[0].trim(); // e.g., "CNS"
-        
-        // This query is an example. You may need a more robust way to map topics to documents.
         const sectionsRef = collection(db, 'sections');
-        const q = query(sectionsRef, where("shortName", "==", topicPrefix.toLowerCase()));
-        
-        const querySnapshot = await getDocs(q);
+        const sectionQuery = query(sectionsRef, where("title", "==", focusData.sectionName));
+        const sectionSnapshot = await getDocs(sectionQuery);
+        if (sectionSnapshot.empty) throw new Error(`Section "${focusData.sectionName}" not found.`);
+        const sectionDoc = sectionSnapshot.docs[0];
+        const sectionId = sectionDoc.id;
 
-        if (querySnapshot.empty) {
-          throw new Error(`No study material found for the topic prefix: "${topicPrefix}".`);
+        const nodesRef = collection(db, 'sections', sectionId, 'nodes');
+        const chapterQuery = query(nodesRef, where("name", "==", focusData.chapterName), where("parentId", "==", null));
+        const chapterSnapshot = await getDocs(chapterQuery);
+        if (chapterSnapshot.empty) throw new Error(`Chapter "${focusData.chapterName}" not found.`);
+        const chapterDoc = chapterSnapshot.docs[0];
+        const chapterData = chapterDoc.data();
+        setCurrentChapter(chapterData);
+
+        const allTopicsQuery = query(nodesRef, where("parentId", "!=", null), orderBy("order"));
+        const allTopicsSnapshot = await getDocs(allTopicsQuery);
+        const descendantTopics = allTopicsSnapshot.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(topic => topic.path && topic.path.includes(focusData.chapterName));
+
+        if (descendantTopics.length === 0) {
+            setChapterTopics([]);
+            setStudyMaterial(null);
+            setIsLoading(false);
+            return;
         }
 
-        // Assuming the first match is the correct one
-        const docData = querySnapshot.docs[0].data();
+        const topicTree = buildTopicTree(descendantTopics, chapterData.topicId);
+        setChapterTopics(topicTree);
         
-        setTopicContent({
-          studyMaterial: docData.mainContent || `No study material available for ${todayFocus}.`,
-          flashcards: docData.flashcards || []
-        });
+        const initialTopic = descendantTopics[0];
+        setCurrentTopic(initialTopic);
 
-      } catch (error) {
-        console.error("Error fetching topic content:", error);
-        setContentError(error.message);
+        const materialDocRef = doc(db, 'sections', sectionId, 'nodes', initialTopic.id);
+        const materialDocSnap = await getDoc(materialDocRef);
+        if (materialDocSnap.exists()) {
+            setStudyMaterial(materialDocSnap.data().mainContent || null);
+        }
+
+        if (auth.currentUser) {
+            const historyQuery = query(
+                collection(db, "chatHistories"),
+                where("userId", "==", auth.currentUser.uid),
+                where("topicId", "==", initialTopic.topicId),
+                orderBy("completedAt", "desc"),
+                limit(1)
+            );
+            const historySnapshot = await getDocs(historyQuery);
+
+            if (!historySnapshot.empty) {
+                setChatHistory(historySnapshot.docs[0].data().history);
+            } else {
+                const greeting = `Hello ${userName || 'Dr.'}, ready to learn about ${initialTopic.name}?`;
+                setChatHistory([{ role: 'assistant', content: greeting }]);
+            }
+        }
+        setIsLessonComplete(false);
+
+      } catch (err) {
+        console.error("Failed to fetch chapter data:", err);
+        setError(err.message);
       } finally {
-        setIsLoadingContent(false);
+        setIsLoading(false);
       }
     };
+    fetchAllData();
+  }, [todayFocus, userName]);
+  
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, isMentorTyping]);
 
-    fetchTopicContent();
-  }, [todayFocus]); // This hook re-runs whenever the todayFocus prop changes
-
-
-  // --- All your other functions (`handleChatInputSubmit`, `generateQuiz`, etc.) go here ---
-  // You just need to make ONE change inside them:
-
-  const generateQuiz = async (numQuestions = 5) => {
-    // ... (your existing setup logic)
-    try {
-      // CHANGED: Use the dynamic topicContent from state instead of hardcoded data
-      const quizPrompt = `
-        You are a helpful assistant. Generate a set of ${numQuestions} multiple-choice questions based on the following study material. 
-        ...
-        Study Material:
-        ${topicContent.studyMaterial} 
-
-        Flashcard Content:
-        ${topicContent.flashcards.map(card => `Q: ${card.question}\nA: ${card.answer}`).join('\n')}
-        ...
-      `;
-      // ... (the rest of your generateQuiz function)
-    } catch (error) {
-      // ...
+  const handleTopicClick = async (topic) => {
+    if (currentTopic?.id === topic.id) return;
+    
+    setIsLoading(true);
+    setCurrentTopic(topic);
+    setStudyMaterial(null);
+    const sectionId = topic.path[0];
+    const materialDocRef = doc(db, 'sections', sectionId, 'nodes', topic.id);
+    const materialDocSnap = await getDoc(materialDocRef);
+    if (materialDocSnap.exists()) {
+        setStudyMaterial(materialDocSnap.data().mainContent || null);
+    } else {
+        setStudyMaterial(null);
     }
+    
+    if (auth.currentUser) {
+        const historyQuery = query(
+            collection(db, "chatHistories"),
+            where("userId", "==", auth.currentUser.uid),
+            where("topicId", "==", topic.topicId),
+            orderBy("completedAt", "desc"),
+            limit(1)
+        );
+        const historySnapshot = await getDocs(historyQuery);
+        if (!historySnapshot.empty) {
+            setChatHistory(historySnapshot.docs[0].data().history);
+        } else {
+            const greeting = `Hello ${userName || 'Dr.'}, ready to learn about ${topic.name}?`;
+            setChatHistory([{ role: 'assistant', content: greeting }]);
+        }
+    }
+    setIsLessonComplete(false);
+    setIsLoading(false);
   };
 
   const handleChatInputSubmit = async (e) => {
-    // ...
+    e.preventDefault();
+    if (!chatInput.trim() || isMentorTyping) return;
+
+    const newUserMessage = { role: 'user', content: chatInput };
+    const newChatHistory = [...chatHistory, newUserMessage];
+    setChatHistory(newChatHistory);
+    setChatInput('');
+    setIsMentorTyping(true);
+
     try {
-      // CHANGED: Use the dynamic topicContent from state
-      const systemPrompt = `
-        You are a medical mentor chatbot named Med42, specializing in radiology. Your user is studying the topic: "${todayFocus}".
-        
-        Here is the study material for reference:
-        ${topicContent.studyMaterial}
-        ...
-      `;
-      // ... (the rest of your chat submit function)
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          history: newChatHistory,
+          context: studyMaterial 
+        }),
+      });
+      if (!response.ok) throw new Error('Network response was not ok');
+      const data = await response.json();
+      const mentorMessage = { role: 'assistant', content: data.reply };
+      setChatHistory(prev => [...prev, mentorMessage]);
+      if (data.isComplete) {
+        setIsLessonComplete(true);
+      }
     } catch (error) {
-      // ...
+      console.error("Error fetching mentor's response:", error);
+      const errorMessage = { role: 'assistant', content: "Sorry, I'm having trouble connecting. Please try again." };
+      setChatHistory(prev => [...prev, errorMessage]);
+    } finally {
+      setIsMentorTyping(false);
     }
   };
   
-  // (You would apply the same change to `generatePersonalizedStudyMaterial` and any other
-  // function that uses the hardcoded `studyMaterial` or `flashcards`)
+  const handleEndConversation = async () => {
+    if (!auth.currentUser || !currentTopic) {
+      alert("Cannot save conversation. User or topic not found.");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'chatHistories'), {
+        userId: auth.currentUser.uid,
+        topicId: currentTopic.topicId,
+        topicName: currentTopic.name,
+        completedAt: serverTimestamp(),
+        history: chatHistory
+      });
+      setChatHistory([]);
+      setIsLessonComplete(false);
+      alert("Conversation saved successfully!");
+    } catch (error) {
+      console.error("Error saving chat history: ", error);
+      alert("Could not save conversation. Please try again.");
+    }
+  };
 
+  const handleSaveProgress = async () => {
+    if (!auth.currentUser || !currentTopic || chatHistory.length <= 1) {
+      alert("Nothing to save yet.");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'chatHistories'), {
+        userId: auth.currentUser.uid,
+        topicId: currentTopic.topicId,
+        topicName: currentTopic.name,
+        completedAt: serverTimestamp(),
+        history: chatHistory
+      });
+      alert("Progress saved!");
+    } catch (error) {
+      console.error("Error saving chat history: ", error);
+      alert("Could not save progress. Please try again.");
+    }
+  };
+
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  if (isLoading) { return <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div><p className="ml-4">Loading Chapter...</p></div>; }
+  if (error) { return <div className="text-center text-red-500 p-10">Error: {error}</div>; }
   
-  // --- RENDER LOGIC ---
-  if (isLoadingContent) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-        <p className="text-gray-600 mt-4">Loading study material for {todayFocus}...</p>
-      </div>
-    );
-  }
+  return (
+    <div className="flex h-[calc(100vh-8rem)]">
+      <aside className={`bg-white shadow-xl flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80 p-6' : 'w-0'}`}>
+        <div className={`flex items-center justify-between mb-6 flex-shrink-0`}>
+          {/* REMOVED truncate class to allow wrapping */}
+          <h2 className="text-2xl font-bold text-gray-800">{currentChapter ? currentChapter.name : 'Chapter'}</h2>
+        </div>
+        <nav className="overflow-y-auto">
+          <ul>
+            {chapterTopics.map((topic) => (
+              <TopicNode 
+                key={topic.id}
+                topic={topic}
+                onTopicSelect={handleTopicClick}
+                currentTopicId={currentTopic ? currentTopic.id : null}
+              />
+            ))}
+          </ul>
+        </nav>
+      </aside>
+      
+      <main className="flex-grow flex flex-col overflow-y-auto bg-gray-50">
+        {/* STICKY HEADER WRAPPER */}
+        <div className="sticky top-0 z-10 bg-gray-50 p-6">
+          {/* STACKED TITLE AND BUTTONS */}
+          <div>
+            <p className="text-sm font-medium text-blue-600">Today's Focus</p>
+            <h1 className="text-3xl font-bold text-gray-800">{currentChapter ? currentChapter.name : "Select a topic"}</h1>
+          </div>
+          <div className="flex space-x-2 flex-shrink-0 mt-4">
+            <button onClick={handleSaveProgress} className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-200">
+              Save Progress
+            </button>
+            <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 bg-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-300">
+              Reference Material
+            </button>
+            <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-300">
+              {isSidebarOpen ? 'Focus Mode' : 'Show Menu'}
+            </button>
+          </div>
+        </div>
 
-  if (contentError) {
-    return <div className="text-center p-10 text-red-500">Error: {contentError}</div>;
-  }
+        {/* MAIN CONTENT WRAPPER */}
+        <div className="px-6 pb-6 flex-grow flex flex-col">
+          {/* REMOVED fixed height from this container to allow the whole <main> area to scroll */}
+          <div className="bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col flex-grow">
+            <div className="flex-grow p-4 overflow-y-auto space-y-4">
+              {chatHistory.map((msg, index) => (
+                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-4xl p-3 rounded-xl shadow text-base ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}>
+                    {msg.role === 'assistant' ? (
+                      <div className="prose max-w-none"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                </div>
+              ))}
+              {isMentorTyping && (
+                <div className="flex justify-start">
+                  <div className="max-w-md p-3 rounded-xl shadow bg-gray-200 text-gray-800">
+                    <span className="animate-pulse">Mentor is typing...</span>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            
+            {isLessonComplete ? (
+              <div className="p-4 bg-gray-100 border-t text-center">
+                <button onClick={handleEndConversation} className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">
+                  End & Save Conversation
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleChatInputSubmit} className="p-4 bg-gray-100 border-t">
+                <fieldset disabled={isMentorTyping} className="flex space-x-2">
+                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Ask a question..." className="flex-grow rounded-lg px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-200" />
+                  <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-blue-400">Send</button>
+                </fieldset>
+              </form>
+            )}
+          </div>
+        </div>
+      </main>
 
-  // The rest of your return statement and JSX is unchanged.
-  // It will now automatically use the dynamic content.
-  // return ( <div className="flex flex-col h-full ..."> ... </div> );
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <ContentDisplay content={studyMaterial} />
+      </Modal>
+    </div>
+  );
 };
 
 export default LearnTab;

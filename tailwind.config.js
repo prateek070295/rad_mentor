@@ -12,5 +12,7 @@ module.exports = {
       },
     },
   },
-  plugins: [], // This array is where you'd add Tailwind plugins for v3
+  plugins: [
+    require('@tailwindcss/typography'), // <-- LOOK FOR THIS LINE
+  ],
 };

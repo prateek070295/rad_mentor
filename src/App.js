@@ -40,12 +40,12 @@ function App() {
   const [dashboardData, setDashboardData] = useState({
     userName: "User",
     todayFocus: "No topic scheduled for today.",
-    syllabusCompletion: 0, // Default to 0
-    testScores: [80, 75, 85, 90, 82, 88], // Placeholder
-    topTopics: ["Breast", "MSK", "GIT"], // Placeholder
-    bottomTopics: ["Neuroradiology", "Physics", "Cardiac"], // Placeholder
+    syllabusCompletion: 0,
+    testScores: [80, 75, 85, 90, 82, 88], 
+    topTopics: ["Breast", "MSK", "GIT"], 
+    bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
     daysUntilExam: 'N/A',
-    daysUntilWeeklyTest: 5, // Placeholder
+    daysUntilWeeklyTest: 5,
   });
 
   // --- TEMPORARY: AUTO-LOGIN FOR TESTING ---
@@ -93,7 +93,6 @@ function App() {
 
           const planRef = doc(db, 'plans', user.uid);
           planUnsubscribe = onSnapshot(planRef, (planSnap) => {
-            // Use a functional update to ensure we have the latest state
             setDashboardData(currentDashboardData => {
                 let newDashboardData = { ...currentDashboardData, userName: user.displayName || "Dr. Test" };
 
@@ -109,8 +108,7 @@ function App() {
                     } else {
                         newDashboardData.todayFocus = "No topic scheduled for today.";
                     }
-
-                    // --- REAL-TIME SYLLABUS COMPLETION ---
+                    
                     if (planData.schedule) {
                         const schedule = planData.schedule;
                         const totalTopics = Object.keys(schedule).length;
@@ -173,7 +171,8 @@ function App() {
       case 'plan':
         return <PlanTab organSystems={organSystems} />;
       case 'learn':
-        return <LearnTab todayFocus={dashboardData.todayFocus} />;
+        // --- THIS IS THE ONLY CHANGE ---
+        return <LearnTab todayFocus={dashboardData.todayFocus} userName={dashboardData.userName} />;
       case 'test':
         return <TestTab />;
       default:
@@ -229,4 +228,3 @@ function App() {
 }
 
 export default App;
-
