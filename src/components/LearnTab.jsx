@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown';
 import TopicNode from './TopicNode';
 import ContentDisplay from './ContentDisplay';
 import Modal from './Modal';
+import ConfidenceRating from './ConfidenceRating';
+import PostSessionModal from './PostSessionModal';
 
 const buildTopicTree = (topics, chapterTopicId) => {
     const nodeMap = new Map();
@@ -33,6 +35,7 @@ const LearnTab = ({ todayFocus, userName }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPostSessionModalOpen, setIsPostSessionModalOpen] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isMentorTyping, setIsMentorTyping] = useState(false);
@@ -205,7 +208,7 @@ const LearnTab = ({ todayFocus, userName }) => {
     }
   };
   
-  const handleEndConversation = async () => {
+  const handleEndConversation = async (rating) => {
     if (!auth.currentUser || !currentTopic) {
       alert("Cannot save conversation. User or topic not found.");
       return;
@@ -216,15 +219,37 @@ const LearnTab = ({ todayFocus, userName }) => {
         topicId: currentTopic.topicId,
         topicName: currentTopic.name,
         completedAt: serverTimestamp(),
-        history: chatHistory
+        history: chatHistory,
+        confidenceRating: rating
       });
-      setChatHistory([]);
-      setIsLessonComplete(false);
-      alert("Conversation saved successfully!");
+      setIsPostSessionModalOpen(true);
     } catch (error) {
       console.error("Error saving chat history: ", error);
       alert("Could not save conversation. Please try again.");
     }
+  };
+
+  const handleClosePostSession = () => {
+    const updateTopicStatus = (topics, topicId) => {
+      return topics.map(topic => {
+        if (topic.id === topicId) {
+          return { ...topic, status: 'completed' };
+        }
+        if (topic.children && topic.children.length > 0) {
+          return { ...topic, children: updateTopicStatus(topic.children, topicId) };
+        }
+        return topic;
+      });
+    };
+    setChapterTopics(prevTopics => updateTopicStatus(prevTopics, currentTopic.id));
+
+    setIsPostSessionModalOpen(false);
+    setChatHistory([]);
+    setIsLessonComplete(false);
+  };
+
+  const handleConfidenceSubmit = (rating) => {
+    handleEndConversation(rating);
   };
 
   const handleSaveProgress = async () => {
@@ -256,7 +281,6 @@ const LearnTab = ({ todayFocus, userName }) => {
     <div className="flex h-[calc(100vh-8rem)]">
       <aside className={`bg-white shadow-xl flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80 p-6' : 'w-0'}`}>
         <div className={`flex items-center justify-between mb-6 flex-shrink-0`}>
-          {/* REMOVED truncate class to allow wrapping */}
           <h2 className="text-2xl font-bold text-gray-800">{currentChapter ? currentChapter.name : 'Chapter'}</h2>
         </div>
         <nav className="overflow-y-auto">
@@ -274,9 +298,7 @@ const LearnTab = ({ todayFocus, userName }) => {
       </aside>
       
       <main className="flex-grow flex flex-col overflow-y-auto bg-gray-50">
-        {/* STICKY HEADER WRAPPER */}
         <div className="sticky top-0 z-10 bg-gray-50 p-6">
-          {/* STACKED TITLE AND BUTTONS */}
           <div>
             <p className="text-sm font-medium text-blue-600">Today's Focus</p>
             <h1 className="text-3xl font-bold text-gray-800">{currentChapter ? currentChapter.name : "Select a topic"}</h1>
@@ -294,9 +316,7 @@ const LearnTab = ({ todayFocus, userName }) => {
           </div>
         </div>
 
-        {/* MAIN CONTENT WRAPPER */}
         <div className="px-6 pb-6 flex-grow flex flex-col">
-          {/* REMOVED fixed height from this container to allow the whole <main> area to scroll */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col flex-grow">
             <div className="flex-grow p-4 overflow-y-auto space-y-4">
               {chatHistory.map((msg, index) => (
@@ -321,11 +341,7 @@ const LearnTab = ({ todayFocus, userName }) => {
             </div>
             
             {isLessonComplete ? (
-              <div className="p-4 bg-gray-100 border-t text-center">
-                <button onClick={handleEndConversation} className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">
-                  End & Save Conversation
-                </button>
-              </div>
+              <ConfidenceRating onRate={handleConfidenceSubmit} />
             ) : (
               <form onSubmit={handleChatInputSubmit} className="p-4 bg-gray-100 border-t">
                 <fieldset disabled={isMentorTyping} className="flex space-x-2">
@@ -341,6 +357,12 @@ const LearnTab = ({ todayFocus, userName }) => {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <ContentDisplay content={studyMaterial} />
       </Modal>
+
+      <PostSessionModal 
+        isOpen={isPostSessionModalOpen}
+        onClose={handleClosePostSession}
+        topicName={currentTopic ? currentTopic.name : ''}
+      />
     </div>
   );
 };
