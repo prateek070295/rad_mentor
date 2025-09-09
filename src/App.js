@@ -10,7 +10,7 @@ import PlanTab from './components/PlanTab';
 import LearnTab from './components/LearnTab'; 
 import TestTab from './components/TestTab';
 import AdminPanel from './components/AdminPanel';
-import PreviewPage from './components/PreviewPage'; // Import the new PreviewPage component
+import PreviewPage from './components/PreviewPage';
 import appLogo from './assets/images/logo 1.PNG';
 
 // Helper function to get today's date in YYYY-MM-DD format
@@ -42,12 +42,12 @@ function App() {
   const [dashboardData, setDashboardData] = useState({
     userName: "User",
     todayFocus: "No topic scheduled for today.",
-    syllabusCompletion: 0, // Default to 0
-    testScores: [80, 75, 85, 90, 82, 88], // Placeholder
-    topTopics: ["Breast", "MSK", "GIT"], // Placeholder
-    bottomTopics: ["Neuroradiology", "Physics", "Cardiac"], // Placeholder
+    syllabusCompletion: 0,
+    testScores: [80, 75, 85, 90, 82, 88], 
+    topTopics: ["Breast", "MSK", "GIT"], 
+    bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
     daysUntilExam: 'N/A',
-    daysUntilWeeklyTest: 5, // Placeholder
+    daysUntilWeeklyTest: 5,
   });
 
   // --- TEMPORARY: AUTO-LOGIN FOR TESTING ---
@@ -95,7 +95,6 @@ function App() {
 
           const planRef = doc(db, 'plans', user.uid);
           planUnsubscribe = onSnapshot(planRef, (planSnap) => {
-            // Use a functional update to ensure we have the latest state
             setDashboardData(currentDashboardData => {
                 let newDashboardData = { ...currentDashboardData, userName: user.displayName || "Dr. Test" };
 
@@ -111,8 +110,7 @@ function App() {
                     } else {
                         newDashboardData.todayFocus = "No topic scheduled for today.";
                     }
-
-                    // --- REAL-TIME SYLLABUS COMPLETION ---
+                    
                     if (planData.schedule) {
                         const schedule = planData.schedule;
                         const totalTopics = Object.keys(schedule).length;
@@ -164,15 +162,12 @@ function App() {
     };
   }, []);
 
-  // --- NEW: Check the URL to decide what to render ---
   const isPreviewPage = window.location.pathname === '/preview';
 
-  // If we're on the preview page, render only that component
   if (isPreviewPage) {
     return <PreviewPage />;
   }
 
-  // Otherwise, render the main application
   const renderContent = () => {
     if (isLoading) {
       return <div className="text-center p-10">Loading Rad Mentor...</div>;
@@ -184,7 +179,7 @@ function App() {
       case 'plan':
         return <PlanTab organSystems={organSystems} />;
       case 'learn':
-        return <LearnTab todayFocus={dashboardData.todayFocus} />;
+        return <LearnTab todayFocus={dashboardData.todayFocus} userName={dashboardData.userName} />;
       case 'test':
         return <TestTab />;
       case 'admin':
