@@ -181,7 +181,8 @@ function App() {
       case 'learn':
         return <LearnTab todayFocus={dashboardData.todayFocus} userName={dashboardData.userName} />;
       case 'test':
-        return <TestTab />;
+        // Pass the organSystems prop to TestTab
+        return <TestTab organSystems={organSystems} />;
       case 'admin':
         return <AdminPanel />; 
       default:
