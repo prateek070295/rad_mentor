@@ -1,0 +1,5 @@
+node_modules/
+*.local
+
+# Ignore the Firebase Admin SDK service account key
+serviceAccountKey.json
