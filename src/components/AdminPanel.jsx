@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, orderBy, where, doc, updateDoc } from 'firebase/firestore';
-import QuillEditor from './QuillEditor'; // Import our new custom editor
-import 'quill/dist/quill.snow.css';     // Import the editor's CSS
+import QuillEditor from './QuillEditor';
+import 'quill/dist/quill.snow.css';
+import QuestionUploader from './QuestionUploader';
+import QPPreviewSave from './QPpreview_save';
 
 const StatusIndicator = ({ status }) => {
   const baseClasses = "w-3 h-3 rounded-full flex-shrink-0";
@@ -15,21 +17,34 @@ const StatusIndicator = ({ status }) => {
 };
 
 const AdminPanel = () => {
-  // Data State
   const [nodes, setNodes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [nodeHasChildren, setNodeHasChildren] = useState({});
-  
-  // Editor State
   const [editedName, setEditedName] = useState('');
   const [content, setContent] = useState(null);
-
-  // UI State
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [statusMap, setStatusMap] = useState({});
+  const [organSystems, setOrganSystems] = useState([]);
 
+  // --- Uploader State Changes ---
+  const [view, setView] = useState('uploader');
+  // ✅ 1. State now holds the full data object (questions + metadata)
+  const [extractedData, setExtractedData] = useState(null); 
+
+  useEffect(() => {
+    const fetchOrganSystems = async () => {
+        const sectionsCollectionRef = collection(db, 'sections');
+        const sectionsQuery = query(sectionsCollectionRef, orderBy("title"));
+        const sectionsSnapshot = await getDocs(sectionsQuery);
+        const systemsList = sectionsSnapshot.docs.map(doc => ({ id: doc.id, name: doc.data().title }));
+        setOrganSystems(systemsList);
+    };
+    fetchOrganSystems();
+  }, []);
+  
+  // ... (all your other functions like calculateAllNodeStatuses, useEffects, drillDown, etc. remain unchanged) ...
   const calculateAllNodeStatuses = useCallback(async (sectionId) => {
     try {
       const allNodesRef = collection(db, 'sections', sectionId, 'nodes');
@@ -171,12 +186,11 @@ const AdminPanel = () => {
 
   const handleSaveChanges = async () => {
     if (!selectedNode) return;
-    console.log("Attempting to save as user with UID:", auth.currentUser?.uid);
     try {
       let docRef;
       let updatedData = {};
       const isContentChanged = JSON.stringify(selectedNode.mainContent) !== JSON.stringify(content);
-      if (breadcrumbs.length === 1) { // This means we are editing a top-level section
+      if (breadcrumbs.length === 1) {
         docRef = doc(db, 'sections', selectedNode.id);
         if (selectedNode.name !== editedName) updatedData.title = editedName;
       } else {
@@ -203,6 +217,25 @@ const AdminPanel = () => {
   const handlePreview = () => { 
       localStorage.setItem('radmentor_preview_content', JSON.stringify(content)); 
       window.open('/preview', '_blank'); 
+  };
+
+  // --- Uploader Function Handlers ---
+
+  // ✅ 2. Handle the incoming data object from the uploader
+  const handleExtracted = (data) => {
+    setExtractedData(data);
+    setView('preview');
+  };
+
+  const handleSaveToBank = () => {
+    setExtractedData(null);
+    setView('uploader');
+    // You can add a success notification here
+  };
+
+  const handleCancelPreview = () => {
+    setExtractedData(null);
+    setView('uploader');
   };
 
   const renderNavContent = () => {
@@ -236,6 +269,7 @@ const AdminPanel = () => {
   return (
     <div className="flex h-[calc(100vh-120px)] bg-gray-200 transition-all duration-300">
       <div className={`bg-white border-r border-gray-300 flex flex-col transition-all duration-300 ${isNavCollapsed ? 'w-16' : 'w-1/4'}`}>
+        {/* ... (Your nav header and breadcrumbs JSX is unchanged) ... */}
         <div className={`p-4 flex items-center justify-between ${isNavCollapsed ? 'flex-col' : 'flex-row'}`}>
             {!isNavCollapsed && <h2 className="text-lg font-bold">Navigation 🌳</h2>}
             <button onClick={() => setIsNavCollapsed(!isNavCollapsed)} className="p-1 hover:bg-gray-200 rounded">
@@ -252,9 +286,38 @@ const AdminPanel = () => {
             </div>
         )}
       </div>
-      <div className="flex-grow p-6 flex flex-col bg-gray-50">
+      <div className="flex-grow p-6 flex flex-col bg-gray-50 overflow-y-auto">
+        
+        {/* --- Uploader Rendering Logic --- */}
+        {view === 'uploader' ? (
+          <div className="mb-8">
+            <QuestionUploader onExtracted={handleExtracted} />
+          </div>
+        ) : (
+          // ✅ 3. Pass the entire data object to the preview component
+          extractedData && (
+            <div className="mb-8">
+              <QPPreviewSave 
+                data={extractedData}
+                organSystems={organSystems}
+                onSave={handleSaveToBank}
+                onCancel={handleCancelPreview}
+              />
+            </div>
+          )
+        )}
+
+        <div className="text-center my-4">
+            <span className="bg-gray-300 h-px w-1/3 inline-block"></span>
+            <span className="text-gray-500 font-semibold uppercase mx-4">Or</span>
+            <span className="bg-gray-300 h-px w-1/3 inline-block"></span>
+        </div>
+        
+        {/* ... (Your Content Editor JSX is unchanged) ... */}
+        <h3 className="text-2xl font-bold text-gray-800 mb-6">Content Editor</h3>
+
         {selectedNode ? (
-          <>
+          <div className="flex-grow flex flex-col">
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex-shrink-0">
               <label htmlFor="topicName" className="block text-sm font-medium text-gray-700">Topic Name</label>
               <input type="text" id="topicName" value={editedName} onChange={(e) => setEditedName(e.target.value)} className="mt-1 block w-full text-xl font-bold border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
@@ -272,10 +335,9 @@ const AdminPanel = () => {
               <button onClick={handleSaveChanges} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">Save Changes</button>
               <button onClick={handlePreview} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-75">See Preview</button>
             </div>
-          </>
+          </div>
         ) : (
           <div>
-            <h2 className="text-lg font-bold mb-4">Content Editor ✍️</h2>
             <p className="text-gray-500">Select a topic from the navigation pane to begin editing.</p>
           </div>
         )}
