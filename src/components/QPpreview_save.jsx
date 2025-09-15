@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+// We no longer need to import firestore methods directly here
 import { db, auth } from '../firebase'; 
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
   const [editedQuestions, setEditedQuestions] = useState([]);
@@ -8,23 +8,19 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
   const [error, setError] = useState(null);
   
   useEffect(() => {
-    // ✅ **FIX**: This block now intelligently matches the AI's topic (e.g., "HeadNeckFace")
-    // to the official topic name from your list (e.g., "Head Neck Face").
     if (data && data.questions && organSystems.length > 0) {
       const matchedQuestions = data.questions.map(q => {
-        if (!q.topic) return q; // Return question as-is if no topic
+        if (!q.topic) return q;
         
         const aiTopicNormalized = q.topic.replace(/\s/g, '').toLowerCase();
         const officialTopic = organSystems.find(os => 
           os.name.replace(/\s/g, '').toLowerCase() === aiTopicNormalized
         );
 
-        // If a match is found, use the official name (with spaces). Otherwise, keep the AI's suggestion.
         return { ...q, topic: officialTopic ? officialTopic.name : q.topic };
       });
       setEditedQuestions(matchedQuestions);
     } else if (data && data.questions) {
-      // Fallback for when organSystems haven't loaded yet
       setEditedQuestions(data.questions);
     }
   }, [data, organSystems]);
@@ -36,12 +32,12 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
   };
 
   const handleSaveToFirestore = async () => {
-    if (!db || !auth.currentUser) {
-      setError("Database or user authentication not ready.");
-      return;
-    }
     if (!data || !data.metadata) {
       setError("Exam metadata is missing. Cannot save.");
+      return;
+    }
+    if (!auth.currentUser) {
+      setError("You must be logged in to save questions.");
       return;
     }
 
@@ -49,26 +45,34 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
     setError(null);
     
     try {
-      const questionsCollectionRef = collection(db, "questionBank");
+      const idToken = await auth.currentUser.getIdToken();
       
-      const savePromises = editedQuestions.map(question => {
-        const dataToSave = {
-          ...question,
-          ...data.metadata,
-          // When saving, we can remove spaces again for a consistent format in the DB
-          topic: question.topic.replace(/\s/g, ''),
-          createdAt: serverTimestamp(),
-          uploaderId: auth.currentUser.uid,
-        };
-        return addDoc(questionsCollectionRef, dataToSave);
+      // ✅ **CHANGE**: Call our new secure backend endpoint instead of writing directly from the client
+      const response = await fetch('https://api-4qet5dlzga-el.a.run.app/save-questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}` // Send auth token for security
+        },
+        body: JSON.stringify({
+          questions: editedQuestions,
+          metadata: data.metadata,
+        }),
       });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'The server returned an error.');
+      }
       
-      await Promise.all(savePromises);
+      console.log(result); // Optional: log the success message from the server
+      alert(`Save complete! ${result.newQuestionsAdded} new questions were added. ${result.duplicatesSkipped} duplicates were skipped.`);
       onSave(); 
       
     } catch (e) {
-      console.error("Failed to save questions to Firestore:", e);
-      setError("Failed to save questions. Please check the console for details.");
+      console.error("Failed to save questions:", e);
+      setError(`Save Failed: ${e.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -109,7 +113,6 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
                 onChange={(e) => handleTopicChange(index, e.target.value)}
                 className="block w-full max-w-xs pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
               >
-                {/* This conditional logic for "(AI Suggested)" is now only for true mismatches */}
                 {item.topic && !organSystems.some(os => os.name === item.topic) && (
                     <option value={item.topic}>{item.topic} (AI Suggested)</option>
                 )}
