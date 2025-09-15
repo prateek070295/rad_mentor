@@ -8,6 +8,7 @@ import socraticTutorRouter from "./routes/socraticTutor.js";
 import generateMcqRouter from "./routes/generateMcq.js";
 import generateTheoryRouter from "./routes/generateTheory.js";
 import extractQuestionsRouter from "./routes/extractQuestions.js";
+import saveQuestionsRouter from "./routes/saveQuestions.js";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -41,6 +42,7 @@ app.use("/chat", socraticTutorRouter);
 app.use("/generate-mcq-test", generateMcqRouter);
 app.use("/generate-theory-test", generateTheoryRouter);
 app.use("/extract-questions", extractQuestionsRouter);
+app.use("/save-questions", saveQuestionsRouter);
 
 // ---------- Global error handler (JSON always) ----------
 app.use((err, req, res, _next) => {
