@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-// We no longer need to import firestore methods directly here
-import { db, auth } from '../firebase'; 
+// ✅ **FIX**: Removed 'db' as it's no longer used in this component.
+import { auth } from '../firebase'; 
+
+const normalizeTopic = (text = '') => text.replace(/[^\w]/g, '').toLowerCase();
 
 const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
   const [editedQuestions, setEditedQuestions] = useState([]);
@@ -11,12 +13,10 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
     if (data && data.questions && organSystems.length > 0) {
       const matchedQuestions = data.questions.map(q => {
         if (!q.topic) return q;
-        
-        const aiTopicNormalized = q.topic.replace(/\s/g, '').toLowerCase();
+        const aiTopicNormalized = normalizeTopic(q.topic);
         const officialTopic = organSystems.find(os => 
-          os.name.replace(/\s/g, '').toLowerCase() === aiTopicNormalized
+          normalizeTopic(os.name) === aiTopicNormalized
         );
-
         return { ...q, topic: officialTopic ? officialTopic.name : q.topic };
       });
       setEditedQuestions(matchedQuestions);
@@ -47,12 +47,11 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
     try {
       const idToken = await auth.currentUser.getIdToken();
       
-      // ✅ **CHANGE**: Call our new secure backend endpoint instead of writing directly from the client
       const response = await fetch('https://api-4qet5dlzga-el.a.run.app/save-questions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}` // Send auth token for security
+          'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({
           questions: editedQuestions,
@@ -66,7 +65,6 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
         throw new Error(result.error || 'The server returned an error.');
       }
       
-      console.log(result); // Optional: log the success message from the server
       alert(`Save complete! ${result.newQuestionsAdded} new questions were added. ${result.duplicatesSkipped} duplicates were skipped.`);
       onSave(); 
       
@@ -103,7 +101,11 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
         {editedQuestions.map((item, index) => (
           <div key={index} className="p-4 border rounded-lg bg-gray-50">
             <p className="font-semibold text-gray-800 mb-2">{index + 1}. {item.questionText}</p>
-            <div className="flex items-center gap-4">
+            <p className="text-sm text-gray-600">
+                Marks: <strong>{item.marks}</strong>
+                {item.marksDistribution && <span className="text-gray-400 ml-1">({item.marksDistribution})</span>}
+            </p>
+            <div className="flex items-center gap-4 mt-2">
               <label htmlFor={`topic-${index}`} className="block text-sm font-medium text-gray-700">
                 Topic:
               </label>
@@ -113,7 +115,7 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
                 onChange={(e) => handleTopicChange(index, e.target.value)}
                 className="block w-full max-w-xs pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
               >
-                {item.topic && !organSystems.some(os => os.name === item.topic) && (
+                {item.topic && !organSystems.some(os => normalizeTopic(os.name) === normalizeTopic(item.topic)) && (
                     <option value={item.topic}>{item.topic} (AI Suggested)</option>
                 )}
                 {organSystems.map(system => (

@@ -1,8 +1,12 @@
 import express from "express";
-// ✅ **FIX**: Only import getFirestore, as the other functions are not part of the Admin SDK
 import { getFirestore } from "firebase-admin/firestore";
 
 const router = express.Router();
+
+function normalizeText(text) {
+  if (!text) return '';
+  return text.toLowerCase().replace(/\[[^\]]*\]/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
 
 router.post("/", express.json(), async (req, res) => {
     const db = getFirestore();
@@ -14,19 +18,14 @@ router.post("/", express.json(), async (req, res) => {
             return res.status(400).json({ error: "Invalid request body." });
         }
 
-        const questionBankRef = db.collection("questionBank"); // ✅ **FIX**: Use Admin SDK syntax
-        const batch = db.batch(); // ✅ **FIX**: Use Admin SDK syntax
+        const questionBankRef = db.collection("questionBank");
+        const batch = db.batch();
         let addedCount = 0;
         let existingCount = 0;
 
         await Promise.all(questions.map(async (question) => {
-            // ✅ **FIX**: Rewrote the query using the chained Admin SDK syntax
-            const q = questionBankRef
-                .where("questionText", "==", question.questionText)
-                .where("exam", "==", metadata.exam)
-                .where("year", "==", metadata.year)
-                .where("paper", "==", metadata.paper);
-
+            const questionFingerprint = normalizeText(question.questionText);
+            const q = questionBankRef.where("questionFingerprint", "==", questionFingerprint);
             const querySnapshot = await q.get();
 
             if (querySnapshot.empty) {
@@ -34,6 +33,9 @@ router.post("/", express.json(), async (req, res) => {
                 const dataToSave = {
                     ...question,
                     ...metadata,
+                    // ✅ **FIX**: Ensure the year is always saved as a number for consistency
+                    year: Number(metadata.year), 
+                    questionFingerprint,
                     topic: question.topic.replace(/\s/g, ''),
                     createdAt: new Date(),
                     uploaderId: uid || 'admin-user',
