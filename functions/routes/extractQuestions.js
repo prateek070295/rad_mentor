@@ -5,7 +5,6 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const router = express.Router();
 
-// Sorts text by Y/X coordinates to accurately reconstruct text flow
 async function getTextFromPdf(buffer) {
     const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
@@ -58,27 +57,28 @@ router.post("/", (req, res) => {
         response_mime_type: "application/json",
         temperature: 0.2,
       };
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", generationConfig });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest", generationConfig });
       
+      // ✅ **FIX**: Upgraded prompt to include 'questionNumber'
       const extractionPrompt = `
-        You are an expert at parsing medical exam papers. Your task is to extract all questions, their total marks, and their mark distribution from the provided text.
+        You are an expert at parsing medical exam papers. Your task is to extract all questions, their number, total marks, and mark distribution.
 
         INSTRUCTIONS:
-        1. Identify each main question, which is typically numbered (e.g., "1.", "2.").
-        2. If a question has sub-parts (e.g., "a)", "b)", "i)", "ii)"), combine them all into a single 'questionText' for that main question number. Use newline characters (\\n) to separate the parts.
-        3. The 'marks' field should be the total marks for the entire question (e.g., for "[7+3]", the marks are 10).
-        4. The 'marksDistribution' field should be a string of the content inside the brackets. The format might be "[7+3]" or "$[7+3]"; handle both equally and extract only the inner content (e.g., "7+3" or "(3+3)+4").
-        5. If there is no distribution (e.g., just "[10]"), 'marksDistribution' should be an empty string "".
-        6. Return a STRICT JSON array only.
+        1. Identify each main question, which is typically numbered (e.g., "1.", "2."). Capture this number.
+        2. If a question has sub-parts (e.g., "a)", "b)"), combine them into a single 'questionText'.
+        3. The 'marks' field should be the total marks (e.g., for "[7+3]", marks are 10).
+        4. The 'marksDistribution' field should be the string inside the brackets (e.g., "7+3").
+        5. Return a STRICT JSON array only. Each object must have 'questionNumber', 'questionText', 'marks', and 'marksDistribution'.
 
         EXAMPLE:
-        Input Text: "1. Describe the pancreas. $[3+7]"
+        Input Text: "2. a) Describe X. b) Discuss Y. [4+6]"
         Output JSON:
         [
           {
-            "questionText": "Describe the pancreas.",
+            "questionNumber": 2,
+            "questionText": "a) Describe X.\\nb) Discuss Y.",
             "marks": 10,
-            "marksDistribution": "3+7"
+            "marksDistribution": "4+6"
           }
         ]
 
@@ -92,11 +92,12 @@ router.post("/", (req, res) => {
         return res.status(422).json({ step: "ai-extract", error: "AI failed to extract questions from the text." });
       }
 
+      // ✅ **FIX**: Pass all new fields to the tagging prompt
       const taggingPrompt = `
-        Given these questions (with marks and distribution), assign ONE topic from the list.
+        Given these questions, assign ONE topic from the list.
         The list is: ["Breast","Cardiovascular","Chest","GIT","Genitourinary","HeadNeckFace","Hepatobiliary_Pancreas_Spleen_Abdominal_Trauma","Musculoskeletal","Neuroradiology","Obs&Gyn","Pediatrics","Physics","Recent_Advances"].
-        Return a STRICT JSON array with the original questionText, marks, marksDistribution, and the assigned topic:
-        [{ "questionText": string, "marks": number, "marksDistribution": string, "topic": string }]
+        Return a STRICT JSON array with all original data plus the assigned topic:
+        [{ "questionNumber": number, "questionText": string, "marks": number, "marksDistribution": string, "topic": string }]
         Questions:\n${JSON.stringify(extractedQuestions)}`.trim();
 
       const tgResult = await model.generateContent(taggingPrompt);
@@ -106,7 +107,9 @@ router.post("/", (req, res) => {
         return res.status(422).json({ step: "ai-tag", error: "AI failed to tag the extracted questions." });
       }
 
+      // ✅ **FIX**: Ensure 'questionNumber' is included in the final object
       const stamped = finalQuestions.map(q => ({
+        questionNumber: q.questionNumber || 0,
         questionText: q.questionText,
         marks: Number.isFinite(q.marks) ? q.marks : 0,
         marksDistribution: q.marksDistribution || "",

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// ✅ **FIX**: Removed 'db' as it's no longer used in this component.
 import { auth } from '../firebase'; 
 
 const normalizeTopic = (text = '') => text.replace(/[^\w]/g, '').toLowerCase();
@@ -65,7 +64,8 @@ const QPPreviewSave = ({ data, organSystems, onSave, onCancel }) => {
         throw new Error(result.error || 'The server returned an error.');
       }
       
-      alert(`Save complete! ${result.newQuestionsAdded} new questions were added. ${result.duplicatesSkipped} duplicates were skipped.`);
+      // ✅ **FIX**: Updated alert to show both new and repeated (updated) questions.
+      alert(`Save complete! ${result.newQuestionsAdded} new questions were added. ${result.existingQuestionsUpdated} repeat questions were updated.`);
       onSave(); 
       
     } catch (e) {
