@@ -29,3 +29,7 @@ PlanTab Copy.jsx
 SetupWizar copy.jsx
 
 .env
+
+# Firebase / Google Cloud
+*.log
+firebase-debug.log
