@@ -8,26 +8,12 @@ const checkpointSchema = {
   properties: {
     type: { enum: ["mcq", "short"] },
     question_md: { type: "string", maxLength: 500 },
-    options: {
-      type: "array",
-      items: { type: "string", maxLength: 200 },
-      maxItems: 5,
-    },
+    options: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: 5 },
     correct_index: { type: "integer", minimum: 0, maximum: 4 },
-    answer_patterns: {
-      type: "array",
-      items: { type: "string", maxLength: 200 },
-      maxItems: 10,
-    },
+    answer_patterns: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: 10 },
     rationale_md: { type: "string", maxLength: 1000 },
-    hints: {
-      type: "array",
-      items: { type: "string", maxLength: 200 },
-      maxItems: 3,
-    },
-    bloom_level: {
-      enum: ["remember", "understand", "apply", "analyze", "evaluate"],
-    },
+    hints: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: 3 },
+    bloom_level: { enum: ["remember", "understand", "apply", "analyze", "evaluate"] },
     figure_id: { type: ["string", "null"], maxLength: 50 },
   },
   required: ["type", "question_md", "rationale_md", "hints", "bloom_level"],
@@ -39,16 +25,7 @@ const contentSectionSchema = {
     title: { type: "string", minLength: 3, maxLength: 100 },
     order: { type: "integer", minimum: 1 },
     body_md: { type: "string", minLength: 50, maxLength: 1200 },
-    objectives: {
-      type: "array",
-      items: { type: "string", maxLength: 200 },
-      maxItems: 5,
-    },
-    key_points: {
-      type: "array",
-      items: { type: "string", maxLength: 200 },
-      maxItems: 5,
-    },
+    // objectives & key_points have been moved from here
     misconceptions: {
       type: "array",
       items: {
@@ -75,25 +52,49 @@ const contentSectionSchema = {
       },
       maxItems: 5,
     },
+    cases: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string", maxLength: 200 },
+          url: { type: "string" },
+        },
+        required: ["label"],
+      },
+      maxItems: 5,
+    },
     checkpoints: {
       type: "array",
       items: checkpointSchema,
       minItems: 1,
     },
   },
-  required: ["title", "order", "body_md", "checkpoints"],
+  required: ["title", "order", "body_md", "checkpoints"], // misconceptions is correctly optional
 };
 
 const topicStructureSchema = {
   type: "object",
   properties: {
+    // MOVED: 'objectives' is now at the top level
+    objectives: {
+      type: "array",
+      items: { type: "string", maxLength: 200 },
+      maxItems: 5,
+    },
     sections: {
       type: "array",
       items: contentSectionSchema,
       minItems: 1,
     },
+    // MOVED: 'key_points' is now at the top level
+    key_points: {
+      type: "array",
+      items: { type: "string", maxLength: 200 },
+      maxItems: 5,
+    },
   },
-  required: ["sections"],
+  required: ["objectives", "sections", "key_points"], // Now required for the whole topic
 };
 
 export const validateStructure = ajv.compile(topicStructureSchema);
