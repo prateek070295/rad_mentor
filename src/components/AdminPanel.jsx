@@ -5,6 +5,7 @@ import QuillEditor from './QuillEditor';
 import 'quill/dist/quill.snow.css';
 import QuestionUploader from './QuestionUploader';
 import QPPreviewSave from './QPpreview_save';
+import StructuredContentEditor from './StructuredContentEditor';
 
 const StatusIndicator = ({ status }) => {
   const baseClasses = "w-3 h-3 rounded-full flex-shrink-0";
@@ -27,6 +28,7 @@ const AdminPanel = () => {
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [statusMap, setStatusMap] = useState({});
   const [organSystems, setOrganSystems] = useState([]);
+  const [activeEditorTab, setActiveEditorTab] = useState('legacy');
 
   // --- Uploader State Changes ---
   const [view, setView] = useState('uploader');
@@ -268,8 +270,8 @@ const AdminPanel = () => {
 
   return (
     <div className="flex h-[calc(100vh-120px)] bg-gray-200 transition-all duration-300">
+      {/* --- NAVIGATION PANE (No changes here) --- */}
       <div className={`bg-white border-r border-gray-300 flex flex-col transition-all duration-300 ${isNavCollapsed ? 'w-16' : 'w-1/4'}`}>
-        {/* ... (Your nav header and breadcrumbs JSX is unchanged) ... */}
         <div className={`p-4 flex items-center justify-between ${isNavCollapsed ? 'flex-col' : 'flex-row'}`}>
             {!isNavCollapsed && <h2 className="text-lg font-bold">Navigation 🌳</h2>}
             <button onClick={() => setIsNavCollapsed(!isNavCollapsed)} className="p-1 hover:bg-gray-200 rounded">
@@ -286,15 +288,16 @@ const AdminPanel = () => {
             </div>
         )}
       </div>
+
+      {/* --- MAIN CONTENT PANE --- */}
       <div className="flex-grow p-6 flex flex-col bg-gray-50 overflow-y-auto">
         
-        {/* --- Uploader Rendering Logic --- */}
+        {/* --- QUESTION UPLOADER (No changes here) --- */}
         {view === 'uploader' ? (
           <div className="mb-8">
             <QuestionUploader onExtracted={handleExtracted} />
           </div>
         ) : (
-          // ✅ 3. Pass the entire data object to the preview component
           extractedData && (
             <div className="mb-8">
               <QPPreviewSave 
@@ -306,18 +309,18 @@ const AdminPanel = () => {
             </div>
           )
         )}
-
         <div className="text-center my-4">
             <span className="bg-gray-300 h-px w-1/3 inline-block"></span>
             <span className="text-gray-500 font-semibold uppercase mx-4">Or</span>
             <span className="bg-gray-300 h-px w-1/3 inline-block"></span>
         </div>
         
-        {/* ... (Your Content Editor JSX is unchanged) ... */}
+        {/* --- CONTENT EDITOR (This is where the changes are) --- */}
         <h3 className="text-2xl font-bold text-gray-800 mb-6">Content Editor</h3>
 
         {selectedNode ? (
           <div className="flex-grow flex flex-col">
+            {/* --- TOPIC NAME INPUT (No changes here) --- */}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex-shrink-0">
               <label htmlFor="topicName" className="block text-sm font-medium text-gray-700">Topic Name</label>
               <input type="text" id="topicName" value={editedName} onChange={(e) => setEditedName(e.target.value)} className="mt-1 block w-full text-xl font-bold border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
@@ -325,16 +328,46 @@ const AdminPanel = () => {
                 <p className="text-sm text-white bg-blue-500 inline-block px-2 py-0.5 rounded-full mt-2">{selectedNode.category}</p>
               )}
             </div>
-            <div className="flex-grow relative bg-white">
-              <QuillEditor 
-                value={content} 
-                onChange={setContent} 
+
+            {/* --- NEW: TAB BUTTONS --- */}
+            <div className="flex border-b border-gray-300 mb-4">
+              <button 
+                onClick={() => setActiveEditorTab('legacy')}
+                className={`px-4 py-2 text-sm font-semibold ${activeEditorTab === 'legacy' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Legacy (Quill)
+              </button>
+              <button 
+                onClick={() => setActiveEditorTab('structured')}
+                className={`px-4 py-2 text-sm font-semibold ${activeEditorTab === 'structured' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Structured (AI)
+              </button>
+            </div>
+
+            {/* --- NEW: CONDITIONAL EDITOR RENDERING --- */}
+            {activeEditorTab === 'legacy' && (
+              <>
+                <div className="flex-grow relative bg-white">
+                  <QuillEditor 
+                    value={content} 
+                    onChange={setContent} 
+                  />
+                </div>
+                <div className="mt-6 flex-shrink-0 flex items-center gap-4">
+                  <button onClick={handleSaveChanges} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">Save Changes</button>
+                  <button onClick={handlePreview} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-75">See Preview</button>
+                </div>
+              </>
+            )}
+
+            {activeEditorTab === 'structured' && (
+              <StructuredContentEditor
+                organ={breadcrumbs[0]?.id}
+                topicId={selectedNode?.topicId}
               />
-            </div>
-            <div className="mt-6 flex-shrink-0 flex items-center gap-4">
-              <button onClick={handleSaveChanges} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">Save Changes</button>
-              <button onClick={handlePreview} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-75">See Preview</button>
-            </div>
+            )}
+
           </div>
         ) : (
           <div>

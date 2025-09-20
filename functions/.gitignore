@@ -3,3 +3,4 @@ node_modules/
 
 # Ignore the Firebase Admin SDK service account key
 serviceAccountKey.json
+.secret.local

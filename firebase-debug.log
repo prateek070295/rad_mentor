@@ -1,0 +1,123 @@
+[debug] [2025-09-20T05:41:43.919Z] ----------------------------------------------------------------------
+[debug] [2025-09-20T05:41:43.921Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\prate\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start
+[debug] [2025-09-20T05:41:43.922Z] CLI Version:   14.16.0
+[debug] [2025-09-20T05:41:43.922Z] Platform:      win32
+[debug] [2025-09-20T05:41:43.922Z] Node Version:  v22.18.0
+[debug] [2025-09-20T05:41:43.922Z] Time:          Sat Sep 20 2025 11:11:43 GMT+0530 (India Standard Time)
+[debug] [2025-09-20T05:41:43.922Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-09-20T05:41:44.150Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-09-20T05:41:44.151Z] > authorizing via signed-in user (prateek070295@gmail.com)
+[debug] [2025-09-20T05:41:44.234Z] java version "24.0.2" 2025-07-15
+
+[debug] [2025-09-20T05:41:44.234Z] Java(TM) SE Runtime Environment (build 24.0.2+12-54)
+Java HotSpot(TM) 64-Bit Server VM (build 24.0.2+12-54, mixed mode, sharing)
+
+[debug] [2025-09-20T05:41:44.248Z] Parsed Java major version: 24
+[info] i  emulators: Starting emulators: functions, firestore, extensions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions, firestore, extensions"}}
+[debug] [2025-09-20T05:41:44.250Z] Checked if tokens are valid: true, expires at: 1758350484349
+[debug] [2025-09-20T05:41:44.250Z] Checked if tokens are valid: true, expires at: 1758350484349
+[debug] [2025-09-20T05:41:44.251Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/radmentor-app [none]
+[debug] [2025-09-20T05:41:45.710Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/radmentor-app 200
+[debug] [2025-09-20T05:41:45.710Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/radmentor-app {"projectNumber":"544597624961","projectId":"radmentor-app","lifecycleState":"ACTIVE","name":"RadMentor","labels":{"firebase":"enabled","firebase-core":"disabled","generative-language":"enabled"},"createTime":"2025-08-30T20:10:10.670448Z"}
+[debug] [2025-09-20T05:41:45.720Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-09-20T05:41:45.720Z] [firestore] Firestore Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-09-20T05:41:45.720Z] [firestore.websocket] websocket server for firestore only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-09-20T05:41:45.720Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"firestore":[{"address":"127.0.0.1","family":"IPv4","port":8080}],"firestore.websocket":[{"address":"127.0.0.1","family":"IPv4","port":9150}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2025-09-20T05:41:45.725Z] Emulator locator file path: C:\Users\prate\AppData\Local\Temp\hub-radmentor-app.json
+[debug] [2025-09-20T05:41:45.725Z] [hub] writing locator at C:\Users\prate\AppData\Local\Temp\hub-radmentor-app.json
+[debug] [2025-09-20T05:41:45.732Z] [Extensions] Started Extensions emulator, this is a noop.
+[debug] [2025-09-20T05:41:45.736Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-09-20T05:41:45.736Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-09-20T05:41:45.736Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-09-20T05:41:45.736Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"firestore":[{"address":"127.0.0.1","family":"IPv4","port":8080}],"firestore.websocket":[{"address":"127.0.0.1","family":"IPv4","port":9150}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] !  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, database, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[debug] [2025-09-20T05:41:45.758Z] defaultcredentials: writing to file C:\Users\prate\AppData\Roaming\firebase\prateek070295_gmail_com_application_default_credentials.json
+[debug] [2025-09-20T05:41:45.759Z] Setting GAC to C:\Users\prate\AppData\Roaming\firebase\prateek070295_gmail_com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to C:\\Users\\prate\\AppData\\Roaming\\firebase\\prateek070295_gmail_com_application_default_credentials.json"}}
+[debug] [2025-09-20T05:41:45.760Z] Checked if tokens are valid: true, expires at: 1758350484349
+[debug] [2025-09-20T05:41:45.760Z] Checked if tokens are valid: true, expires at: 1758350484349
+[debug] [2025-09-20T05:41:45.760Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/radmentor-app/adminSdkConfig [none]
+[debug] [2025-09-20T05:41:46.199Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/radmentor-app/adminSdkConfig 200
+[debug] [2025-09-20T05:41:46.199Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/radmentor-app/adminSdkConfig {"projectId":"radmentor-app","storageBucket":"radmentor-app.firebasestorage.app"}
+[warn] !  firestore: Cloud Firestore Emulator does not support multiple databases yet. {"metadata":{"emulator":{"name":"firestore"},"message":"Cloud Firestore Emulator does not support multiple databases yet."}}
+[warn] !  firestore: Did not find a Cloud Firestore rules file specified in a firebase.json config file. {"metadata":{"emulator":{"name":"firestore"},"message":"Did not find a Cloud Firestore rules file specified in a firebase.json config file."}}
+[warn] !  firestore: The emulator will default to allowing all reads and writes. Learn more about this option: https://firebase.google.com/docs/emulator-suite/install_and_configure#security_rules_configuration. {"metadata":{"emulator":{"name":"firestore"},"message":"The emulator will default to allowing all reads and writes. Learn more about this option: https://firebase.google.com/docs/emulator-suite/install_and_configure#security_rules_configuration."}}
+[debug] [2025-09-20T05:41:46.211Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2025-09-20T05:41:46.211Z] Ignoring unsupported arg: single_project_mode_error {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: single_project_mode_error"}}
+[debug] [2025-09-20T05:41:46.211Z] Starting Firestore Emulator with command {"binary":"java","args":["-Dgoogle.cloud_firestore.debug_log_level=FINE","-Duser.language=en","-jar","C:\\Users\\prate\\.cache\\firebase\\emulators\\cloud-firestore-emulator-v1.19.8.jar","--host","127.0.0.1","--port",8080,"--websocket_port",9150,"--project_id","radmentor-app","--single_project_mode",true,"--functions_emulator","127.0.0.1:5001"],"optionalArgs":["port","webchannel_port","host","rules","websocket_port","functions_emulator","seed_from_export","project_id","single_project_mode"],"joinArgs":false,"shell":false,"port":8080} {"metadata":{"emulator":{"name":"firestore"},"message":"Starting Firestore Emulator with command {\"binary\":\"java\",\"args\":[\"-Dgoogle.cloud_firestore.debug_log_level=FINE\",\"-Duser.language=en\",\"-jar\",\"C:\\\\Users\\\\prate\\\\.cache\\\\firebase\\\\emulators\\\\cloud-firestore-emulator-v1.19.8.jar\",\"--host\",\"127.0.0.1\",\"--port\",8080,\"--websocket_port\",9150,\"--project_id\",\"radmentor-app\",\"--single_project_mode\",true,\"--functions_emulator\",\"127.0.0.1:5001\"],\"optionalArgs\":[\"port\",\"webchannel_port\",\"host\",\"rules\",\"websocket_port\",\"functions_emulator\",\"seed_from_export\",\"project_id\",\"single_project_mode\"],\"joinArgs\":false,\"shell\":false,\"port\":8080}"}}
+[info] i  firestore: Firestore Emulator logging to firestore-debug.log {"metadata":{"emulator":{"name":"firestore"},"message":"Firestore Emulator logging to \u001b[1mfirestore-debug.log\u001b[22m"}}
+[info] +  firestore: Firestore Emulator UI websocket is running on 9150. {"metadata":{"emulator":{"name":"firestore"},"message":"Firestore Emulator UI websocket is running on 9150."}}
+[debug] [2025-09-20T05:41:47.866Z] [Extensions] Connecting Extensions emulator, this is a noop.
+[info] i  functions: Watching "C:\Users\prate\Documents\RadMentor\rad_mentor-app\functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"C:\\Users\\prate\\Documents\\RadMentor\\rad_mentor-app\\functions\" for Cloud Functions..."}}
+[debug] [2025-09-20T05:41:47.879Z] Validating nodejs source
+[debug] [2025-09-20T05:41:48.645Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "ajv": "^8.17.1",
+    "busboy": "^1.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.0.1",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pdf2json": "^3.2.1",
+    "pdfjs-dist": "^5.4.149"
+  },
+  "devDependencies": {
+    "eslint": "^8.15.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2025-09-20T05:41:48.645Z] Building nodejs source
+[debug] [2025-09-20T05:41:48.645Z] Failed to find version of module node: reached end of search path C:\Users\prate\Documents\RadMentor\rad_mentor-app\functions\node_modules
+[warn] !  functions: Your requested "node" version "20" doesn't match your global version "22". Using node@22 from host. 
+[debug] [2025-09-20T05:41:48.647Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-09-20T05:41:48.653Z] Found firebase-functions binary at 'C:\Users\prate\Documents\RadMentor\rad_mentor-app\functions\node_modules\.bin\firebase-functions'
+[info] Serving at port 8449
+
+[debug] [2025-09-20T05:41:49.649Z] Got response from /__/functions.yaml {"endpoints":{"api":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-south1"],"secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"httpsTrigger":{},"entryPoint":"api"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{},"params":[{"type":"secret","name":"GEMINI_API_KEY"}]}
+[debug] [2025-09-20T05:41:53.684Z] defaultcredentials: writing to file C:\Users\prate\AppData\Roaming\firebase\prateek070295_gmail_com_application_default_credentials.json
+[debug] [2025-09-20T05:41:53.685Z] Setting GAC to C:\Users\prate\AppData\Roaming\firebase\prateek070295_gmail_com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to C:\\Users\\prate\\AppData\\Roaming\\firebase\\prateek070295_gmail_com_application_default_credentials.json"}}
+[info] +  functions: Loaded functions definitions from source: api. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: api."}}
+[info] +  functions[asia-south1-api]: http function initialized (http://127.0.0.1:5001/radmentor-app/asia-south1/api). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/radmentor-app/asia-south1/api)."}}
+[debug] [2025-09-20T05:41:53.692Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌────────────┬────────────────┬──────────────────────────────────┐
+│ Emulator   │ Host:Port      │ View in Emulator UI              │
+├────────────┼────────────────┼──────────────────────────────────┤
+│ Functions  │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions  │
+├────────────┼────────────────┼──────────────────────────────────┤
+│ Firestore  │ 127.0.0.1:8080 │ http://127.0.0.1:4000/firestore  │
+├────────────┼────────────────┼──────────────────────────────────┤
+│ Extensions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/extensions │
+└────────────┴────────────────┴──────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500, 9150
+┌─────────────────────────┬───────────────┬─────────────────────┐
+│ Extension Instance Name │ Extension Ref │ View in Emulator UI │
+└─────────────────────────┴───────────────┴─────────────────────┘
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
