@@ -1,15 +1,27 @@
 // file: src/components/StructuredContentEditor.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReviewAndSave from './ReviewAndSave';
 
-const StructuredContentEditor = ({ organ, topicId }) => {
+const StructuredContentEditor = ({ organ, topicId, initialContent }) => {
   const [rawText, setRawText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [structuredContent, setStructuredContent] = useState(null); 
+  // The structuredContent state is now initialized from the new prop
+  const [structuredContent, setStructuredContent] = useState(initialContent || null); 
   const [error, setError] = useState('');
 
-  const handleGenerate = async () => { /* ...this function is unchanged... */
+  // NEW: This effect listens for changes to the initialContent prop.
+  // When you select a new topic in the Admin Panel, this will update the editor.
+  useEffect(() => {
+    setStructuredContent(initialContent || null);
+    // Reset raw text when new initial content is loaded
+    if (initialContent) {
+      setRawText('');
+    }
+  }, [initialContent]);
+
+
+  const handleGenerate = async () => {
     setStructuredContent(null);
     setError('');
     setIsLoading(true);
@@ -34,14 +46,13 @@ const StructuredContentEditor = ({ organ, topicId }) => {
     }
   };
 
-  // --- THIS FUNCTION IS NOW UPDATED ---
   const handleSave = async (finalContent) => {
     console.log("Saving this content:", finalContent);
     try {
       const response = await fetch('/admin/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalContent), // finalContent is already { organ, topicId, structured }
+        body: JSON.stringify(finalContent),
       });
 
       if (!response.ok) {
@@ -50,26 +61,29 @@ const StructuredContentEditor = ({ organ, topicId }) => {
       }
       
       const result = await response.json();
-      alert(result.message); // Show success message from the server
-      setStructuredContent(null); // Go back to the editor view
+      alert(result.message);
+      // After saving, we clear the view. The parent will refetch.
+      setStructuredContent(null); 
 
-    } catch (err) {
+    } catch (err) { // <-- SYNTAX ERROR WAS HERE
       console.error('Failed to save content:', err);
       alert(`Error: ${err.message}`);
     }
   };
 
   const handleCancel = () => {
+    // Cancelling returns the user to the "Generate" view
     setStructuredContent(null);
   };
 
   return (
     <div className="p-4 bg-gray-50 rounded-lg shadow-inner mt-4">
+      {/* The main conditional logic remains the same */}
       {!structuredContent ? (
         <>
-          <h3 className="text-xl font-semibold mb-3 text-gray-700">1. Paste Source Material</h3>
+          <h3 className="text-xl font-semibold mb-3 text-gray-700">1. Generate New Content</h3>
           <p className="mb-4 text-sm text-gray-500">
-            Paste your raw text below. Use the format `[Image: description,url]` for any images.
+            No structured content found for this topic. Paste raw text below to generate it.
           </p>
           <textarea
             className="w-full h-64 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 transition"
@@ -103,3 +117,4 @@ const StructuredContentEditor = ({ organ, topicId }) => {
 };
 
 export default StructuredContentEditor;
+

@@ -14,6 +14,7 @@ import saveQuestionsRouter from "./routes/saveQuestions.js";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import tutorStepRouter from './routes/tutorStep.js';
+import getContentRouter from './routes/getContent.js';
 
 // ---------- Global options / Firebase Admin ----------
 setGlobalOptions({ region: "asia-south1" });
@@ -36,6 +37,7 @@ app.use("/save-questions", saveQuestionsRouter);
 app.use("/structure", structureGenerator); 
 app.use("/admin/save", adminSave);
 app.use('/tutor/step', tutorStepRouter);
+app.use('/content', getContentRouter);
 
 // ---------- Global error handler (JSON always) ----------
 app.use((err, req, res, _next) => {

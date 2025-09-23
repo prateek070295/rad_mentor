@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { db, auth } from '../firebase';
+import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, where, doc, updateDoc } from 'firebase/firestore';
 import QuillEditor from './QuillEditor';
 import 'quill/dist/quill.snow.css';
@@ -24,16 +24,17 @@ const AdminPanel = () => {
   const [selectedNode, setSelectedNode] = useState(null);
   const [nodeHasChildren, setNodeHasChildren] = useState({});
   const [editedName, setEditedName] = useState('');
-  const [content, setContent] = useState(null);
+  const [legacyContent, setLegacyContent] = useState(null); // Renamed from 'content'
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [statusMap, setStatusMap] = useState({});
   const [organSystems, setOrganSystems] = useState([]);
   const [activeEditorTab, setActiveEditorTab] = useState('legacy');
-
-  // --- Uploader State Changes ---
   const [view, setView] = useState('uploader');
-  // ✅ 1. State now holds the full data object (questions + metadata)
-  const [extractedData, setExtractedData] = useState(null); 
+  const [extractedData, setExtractedData] = useState(null);
+
+  // --- NEW: State for loading and storing structured content ---
+  const [structuredContent, setStructuredContent] = useState(null);
+  const [isStructuredContentLoading, setIsStructuredContentLoading] = useState(false);
 
   useEffect(() => {
     const fetchOrganSystems = async () => {
@@ -45,8 +46,7 @@ const AdminPanel = () => {
     };
     fetchOrganSystems();
   }, []);
-  
-  // ... (all your other functions like calculateAllNodeStatuses, useEffects, drillDown, etc. remain unchanged) ...
+
   const calculateAllNodeStatuses = useCallback(async (sectionId) => {
     try {
       const allNodesRef = collection(db, 'sections', sectionId, 'nodes');
@@ -166,14 +166,41 @@ const AdminPanel = () => {
       setBreadcrumbs(prev => [...prev, { id: node.id, name: node.name, topicId: node.topicId }]); 
   };
   
-  const selectNodeForEditing = (node) => { 
+  // --- UPDATED: This function now fetches both legacy and structured content ---
+  const selectNodeForEditing = async (node) => { 
       setSelectedNode(node); 
       setEditedName(node.name); 
+
+      // Reset content states
+      setLegacyContent(null);
+      setStructuredContent(null);
+      
+      // Load legacy Quill content
       if (typeof node.mainContent === 'object' && node.mainContent !== null) { 
-          setContent(node.mainContent); 
-      } else { 
-          setContent(null); 
-      } 
+          setLegacyContent(node.mainContent); 
+      }
+      
+      // Load structured content from our new API
+      if (breadcrumbs.length > 0) {
+        setIsStructuredContentLoading(true);
+        const organ = breadcrumbs[0].id;
+        const topicId = node.id; // Use the document ID for the API call
+        try {
+          const response = await fetch(`/content?organ=${organ}&topicId=${topicId}`);
+          if (response.ok) {
+            const data = await response.json();
+            setStructuredContent(data.structuredContent); // Will be null if no content exists yet
+          } else {
+            console.error("Failed to fetch structured content, server responded with an error.");
+            setStructuredContent(null);
+          }
+        } catch (error) {
+          console.error("Error fetching structured content:", error);
+          setStructuredContent(null);
+        } finally {
+          setIsStructuredContentLoading(false);
+        }
+      }
   };
 
   const handleBreadcrumbClick = (index) => { 
@@ -186,27 +213,17 @@ const AdminPanel = () => {
       setBreadcrumbs([]); 
   };
 
+  // --- UPDATED: This function now only saves legacy content ---
   const handleSaveChanges = async () => {
     if (!selectedNode) return;
     try {
-      let docRef;
-      let updatedData = {};
-      const isContentChanged = JSON.stringify(selectedNode.mainContent) !== JSON.stringify(content);
-      if (breadcrumbs.length === 1) {
-        docRef = doc(db, 'sections', selectedNode.id);
-        if (selectedNode.name !== editedName) updatedData.title = editedName;
-      } else {
-        const parentSection = breadcrumbs[0];
-        docRef = doc(db, 'sections', parentSection.id, 'nodes', selectedNode.id);
-        if (selectedNode.name !== editedName) updatedData.name = editedName;
-        if (isContentChanged) updatedData.mainContent = { ...content };
-      }
-      if (Object.keys(updatedData).length === 0) { 
-          alert("No changes to save."); 
-          return; 
-      }
-      await updateDoc(docRef, updatedData);
-      alert('Changes saved successfully!');
+      const parentSection = breadcrumbs[0];
+      const docRef = doc(db, 'sections', parentSection.id, 'nodes', selectedNode.id);
+      await updateDoc(docRef, { 
+        name: editedName,
+        mainContent: legacyContent 
+      });
+      alert('Legacy content saved successfully!');
       if(breadcrumbs.length > 0) {
         calculateAllNodeStatuses(breadcrumbs[0].id);
       }
@@ -217,13 +234,10 @@ const AdminPanel = () => {
   };
 
   const handlePreview = () => { 
-      localStorage.setItem('radmentor_preview_content', JSON.stringify(content)); 
+      localStorage.setItem('radmentor_preview_content', JSON.stringify(legacyContent)); 
       window.open('/preview', '_blank'); 
   };
 
-  // --- Uploader Function Handlers ---
-
-  // ✅ 2. Handle the incoming data object from the uploader
   const handleExtracted = (data) => {
     setExtractedData(data);
     setView('preview');
@@ -232,7 +246,6 @@ const AdminPanel = () => {
   const handleSaveToBank = () => {
     setExtractedData(null);
     setView('uploader');
-    // You can add a success notification here
   };
 
   const handleCancelPreview = () => {
@@ -270,7 +283,6 @@ const AdminPanel = () => {
 
   return (
     <div className="flex h-[calc(100vh-120px)] bg-gray-200 transition-all duration-300">
-      {/* --- NAVIGATION PANE (No changes here) --- */}
       <div className={`bg-white border-r border-gray-300 flex flex-col transition-all duration-300 ${isNavCollapsed ? 'w-16' : 'w-1/4'}`}>
         <div className={`p-4 flex items-center justify-between ${isNavCollapsed ? 'flex-col' : 'flex-row'}`}>
             {!isNavCollapsed && <h2 className="text-lg font-bold">Navigation 🌳</h2>}
@@ -289,10 +301,7 @@ const AdminPanel = () => {
         )}
       </div>
 
-      {/* --- MAIN CONTENT PANE --- */}
       <div className="flex-grow p-6 flex flex-col bg-gray-50 overflow-y-auto">
-        
-        {/* --- QUESTION UPLOADER (No changes here) --- */}
         {view === 'uploader' ? (
           <div className="mb-8">
             <QuestionUploader onExtracted={handleExtracted} />
@@ -315,64 +324,51 @@ const AdminPanel = () => {
             <span className="bg-gray-300 h-px w-1/3 inline-block"></span>
         </div>
         
-        {/* --- CONTENT EDITOR (This is where the changes are) --- */}
         <h3 className="text-2xl font-bold text-gray-800 mb-6">Content Editor</h3>
 
         {selectedNode ? (
           <div className="flex-grow flex flex-col">
-            {/* --- TOPIC NAME INPUT (No changes here) --- */}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex-shrink-0">
               <label htmlFor="topicName" className="block text-sm font-medium text-gray-700">Topic Name</label>
-              <input type="text" id="topicName" value={editedName} onChange={(e) => setEditedName(e.target.value)} className="mt-1 block w-full text-xl font-bold border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+              <input type="text" id="topicName" value={editedName} onChange={(e) => setEditedName(e.target.value)} className="mt-1 block w-full text-xl font-bold border-gray-300 rounded-md shadow-sm" />
               {selectedNode.category && (
                 <p className="text-sm text-white bg-blue-500 inline-block px-2 py-0.5 rounded-full mt-2">{selectedNode.category}</p>
               )}
             </div>
 
-            {/* --- NEW: TAB BUTTONS --- */}
             <div className="flex border-b border-gray-300 mb-4">
-              <button 
-                onClick={() => setActiveEditorTab('legacy')}
-                className={`px-4 py-2 text-sm font-semibold ${activeEditorTab === 'legacy' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                Legacy (Quill)
-              </button>
-              <button 
-                onClick={() => setActiveEditorTab('structured')}
-                className={`px-4 py-2 text-sm font-semibold ${activeEditorTab === 'structured' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                Structured (AI)
-              </button>
+              <button onClick={() => setActiveEditorTab('legacy')} className={`px-4 py-2 text-sm font-semibold ${activeEditorTab === 'legacy' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>Legacy (Quill)</button>
+              <button onClick={() => setActiveEditorTab('structured')} className={`px-4 py-2 text-sm font-semibold ${activeEditorTab === 'structured' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>Structured (AI)</button>
             </div>
 
-            {/* --- NEW: CONDITIONAL EDITOR RENDERING --- */}
             {activeEditorTab === 'legacy' && (
               <>
                 <div className="flex-grow relative bg-white">
-                  <QuillEditor 
-                    value={content} 
-                    onChange={setContent} 
-                  />
+                  <QuillEditor value={legacyContent} onChange={setLegacyContent} />
                 </div>
                 <div className="mt-6 flex-shrink-0 flex items-center gap-4">
-                  <button onClick={handleSaveChanges} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">Save Changes</button>
-                  <button onClick={handlePreview} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-75">See Preview</button>
+                  <button onClick={handleSaveChanges} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">Save Changes</button>
+                  <button onClick={handlePreview} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700">See Preview</button>
                 </div>
               </>
             )}
 
             {activeEditorTab === 'structured' && (
-              <StructuredContentEditor
-                organ={breadcrumbs[0]?.id}
-                topicId={selectedNode?.topicId}
-              />
+              isStructuredContentLoading ? (
+                <div className="text-center p-8">
+                  <p className="text-gray-500">Loading structured content...</p>
+                </div>
+              ) : (
+                <StructuredContentEditor
+                  organ={breadcrumbs[0]?.id}
+                  topicId={selectedNode?.id}
+                  initialContent={structuredContent}
+                />
+              )
             )}
-
           </div>
         ) : (
-          <div>
-            <p className="text-gray-500">Select a topic from the navigation pane to begin editing.</p>
-          </div>
+          <p className="text-gray-500">Select a topic from the navigation pane to begin editing.</p>
         )}
       </div>
     </div>
@@ -380,3 +376,4 @@ const AdminPanel = () => {
 };
 
 export default AdminPanel;
+
