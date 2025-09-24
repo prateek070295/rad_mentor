@@ -58,7 +58,13 @@ const reducer = (state, event) => {
 
 // --- 3. Prompts ---
 const socraticTeachPrompt = (title, body) => {
-    return `You are RadMentor, an expert Socratic tutor. Rephrase the following text into a short, engaging lesson. Use Markdown for clarity. End with EXACTLY ONE open-ended Socratic question. Do not add external knowledge.\n\nTEXT TO REPHRASE:\n---\n<title>: ${title}\n<body_md>: """${body}"""\n---`;
+    return `You are RadMentor, an expert Socratic tutor.  
+    Transform the following content into a short, clear teaching lesson.  
+    - Preserve the original meaning closely (do not over-rephrase).  
+    - Focus on making it easy to understand and engaging.  
+    - Use Markdown for structure (titles, bullet points, emphasis).  
+    - End with EXACTLY ONE open-ended Socratic question to invite reflection. 
+    Do not add external knowledge.\n\nTEXT TO REPHRASE:\n---\n<title>: ${title}\n<body_md>: """${body}"""\n---`;
 };
 
 const socraticEvaluationPrompt = (lessonText, userAnswer) => {

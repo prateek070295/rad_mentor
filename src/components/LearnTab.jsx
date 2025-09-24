@@ -224,7 +224,8 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
       </div>
     );
 
-    const shouldShowInput = isLastCard && ['OBJECTIVES_CARD', 'TEACH_CARD', 'SHORT_CHECKPOINT', 'SUMMARY_CARD'].includes(card.type);
+    // FIX: Removed 'OBJECTIVES_CARD' from this list
+    const shouldShowInput = isLastCard && ['TEACH_CARD', 'SHORT_CHECKPOINT'].includes(card.type);
 
     switch(card.type) {
         case 'OBJECTIVES_CARD':
@@ -233,7 +234,17 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
                     <div className="bg-indigo-600 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
                     <div className="p-6">
                         <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-                        {shouldShowInput && renderChatInput()}
+                        {isLastCard && (
+                          <div className="mt-6 flex justify-end">
+                            <button
+                              onClick={handleContinue}
+                              disabled={isMentorTyping}
+                              className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-blue-400"
+                            >
+                              Ready
+                            </button>
+                          </div>
+                        )}
                     </div>
                 </div>
             );
@@ -305,7 +316,6 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
                     <div className="bg-yellow-500 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
                     <div className="p-6">
                         <div className="prose prose-lg max-w-none text-gray-800 mt-4"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-                        {shouldShowInput && renderChatInput()}
                     </div>
                 </div>
             );
