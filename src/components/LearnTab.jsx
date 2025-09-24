@@ -6,13 +6,13 @@ import ReactMarkdown from 'react-markdown';
 import TopicNode from './TopicNode';
 import MCQForm from './MCQForm';
 
-const LearnTab = ({ todayFocus, userName }) => {
+const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentChapter, setCurrentChapter] = useState(null);
   const [chapterTopics, setChapterTopics] = useState([]);
   const [isSidebarLoading, setIsSidebarLoading] = useState(true);
-  
+
   // Tutor State
   const [sessionState, setSessionState] = useState(null);
   const [tutorHistory, setTutorHistory] = useState([]);
@@ -21,6 +21,13 @@ const LearnTab = ({ todayFocus, userName }) => {
   const [activeTopic, setActiveTopic] = useState(null);
 
   const chatEndRef = useRef(null);
+
+  // Notify parent component about focus mode change
+  useEffect(() => {
+    if (setIsFocusMode) {
+      setIsFocusMode(!isSidebarOpen); // True when in focus mode
+    }
+  }, [isSidebarOpen, setIsFocusMode]);
 
   const parseFocusString = (fullFocusString) => {
     if (!fullFocusString) return null;
@@ -54,14 +61,14 @@ const LearnTab = ({ todayFocus, userName }) => {
         const chapterQuery = query(nodesRef, where("name", "==", focusData.chapterName), where("parentId", "==", null));
         const chapterSnapshot = await getDocs(chapterQuery);
         if (chapterSnapshot.empty) throw new Error(`Chapter "${focusData.chapterName}" not found.`);
-        
+
         const chapterData = chapterSnapshot.docs[0].data();
         setCurrentChapter(chapterData);
 
         const allTopicsQuery = query(nodesRef, where("path", "array-contains", chapterData.name), orderBy("order"));
         const allTopicsSnapshot = await getDocs(allTopicsQuery);
         const descendantTopics = allTopicsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        
+
         const nodeMap = new Map();
         descendantTopics.forEach(topic => {
             topic.children = [];
@@ -86,15 +93,14 @@ const LearnTab = ({ todayFocus, userName }) => {
     };
     fetchSidebarData();
   }, [todayFocus]);
-  
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [tutorHistory, isMentorTyping]);
 
-  // Starts a new tutor session
   const handleTopicClick = async (topic) => {
     if (activeTopic?.id === topic.id) return;
-    
+
     setIsMentorTyping(true);
     setTutorHistory([]);
     setActiveTopic(topic);
@@ -107,7 +113,7 @@ const LearnTab = ({ todayFocus, userName }) => {
         body: JSON.stringify({
           topicId: topic.id,
           organ: topic.path[0],
-          userName: userName 
+          userName: userName
         }),
       });
 
@@ -124,7 +130,6 @@ const LearnTab = ({ todayFocus, userName }) => {
     }
   };
 
-  // Handles text input submissions
   const handleChatInputSubmit = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || isMentorTyping || !sessionState) return;
@@ -150,8 +155,7 @@ const LearnTab = ({ todayFocus, userName }) => {
       setIsMentorTyping(false);
     }
   };
-  
-  // Handles MCQ form submissions
+
   const handleCheckpointSubmit = async (selectedIndex) => {
     if (isMentorTyping || !sessionState) return;
     setIsMentorTyping(true);
@@ -177,7 +181,6 @@ const LearnTab = ({ todayFocus, userName }) => {
     }
   };
 
-  // Handles the "Continue" button on various cards
   const handleContinue = async () => {
     if (isMentorTyping || !sessionState) return;
     setIsMentorTyping(true);
@@ -203,122 +206,179 @@ const LearnTab = ({ todayFocus, userName }) => {
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  // Renders different UI cards based on the type from the server
   const renderTutorCard = (card, index) => {
     if (!card) return null;
+    const isLastCard = index === tutorHistory.length - 1;
+
+    const renderChatInput = () => (
+      <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <form onSubmit={handleChatInputSubmit}>
+            <fieldset disabled={isMentorTyping}>
+                <label className="font-semibold text-gray-700 block mb-2">Your Answer</label>
+                <div className="flex space-x-2">
+                    <input type="text" autoFocus value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type your answer..." className="flex-grow rounded-lg px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400">Send</button>
+                </div>
+            </fieldset>
+        </form>
+      </div>
+    );
+
+    const shouldShowInput = isLastCard && ['OBJECTIVES_CARD', 'TEACH_CARD', 'SHORT_CHECKPOINT', 'SUMMARY_CARD'].includes(card.type);
+
     switch(card.type) {
-      case 'OBJECTIVES_CARD':
-        return (
-            <div key={index} className="p-4 rounded-lg shadow-md bg-indigo-50 border-l-4 border-indigo-500">
-                <h3 className="font-bold text-lg text-indigo-800">{card.title}</h3>
-                <div className="prose max-w-none prose-sm text-gray-700 mt-2"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-            </div>
-        );
-      case 'TEACH_CARD':
-        return (
-          <div key={index} className="flex justify-start">
-            <div className="max-w-4xl p-4 rounded-xl shadow bg-gray-200 text-gray-800">
-              <h3 className="font-bold text-lg mb-2">{card.title}</h3>
-              <div className="prose max-w-none"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-              {(card.assets?.images?.length > 0 || card.assets?.cases?.length > 0) && (
-                <div className="mt-4 pt-3 border-t border-gray-400">
-                  <h4 className="font-semibold text-sm text-gray-600 mb-2">Reference Material:</h4>
-                  {(card.assets.images || []).map(img => <a key={img.alt} href={img.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline block text-sm">{img.alt}</a>)}
-                  {(card.assets.cases || []).map(c => <a key={c.label} href={c.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline block text-sm">{c.label}</a>)}
+        case 'OBJECTIVES_CARD':
+            return (
+                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                    <div className="bg-indigo-600 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                    <div className="p-6">
+                        <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                        {shouldShowInput && renderChatInput()}
+                    </div>
                 </div>
-              )}
-            </div>
-          </div>
-        );
-      case 'TRANSITION_CARD':
-        return (
-            <div key={index} className="p-4 rounded-lg shadow-md bg-blue-50 border-l-4 border-blue-500">
-                <h3 className="font-bold text-lg text-blue-800">{card.title}</h3>
-                <div className="prose max-w-none prose-sm text-gray-700 mt-2"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-                <div className="mt-4 flex justify-end">
-                    <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-1 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 disabled:bg-blue-400">Continue to Checkpoint →</button>
+            );
+        case 'TEACH_CARD':
+            return (
+              <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                <div className="p-6">
+                    <div className="prose prose-lg max-w-none"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                    {(card.assets?.images?.length > 0 || card.assets?.cases?.length > 0) && (
+                        <div className="mt-6 pt-4 border-t border-gray-300">
+                        <h4 className="font-semibold text-base text-gray-600 mb-2">Reference Material:</h4>
+                        {(card.assets.images || []).map(img => <a key={img.alt} href={img.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline block text-base">{img.alt}</a>)}
+                        {(card.assets.cases || []).map(c => <a key={c.label} href={c.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline block text-base">{c.label}</a>)}
+                        </div>
+                    )}
+                    {shouldShowInput && renderChatInput()}
                 </div>
-            </div>
-        );
-      case 'MCQ_CHECKPOINT':
-        return <MCQForm key={index} title={card.title} question={card.message} options={card.options} onSubmit={handleCheckpointSubmit} isMentorTyping={isMentorTyping}/>;
-      case 'SHORT_CHECKPOINT':
-        return (
-          <div key={index} className="p-4 bg-gray-100 border border-gray-300 rounded-lg mt-4">
-            <h3 className="font-bold text-lg mb-2">{card.title}</h3>
-            <p className="mb-4">{card.message}</p>
-            <p className="text-sm text-gray-500 italic">Type your answer in the chat box below.</p>
-          </div>
-        );
-      case 'FEEDBACK_CARD':
-        const isCorrect = card.isCorrect;
-        return (
-          <div key={index} className={`p-4 rounded-lg shadow-md border-l-4 ${isCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
-            <h3 className={`font-bold text-lg mb-2 ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>{card.title}</h3>
-            <div className="prose max-w-none prose-sm text-gray-700"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-            <div className="mt-4 flex justify-end">
-              <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-1 bg-gray-700 text-white text-sm font-semibold rounded-md hover:bg-gray-800 disabled:bg-gray-400">Continue →</button>
-            </div>
-          </div>
-        );
-       case 'SUMMARY_CARD':
-       case 'TOPIC_COMPLETE':
-        return (
-            <div key={index} className="p-4 rounded-lg shadow-md bg-yellow-50 border-l-4 border-yellow-500">
-                <h3 className="font-bold text-lg text-yellow-800">{card.title}</h3>
-                <div className="prose max-w-none prose-sm text-gray-700"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-            </div>
-        );
-      case 'USER_MESSAGE':
-        return ( <div key={index} className="flex justify-end"><div className={`max-w-4xl p-3 rounded-xl shadow text-base bg-blue-500 text-white`}>{card.message}</div></div> );
-      case 'ERROR':
-        return ( <div key={index} className="flex justify-start"><div className="p-3 rounded-xl bg-red-100 text-red-700">{card.message}</div></div> );
-      default:
-        return <div key={index} className="text-sm text-gray-400">Received an unknown card type: {card.type}</div>;
+              </div>
+            );
+        case 'TRANSITION_CARD':
+            return (
+                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                     <div className="bg-blue-600 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                    <div className="p-6">
+                        <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                        <div className="mt-6 flex justify-end">
+                            <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-blue-400">Continue to Checkpoint →</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        case 'MCQ_CHECKPOINT':
+            return (
+                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                    <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                    <div className="p-6">
+                        <MCQForm question={card.message} options={card.options} onSubmit={handleCheckpointSubmit} isMentorTyping={isMentorTyping}/>
+                    </div>
+                </div>
+            );
+        case 'SHORT_CHECKPOINT':
+            return (
+                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                    <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                    <div className="p-6">
+                        <div className="prose prose-lg max-w-none"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                        {shouldShowInput && renderChatInput()}
+                    </div>
+              </div>
+            );
+        case 'FEEDBACK_CARD':
+            const isCorrect = card.isCorrect;
+            return (
+              <div key={index} className={`rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden`}>
+                <div className={`${isCorrect ? 'bg-green-600' : 'bg-red-600'} p-4`}><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                <div className="p-6">
+                    <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                    <div className="mt-6 flex justify-end">
+                      <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-2 bg-gray-700 text-white font-semibold rounded-md hover:bg-gray-800 disabled:bg-gray-400">Continue →</button>
+                    </div>
+                </div>
+              </div>
+            );
+        case 'SUMMARY_CARD':
+        case 'TOPIC_COMPLETE':
+            return (
+                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                    <div className="bg-yellow-500 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                    <div className="p-6">
+                        <div className="prose prose-lg max-w-none text-gray-800 mt-4"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                        {shouldShowInput && renderChatInput()}
+                    </div>
+                </div>
+            );
+        case 'USER_MESSAGE':
+            return (
+                <div key={index} className="flex justify-end">
+                    <div className="inline-block max-w-2xl p-4 rounded-lg bg-gray-100 border border-gray-200 text-gray-800">{card.message}</div>
+                </div>
+            );
+        case 'ERROR':
+            return ( <div key={index} className="flex justify-start"><div className="p-4 rounded-xl bg-red-100 text-red-700 font-medium">{card.message}</div></div> );
+        default:
+            return <div key={index} className="text-sm text-gray-400">Received an unknown card type: {card.type}</div>;
     }
   };
 
-  // Determines when the text input should be visible
-  const shouldShowChatInput = () => {
-    if (!sessionState || tutorHistory.length === 0) return false;
-    const lastCardType = tutorHistory[tutorHistory.length - 1]?.type;
-    return ['OBJECTIVES_CARD', 'TEACH_CARD', 'SHORT_CHECKPOINT', 'SUMMARY_CARD'].includes(lastCardType);
-  }
-
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
-      <aside className={`bg-white shadow-xl flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80 p-6' : 'w-0'}`}>
-        <div className={`flex items-center justify-between mb-6 flex-shrink-0 ${!isSidebarOpen && 'hidden'}`}>
-          <h2 className="text-2xl font-bold text-gray-800">{currentChapter ? currentChapter.name : 'Chapter'}</h2>
+    <div className="flex h-full w-full"> {/* Use h-full to fill parent */}
+      {/* Sidebar */}
+      <aside className={`bg-white shadow-xl flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'}`}>
+        <div className={`p-6 font-bold text-2xl text-gray-800 flex-shrink-0 border-b ${!isSidebarOpen && 'hidden'}`}>
+            {currentChapter ? currentChapter.name : 'Chapter'}
         </div>
-        <nav className={`overflow-y-auto ${!isSidebarOpen && 'hidden'}`}>
+        <nav className={`flex-grow overflow-y-auto p-6 ${!isSidebarOpen && 'hidden'}`}>
           {isSidebarLoading ? <p>Loading topics...</p> : <ul>{chapterTopics.map(topic => <TopicNode key={topic.id} topic={topic} onTopicSelect={handleTopicClick} currentTopicId={activeTopic ? activeTopic.id : null}/>)}</ul>}
         </nav>
       </aside>
-      
-      <main className="flex-grow flex flex-col overflow-y-auto bg-gray-50">
-        <div className="sticky top-0 z-10 bg-gray-50 p-6 border-b border-gray-200">
-            <div><h1 className="text-3xl font-bold text-gray-800">{activeTopic ? activeTopic.name : "Select a topic"}</h1></div>
-            <div className="flex space-x-2 flex-shrink-0 mt-4">
-              <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-300">{isSidebarOpen ? 'Focus Mode' : 'Show Menu'}</button>
+
+      {/* Main content area */}
+      <main className="flex-grow flex flex-col bg-gray-50 h-full">
+        {isSidebarOpen ? (
+          <>
+            {/* --- Standard Header --- */}
+            <div className="sticky top-0 z-10 bg-gray-50 p-6 border-b border-gray-200 flex-shrink-0">
+              <div><h1 className="text-3xl font-bold text-gray-800">{activeTopic ? activeTopic.name : "Select a topic"}</h1></div>
+              <div className="flex space-x-2 flex-shrink-0 mt-4">
+                  <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-300">Focus Mode</button>
+              </div>
             </div>
-          </div>
-        <div className="px-6 pb-6 flex-grow flex flex-col">
-          <div className="bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col flex-grow">
-            <div className="flex-grow p-4 overflow-y-auto space-y-4">
-              {tutorHistory.length > 0 ? tutorHistory.map(renderTutorCard) : <div className="text-center text-gray-500 pt-10">Select a topic from the menu to begin.</div>}
-              {isMentorTyping && ( <div className="flex justify-start"><div className="p-3 rounded-xl bg-gray-200 text-gray-800"><span className="animate-pulse">Mentor is thinking...</span></div></div>)}
-              <div ref={chatEndRef} />
+          </>
+        ) : (
+          <>
+            {/* --- Focus Mode Header --- */}
+            <div className="flex-shrink-0 p-6 h-20">
+              <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-semibold hover:bg-gray-900 shadow-lg">
+                  Show Menu
+              </button>
             </div>
-            {shouldShowChatInput() && (
-              <form onSubmit={handleChatInputSubmit} className="p-4 bg-gray-100 border-t">
-                <fieldset disabled={isMentorTyping} className="flex space-x-2">
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type your answer or 'ready' to continue..." className="flex-grow rounded-lg px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">Send</button>
-                </fieldset>
-              </form>
+          </>
+        )}
+
+        {/* --- Lesson Content (Scrollable Area) --- */}
+        <div className="flex-grow overflow-y-auto p-6 space-y-6">
+            {tutorHistory.length > 0 ? (
+                tutorHistory.map(renderTutorCard)
+            ) : (
+                <div className="text-center text-gray-500 pt-10">
+                    <h2 className="text-2xl font-semibold mb-2">Welcome to the Learn Tab!</h2>
+                    <p>Select a topic from the menu on the left to begin your interactive lesson.</p>
+                </div>
             )}
-          </div>
+            {isMentorTyping && (
+                <div className="flex justify-start">
+                    <div className="p-4 rounded-xl bg-white border border-gray-200 text-gray-800 shadow-md">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+                            <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+                            <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            <div ref={chatEndRef} />
         </div>
       </main>
     </div>
@@ -326,4 +386,3 @@ const LearnTab = ({ todayFocus, userName }) => {
 };
 
 export default LearnTab;
-
