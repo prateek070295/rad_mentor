@@ -34,6 +34,7 @@ const daysBetween = (start, end) => {
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isFocusMode, setIsFocusMode] = useState(false); // State for focus mode
   
   const [organSystems, setOrganSystems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,9 +56,8 @@ function App() {
     const autoLogin = async () => {
       try {
         await signInWithEmailAndPassword(auth, "test@test.com", "123456");
-        console.log("Auto-login successful for testing!");
       } catch (error) {
-        // This is expected if already logged in, so we can ignore the error.
+        // This is expected if already logged in.
       }
     };
     autoLogin();
@@ -179,9 +179,8 @@ function App() {
       case 'plan':
         return <PlanTab organSystems={organSystems} />;
       case 'learn':
-        return <LearnTab todayFocus={dashboardData.todayFocus} userName={dashboardData.userName} />;
+        return <LearnTab todayFocus={dashboardData.todayFocus} userName={dashboardData.userName} setIsFocusMode={setIsFocusMode} />;
       case 'test':
-        // Pass the organSystems prop to TestTab
         return <TestTab organSystems={organSystems} />;
       case 'admin':
         return <AdminPanel />; 
@@ -191,53 +190,59 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 font-inter">
-      <header className="sticky top-0 bg-white shadow-md p-4 flex items-center justify-between z-10">
-        <div className="flex items-center space-x-2">
-          <img src={appLogo} alt="Rad Mentor App Logo" className="w-8 h-8" />
-          <span className="text-xl font-bold text-gray-800">Rad Mentor</span>
-        </div>
-        <div className="flex items-center space-x-4">
-          <nav className="hidden md:flex space-x-4">
-            <button
-              className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              Dashboard
-            </button>
-            <button
-              className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'plan' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-              onClick={() => setActiveTab('plan')}
-            >
-              Plan
-            </button>
-            <button
-              className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-              onClick={() => setActiveTab('learn')}
-            >
-              Learn
-            </button>
-            <button
-              className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'test' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-              onClick={() => setActiveTab('test')}
-            >
-              Test
-            </button>
-            <button
-              className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-              onClick={() => setActiveTab('admin')}
-            >
-            Admin
-            </button>
-          </nav>
-          <div className="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-800 font-semibold text-lg">
-            S
+    <div className="h-screen w-screen bg-gray-100 font-inter flex flex-col">
+      {/* Conditionally render the header based on focus mode */}
+      {!isFocusMode && (
+        <header className="flex-shrink-0 bg-white shadow-md p-4 flex items-center justify-between z-20">
+          <div className="flex items-center space-x-2">
+            <img src={appLogo} alt="Rad Mentor App Logo" className="w-8 h-8" />
+            <span className="text-xl font-bold text-gray-800">Rad Mentor</span>
           </div>
-        </div>
-      </header>
+          <div className="flex items-center space-x-4">
+            <nav className="hidden md:flex space-x-4">
+              <button
+                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('dashboard')}
+              >
+                Dashboard
+              </button>
+              <button
+                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'plan' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('plan')}
+              >
+                Plan
+              </button>
+              <button
+                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('learn')}
+              >
+                Learn
+              </button>
+              <button
+                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'test' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('test')}
+              >
+                Test
+              </button>
+              <button
+                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('admin')}
+              >
+              Admin
+              </button>
+            </nav>
+            <div className="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-800 font-semibold text-lg">
+              S
+            </div>
+          </div>
+        </header>
+      )}
 
-      <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-        {renderContent()}
+      {/* Main content area now grows and handles its own scrolling */}
+      <main className="flex-grow overflow-y-auto">
+        <div className={isFocusMode || activeTab === 'learn' ? "" : "container mx-auto p-4 sm:p-6 lg:p-8"}>
+            {renderContent()}
+        </div>
       </main>
     </div>
   );
