@@ -161,6 +161,23 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [tutorHistory, isMentorTyping]);
 
+  useEffect(() => {
+      const handleKeyDown = (event) => {
+        // Check if the sidebar is closed (i.e., we are in focus mode) and Escape is pressed
+        if (!isSidebarOpen && event.key === 'Escape') {
+          setIsSidebarOpen(true);
+        }
+      };
+
+      // Add event listener when the component mounts
+      window.addEventListener('keydown', handleKeyDown);
+
+      // Cleanup: remove event listener when the component unmounts to prevent memory leaks
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [isSidebarOpen]);
+    
   const callTutorApi = useCallback(async (body) => {
     if (!auth.currentUser) throw new Error("User not authenticated.");
     const token = await auth.currentUser.getIdToken();
