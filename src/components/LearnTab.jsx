@@ -286,6 +286,35 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
     submitTutorInteraction("continue", null);
   };
 
+  const handleContinueToNextTopic = () => {
+    // 1. Create a flat list of all learnable topics (those without children)
+    const flatTopics = [];
+    const flattenRecursively = (topics) => {
+        topics.forEach(topic => {
+            if (!topic.children || topic.children.length === 0) {
+                flatTopics.push(topic);
+            }
+            if (topic.children && topic.children.length > 0) {
+                flattenRecursively(topic.children);
+            }
+        });
+    };
+    flattenRecursively(chapterTopics); // chapterTopics holds the full, merged tree
+
+    // 2. Find the index of the current topic
+    const currentIndex = flatTopics.findIndex(topic => topic.id === activeTopic.id);
+
+    // 3. If there is a next topic, click it
+    if (currentIndex !== -1 && currentIndex < flatTopics.length - 1) {
+        const nextTopic = flatTopics[currentIndex + 1];
+        handleTopicClick(nextTopic);
+    } else {
+        // Optional: Handle the case where the last topic in the chapter is finished
+        console.log("Chapter complete!");
+        // You could add a UI card here to celebrate completing the chapter
+    }
+  };
+
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   
   const renderTutorCard = (card, index) => {
@@ -312,7 +341,28 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
         case 'MCQ_CHECKPOINT': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <MCQForm question={card.message} options={card.options} onSubmit={handleCheckpointSubmit} isMentorTyping={isMentorTyping}/> </div> </div> );
         case 'SHORT_CHECKPOINT': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none"><ReactMarkdown>{card.message}</ReactMarkdown></div> {shouldShowInput && renderChatInput()} </div> </div> );
         case 'FEEDBACK_CARD': const isCorrect = card.isCorrect; return ( <div key={index} className={`rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden`}> <div className={`${isCorrect ? 'bg-green-600' : 'bg-red-600'} p-4`}><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div> <div className="mt-6 flex justify-end"> <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-2 bg-gray-700 text-white font-semibold rounded-md hover:bg-gray-800 disabled:bg-gray-400">Continue →</button> </div> </div> </div> );
-        case 'SUMMARY_CARD': case 'TOPIC_COMPLETE': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-yellow-500 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none text-gray-800 mt-4"><ReactMarkdown>{card.message}</ReactMarkdown></div> </div> </div> );
+                case 'SUMMARY_CARD':
+        case 'TOPIC_COMPLETE':
+            return (
+                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
+                    <div className="bg-yellow-500 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
+                    <div className="p-6">
+                        <div className="prose prose-lg max-w-none text-gray-800 mt-4"><ReactMarkdown>{card.message}</ReactMarkdown></div>
+                        {/* NEW: Conditionally render the continue button */}
+                        {card.isTopicComplete && isLastCard && (
+                            <div className="mt-6 flex justify-end">
+                                <button
+                                  onClick={handleContinueToNextTopic}
+                                  disabled={isMentorTyping}
+                                  className="px-6 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 disabled:bg-green-400"
+                                >
+                                  Continue to Next Topic →
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
         case 'USER_MESSAGE': return ( <div key={index} className="flex justify-end"> <div className="inline-block max-w-2xl p-4 rounded-lg bg-gray-100 border border-gray-200 text-gray-800">{card.message}</div> </div> );
         case 'ERROR': return ( <div key={index} className="flex justify-start"><div className="p-4 rounded-xl bg-red-100 text-red-700 font-medium">{card.message}</div></div> );
         default: return <div key={index} className="text-sm text-gray-400">Received an unknown card type: {card.type}</div>;
