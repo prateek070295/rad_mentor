@@ -22,3 +22,7 @@ const app = initializeApp(firebaseConfig);
 // ADDED: Initialize Firestore and Auth, then export them
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+if (window.location.hostname === "localhost") {
+  window.auth = auth;
+}
