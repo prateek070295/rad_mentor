@@ -49,7 +49,7 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
   const [chatInput, setChatInput] = useState('');
   const [isMentorTyping, setIsMentorTyping] = useState(false);
   const [activeTopic, setActiveTopic] = useState(null);
-  const chatEndRef = useRef(null);
+  const lastCardRef = useRef(null);
   
   const { progress: userProgress, isLoading: isProgressLoading } = useUserProgress(currentChapter?.sectionName);
 
@@ -158,7 +158,7 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
   }, [userProgress, sourceTopicsTree, isProgressLoading, currentChapter]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    lastCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [tutorHistory, isMentorTyping]);
 
   useEffect(() => {
@@ -297,7 +297,7 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
             <fieldset disabled={isMentorTyping}>
                 <label className="font-semibold text-gray-700 block mb-2">Your Answer</label>
                 <div className="flex space-x-2">
-                    <input type="text" autoFocus value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type your answer..." className="flex-grow rounded-lg px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type your answer..." className="flex-grow rounded-lg px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400">Send</button>
                 </div>
             </fieldset>
@@ -320,7 +320,8 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
   };
 
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-screen w-full overflow-hidden bg-gray-50">
+      {/* Sidebar (Correct) */}
       <aside className={`bg-white shadow-xl flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'}`}>
         <div className={`p-6 font-bold text-2xl text-gray-800 flex-shrink-0 border-b ${!isSidebarOpen && 'hidden'}`}>
           {currentChapter ? currentChapter.name : 'Chapter'}
@@ -330,43 +331,52 @@ const LearnTab = ({ todayFocus, userName, setIsFocusMode }) => {
         </nav>
       </aside>
 
-      <main className="flex-grow flex flex-col bg-gray-50 h-full">
+      {/* Main content area */}
+      <main className="flex-grow flex flex-col overflow-hidden"> {/* CHANGED: Main area no longer scrolls */}
         {isSidebarOpen ? (
-          <div className="sticky top-0 z-10 bg-gray-50 p-6 border-b border-gray-200 flex-shrink-0">
+          // Header is now a static block, not sticky
+          <div className="p-6 border-b border-gray-200 flex-shrink-0">
             <div><h1 className="text-3xl font-bold text-gray-800">{activeTopic ? activeTopic.name : "Select a topic"}</h1></div>
             <div className="flex space-x-2 flex-shrink-0 mt-4">
               <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-300">Focus Mode</button>
             </div>
           </div>
         ) : (
-          <div className="flex-shrink-0 p-6 h-20">
+          <div className="flex items-center justify-between p-6 flex-shrink-0 border-b border-gray-200 bg-gray-50">
             <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-semibold hover:bg-gray-900 shadow-lg">
               Show Menu
             </button>
+            <h1 className="text-2xl font-bold text-gray-800 truncate pl-4">
+              {activeTopic ? activeTopic.name : ""}
+            </h1>
           </div>
         )}
 
+        {/* This inner div is now the only scrolling part */}
         <div className="flex-grow overflow-y-auto p-6 space-y-6">
-          {tutorHistory.length > 0 ? (
-            tutorHistory.map(renderTutorCard)
-          ) : (
-            <div className="text-center text-gray-500 pt-10">
-              <h2 className="text-2xl font-semibold mb-2">Welcome to the Learn Tab!</h2>
-              <p>Select a topic from the menu on the left to begin your interactive lesson.</p>
-            </div>
-          )}
-          {isMentorTyping && (
-            <div className="flex justify-start">
-              <div className="p-4 rounded-xl bg-white border border-gray-200 text-gray-800 shadow-md">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
+            {tutorHistory.length > 0 ? (
+              tutorHistory.map((card, index) => (
+                <div key={index} ref={index === tutorHistory.length - 1 ? lastCardRef : null}>
+                  {renderTutorCard(card, index)}
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-gray-500 pt-10">
+                <h2 className="text-2xl font-semibold mb-2">Welcome to the Learn Tab!</h2>
+                <p>Select a topic from the menu on the left to begin your interactive lesson.</p>
+              </div>
+            )}
+            {isMentorTyping && (
+              <div className="flex justify-start">
+                <div className="p-4 rounded-xl bg-white border border-gray-200 text-gray-800 shadow-md">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
+            )}
         </div>
       </main>
     </div>
