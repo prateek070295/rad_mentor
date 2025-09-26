@@ -7,6 +7,25 @@ import { onAuthStateChanged } from "firebase/auth";
 import SetupWizard from './SetupWizard';
 // --- Service Imports ---
 import { generateSchedule, daysBetween } from '../services/scheduleGenerator';
+// --- Scheduler Flags ---
+import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
+// flags debug
+import FlagsDebug from "./FlagsDebug";
+
+
+// new code
+const { flags, loading } = useSchedulerFlags();
+if (loading) {
+  // while flags load, keep UI stable
+  return null; 
+}
+
+// You now have booleans to gate future features:
+const enableNewRoadmap = flags.useMasterPlan === true;
+const enableWeekly = flags.useWeeklyPlanner === true;
+
+
+
 
 const PlanTab = ({ organSystems }) => {
   // --- State Management ---
@@ -292,6 +311,9 @@ const PlanTab = ({ organSystems }) => {
       ) : (
         renderMainCalendarView()
       )}
+
+      <FlagsDebug />
+
     </div>
   );
 };
