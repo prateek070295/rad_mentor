@@ -13,20 +13,6 @@ import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
 import FlagsDebug from "./FlagsDebug";
 
 
-// new code
-const { flags, loading } = useSchedulerFlags();
-if (loading) {
-  // while flags load, keep UI stable
-  return null; 
-}
-
-// You now have booleans to gate future features:
-const enableNewRoadmap = flags.useMasterPlan === true;
-const enableWeekly = flags.useWeeklyPlanner === true;
-
-
-
-
 const PlanTab = ({ organSystems }) => {
   // --- State Management ---
   const [user, setUser] = useState(null);
@@ -40,6 +26,13 @@ const PlanTab = ({ organSystems }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   const [dragOverItemIndex, setDragOverItemIndex] = useState(null);
+
+    // new code
+  const { flags, loading: flagsLoading } = useSchedulerFlags();
+  const enableNewRoadmap = !!flags.useMasterPlan;
+  const enableWeekly     = !!flags.useWeeklyPlanner;
+
+  
 
   // --- Auth & Data Fetching Hook ---
   useEffect(() => {
@@ -302,6 +295,12 @@ const PlanTab = ({ organSystems }) => {
   
   return (
     <div className="relative h-full">
+      <button
+        className="text-blue-600 underline mt-2"
+        onClick={() => (window.location.href = '/planner/preview')}
+      >
+        Open Planner Preview (read-only)
+      </button>
       {showSetup ? (
         <SetupWizard 
             organSystems={organSystems}

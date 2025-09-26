@@ -12,6 +12,8 @@ import TestTab from './components/TestTab';
 import AdminPanel from './components/AdminPanel';
 import PreviewPage from './components/PreviewPage';
 import appLogo from './assets/images/logo 1.PNG';
+import PlannerPreview from './pages/PlannerPreview';
+
 
 // Helper function to get today's date in YYYY-MM-DD format
 const getLocalDate = () => {
@@ -167,6 +169,12 @@ function App() {
   if (isPreviewPage) {
     return <PreviewPage />;
   }
+
+  const isPlannerPreviewPage = window.location.pathname === '/planner/preview';
+  if (isPlannerPreviewPage) {
+    return <PlannerPreview />;
+  }
+
 
   const renderContent = () => {
     if (isLoading) {
