@@ -7,6 +7,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import SetupWizard from './SetupWizard';
 // --- Service Imports ---
 import { generateSchedule, daysBetween } from '../services/scheduleGenerator';
+// --- Scheduler Flags ---
+import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
+// flags debug
+import FlagsDebug from "./FlagsDebug";
+
 
 const PlanTab = ({ organSystems }) => {
   // --- State Management ---
@@ -21,6 +26,13 @@ const PlanTab = ({ organSystems }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   const [dragOverItemIndex, setDragOverItemIndex] = useState(null);
+
+    // new code
+  const { flags, loading: flagsLoading } = useSchedulerFlags();
+  const enableNewRoadmap = !!flags.useMasterPlan;
+  const enableWeekly     = !!flags.useWeeklyPlanner;
+
+  
 
   // --- Auth & Data Fetching Hook ---
   useEffect(() => {
@@ -283,6 +295,12 @@ const PlanTab = ({ organSystems }) => {
   
   return (
     <div className="relative h-full">
+      <button
+        className="text-blue-600 underline mt-2"
+        onClick={() => (window.location.href = '/planner/preview')}
+      >
+        Open Planner Preview (read-only)
+      </button>
       {showSetup ? (
         <SetupWizard 
             organSystems={organSystems}
@@ -292,6 +310,9 @@ const PlanTab = ({ organSystems }) => {
       ) : (
         renderMainCalendarView()
       )}
+
+      <FlagsDebug />
+
     </div>
   );
 };
