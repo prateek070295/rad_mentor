@@ -1,10 +1,13 @@
+// src/pages/StudyItemsDebug.jsx
 import { useEffect, useState } from "react";
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase";
+import { computePriority, byPriorityDesc } from "../lib/priority";
 
 export default function StudyItemsDebug() {
   const [bySection, setBySection] = useState([]);
   const [globalTop, setGlobalTop] = useState([]);
+  const [rankedTop, setRankedTop] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -30,6 +33,13 @@ export default function StudyItemsDebug() {
       );
       const s2 = await getDocs(q2);
       setGlobalTop(s2.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      // Example 3: client-side "priority" ranking on a sample of 200 docs
+      const qAll = query(collection(db, "study_items"), limit(200)); // sample; increase if you want
+      const sAll = await getDocs(qAll);
+      const all = sAll.docs.map(d => ({ id: d.id, ...d.data() }));
+      const ranked = [...all].sort(byPriorityDesc).slice(0, 20);
+      setRankedTop(ranked);
     })();
   }, []);
 
@@ -43,9 +53,18 @@ export default function StudyItemsDebug() {
         {JSON.stringify(bySection, null, 2)}
       </pre>
 
-      <h3 style={{ marginTop: 16 }}>Top (global)</h3>
+      <h3 style={{ marginTop: 16 }}>Top (global by fields)</h3>
       <pre style={{ background: "#f6f6f6", padding: 12, borderRadius: 8, overflowX: "auto" }}>
         {JSON.stringify(globalTop, null, 2)}
+      </pre>
+
+      <h3 style={{ marginTop: 16 }}>Top by Priority (client-side, sample of 200)</h3>
+      <pre style={{ background: "#f6f6f6", padding: 12, borderRadius: 8, overflowX: "auto" }}>
+        {JSON.stringify(
+          rankedTop.map(x => ({ ...x, _score: computePriority(x) })),
+          null,
+          2
+        )}
       </pre>
     </div>
   );
