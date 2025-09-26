@@ -13,6 +13,8 @@ import AdminPanel from './components/AdminPanel';
 import PreviewPage from './components/PreviewPage';
 import appLogo from './assets/images/logo 1.PNG';
 import PlannerPreview from './pages/PlannerPreview';
+import StudyItemsDebug from './pages/StudyItemsDebug';
+
 
 
 // Helper function to get today's date in YYYY-MM-DD format
@@ -174,6 +176,12 @@ function App() {
   if (isPlannerPreviewPage) {
     return <PlannerPreview />;
   }
+
+  const isStudyItemsDebug = window.location.pathname === '/study-items-debug';
+  if (isStudyItemsDebug) {
+    return <StudyItemsDebug />;
+  }
+
 
 
   const renderContent = () => {
