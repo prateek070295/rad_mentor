@@ -5,7 +5,7 @@
 const CATEGORY_SCORE = { must: 3, good: 2, nice: 1 };
 const LEVEL_BONUS = { chapter: 0, topic: 0.5, subtopic: 1.0 }; // slight bias to smaller chunks
 
-// Clamp minutes so huge items don’t dominate; small reward for “chunky” topics.
+// Clamp minutes so huge items don't dominate; small reward for "chunky" topics.
 function minutesBonus(estimatedMinutes = 45) {
   const m = Math.max(10, Math.min(Number(estimatedMinutes) || 0, 120)); // 10..120
   return (m - 10) / 110; // 0..1

@@ -14,6 +14,9 @@ import PreviewPage from './components/PreviewPage';
 import appLogo from './assets/images/logo 1.PNG';
 import PlannerPreview from './pages/PlannerPreview';
 import StudyItemsDebug from './pages/StudyItemsDebug';
+import PlanTabV2 from './components/PlanTabV2';
+import TimeReport from './pages/TimeReport.jsx';
+
 
 
 
@@ -177,10 +180,21 @@ function App() {
     return <PlannerPreview />;
   }
 
+  const isTimeReportPage = window.location.pathname === '/planner/time';
+  if (isTimeReportPage) {
+    return <TimeReport />;
+  }
+
   const isStudyItemsDebug = window.location.pathname === '/study-items-debug';
   if (isStudyItemsDebug) {
     return <StudyItemsDebug />;
   }
+
+  const isPlanV2Page = window.location.pathname === '/plan-v2';
+  if (isPlanV2Page) {
+    return <PlanTabV2 />;
+  }
+
 
 
 
@@ -194,6 +208,8 @@ function App() {
         return <Dashboard {...dashboardData} />;
       case 'plan':
         return <PlanTab organSystems={organSystems} />;
+      case 'planV2':                       // ⬅️ add this block
+        return <PlanTabV2 />;
       case 'learn':
         return <LearnTab todayFocus={dashboardData.todayFocus} userName={dashboardData.userName} setIsFocusMode={setIsFocusMode} />;
       case 'test':
@@ -227,6 +243,12 @@ function App() {
                 onClick={() => setActiveTab('plan')}
               >
                 Plan
+              </button>
+              <button
+                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'planV2' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('planV2')}
+              >
+                Plan (V2)
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}

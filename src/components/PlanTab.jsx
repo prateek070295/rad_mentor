@@ -9,8 +9,7 @@ import SetupWizard from './SetupWizard';
 import { generateSchedule, daysBetween } from '../services/scheduleGenerator';
 // --- Scheduler Flags ---
 import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
-// flags debug
-import FlagsDebug from "./FlagsDebug";
+
 
 
 const PlanTab = ({ organSystems }) => {
@@ -310,8 +309,6 @@ const PlanTab = ({ organSystems }) => {
       ) : (
         renderMainCalendarView()
       )}
-
-      <FlagsDebug />
 
     </div>
   );

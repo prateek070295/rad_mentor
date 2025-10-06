@@ -1,514 +1,605 @@
 // src/pages/PlannerPreview.jsx
-import { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getAuth } from "firebase/auth";
 import {
   collection,
   getDocs,
-  getDoc,
   doc,
-  limit,
   query,
   where,
+  writeBatch,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
-import { exportDocumentJSON, exportCollectionJSON } from "../utils/exportFirestore";
-import { computePriority, getChapterId } from "../lib/priority";
 
+/* ======================= helpers ======================= */
+const catRank = (c) => (c === "must" ? 3 : c === "good" ? 2 : c === "nice" ? 1 : 0);
+const padSeq = (n, width = 5) => String(n).padStart(width, "0");
+const todayISO = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+// robust numeric topic index: "6.12" -> 12; "6.3" -> 3; unknown -> big fallback
+function parseTopicIndex(topicId) {
+  const m = String(topicId || "").match(/^\s*\d+\.(\d+)/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n)) return n;
+  }
+  return 1e9;
+}
+
+// numeric-ish chapter tiebreaker if needed
+function chapterIdNumeric(a, b) {
+  const toNum = (s) => {
+    const m = String(s || "").match(/^\s*(\d+)/);
+    return m ? parseInt(m[1], 10) : 1e9;
+  };
+  return toNum(a) - toNum(b);
+}
+
+/* ============= build RAW topic blocks (unsorted) ============= */
 /**
- * Read-only planner preview with strict hierarchy:
- * Across sections: Chapter category (must>good>nice) → chapter.order (asc)
- * Within a chapter: Topic category (must>good>nice) → topic.order (asc)
- * Within a topic: topic first, then subtopics by subtopic.order (asc)
+ * Block = Topic (+ its subtopics list) carrying enough chapter/topic meta
+ * Minutes come from study_items roll-ups you computed server-side.
  */
-export default function PlannerPreview() {
-  const { flags, loading } = useSchedulerFlags();
+async function buildTopicBlocksRaw() {
+  const [topicsSnap, chaptersSnap, subsSnap] = await Promise.all([
+    getDocs(query(collection(db, "study_items"), where("level", "==", "topic"))),
+    getDocs(query(collection(db, "study_items"), where("level", "==", "chapter"))),
+    getDocs(query(collection(db, "study_items"), where("level", "==", "subtopic"))),
+  ]);
 
-  // Inputs
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [dailyCap, setDailyCap] = useState(270);
-  const [preview, setPreview] = useState(null);
+  // chapters index
+  const chapters = new Map(); // `${section}__${chapterId}` -> chap data
+  chaptersSnap.forEach((d) => chapters.set(d.id, { id: d.id, ...d.data() }));
 
-  // Suggestions state
-  const [sectionFilter, setSectionFilter] = useState(""); // blank = all sections
-  const [sampleSize, setSampleSize] = useState(400); // slightly larger sample for better chapters coverage
-  const [rankedTop, setRankedTop] = useState([]);
-  const [packedDay, setPackedDay] = useState(null);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  // subtopics grouped by topic
+  const tmp = new Map(); // `${section}__${topicId}` -> [{id, order}, ...]
+  subsSnap.forEach((s) => {
+    const sd = s.data();
+    const key = `${sd.section}__${sd.parentId}`;
+    if (!tmp.has(key)) tmp.set(key, []);
+    tmp.get(key).push({ id: sd.itemId, order: typeof sd.order === "number" ? sd.order : 9999 });
+  });
+  const subsByTopic = new Map();
+  for (const [k, arr] of tmp) {
+    arr.sort((a, b) => a.order - b.order);
+    subsByTopic.set(k, arr.map((x) => x.id));
+  }
 
-  // Meta maps (keys are `${section}__${chapterId}` and `${section}__${topicId}`)
-  const [chapterMeta, setChapterMeta] = useState({});
-  const [topicMeta, setTopicMeta] = useState({});
+  // compose raw blocks (no sorting yet)
+  const blocks = [];
+  topicsSnap.forEach((t) => {
+    const td = t.data();
+    const section = td.section;
+    const topicId = td.itemId;
+    const chapterId = td.parentId;
+    const minutes = Number(td.estimatedMinutes) || 0;
 
-  // Export helpers
-  const auth = getAuth();
-  const uid = auth.currentUser?.uid || "";
-  const defaultDocPath = uid ? `plans/${uid}` : "";
-  const [customPath, setCustomPath] = useState(defaultDocPath);
+    const chap = chapters.get(`${section}__${chapterId}`) || {};
+    const chapterCategory = chap.categoryNorm || chap.category || "good";
+    const chapterOrder = typeof chap.order === "number" ? chap.order : 9999;
+    const isChapter1 = String(chapterId || "").split(".")[0] === "1";
 
+    // Intro heuristic: x.1 OR order==1 OR name includes "intro"
+    const isIntro =
+      String(topicId || "").split(".")[1] === "1" ||
+      Number(td.order) === 1 ||
+      String(td.name || "").toLowerCase().includes("intro");
+
+    blocks.push({
+      section,
+      topicId,
+      topicName: td.name || "",
+      minutes,
+      subtopicIds: subsByTopic.get(`${section}__${topicId}`) || [],
+
+      chapterId,
+      chapterOrder,
+      chapterCategory,
+      isChapter1,
+
+      topicOrder: typeof td.order === "number" ? td.order : 9999,
+      isIntro,
+      topicIndex: parseTopicIndex(topicId),
+    });
+  });
+
+  return blocks;
+}
+
+/* ============= apply ordering (chapter-first) ============= */
+/**
+ * Global: chapterCategory (must>good>nice) across sections,
+ * then custom section order.
+ * Preserve chapter flow:
+ *   - Chapter 1 first
+ *   - Chapter order (book order)
+ *   - Within a chapter: Intro first, then numeric topic index, then topicOrder.
+ */
+function applyOrdering(rawBlocks, prefs) {
+  const includedSet = new Set(prefs.order.filter((s) => prefs.included[s]));
+  const orderIndex = new Map(prefs.order.map((s, i) => [s, i]));
+  const unknownBase = prefs.order.length + 1000;
+
+  const filtered = rawBlocks.filter((b) => includedSet.has(b.section));
+
+  filtered.sort((a, b) => {
+    // 1) chapter category (must > good > nice) across all sections
+    const ca = catRank(a.chapterCategory);
+    const cb = catRank(b.chapterCategory);
+    if (ca !== cb) return cb - ca;
+
+    // 2) custom section order
+    const ra = orderIndex.has(a.section) ? orderIndex.get(a.section) : unknownBase;
+    const rb = orderIndex.has(b.section) ? orderIndex.get(b.section) : unknownBase;
+    if (ra !== rb) return ra - rb;
+
+    // 3) Chapter 1 (foundational) first
+    if (a.isChapter1 !== b.isChapter1) return a.isChapter1 ? -1 : 1;
+
+    // 4) Chapter order (book order)
+    if (a.chapterOrder !== b.chapterOrder) return a.chapterOrder - b.chapterOrder;
+
+    // 5) Inside same chapter: preserve flow
+    if (a.chapterId === b.chapterId) {
+      // Intro first
+      if (a.isIntro !== b.isIntro) return a.isIntro ? -1 : 1;
+
+      // Numeric topic index (e.g., 6.2 < 6.3 < 6.12)
+      const ia = Number.isFinite(a.topicIndex) ? a.topicIndex : a.topicOrder;
+      const ib = Number.isFinite(b.topicIndex) ? b.topicIndex : b.topicOrder;
+      if (ia !== ib) return ia - ib;
+
+      // tiny fallback
+      return a.topicOrder - b.topicOrder;
+    }
+
+    // If not same chapter, use chapterId numeric-ish as stable fallback
+    return chapterIdNumeric(a.chapterId, b.chapterId);
+  });
+
+  return filtered;
+}
+
+/* ============= Section picker + reorder UI ============= */
+function SectionOrderEditor({ prefs, setPrefs, allSections, onApply }) {
+  // Ensure prefs includes all sections; default included=true
   useEffect(() => {
-    if (!loading && flags?.dailyCapacityMinsDefault) {
-      setDailyCap(flags.dailyCapacityMinsDefault);
-    }
-  }, [loading, flags]);
+    if (!allSections.length) return;
+    setPrefs((prev) => {
+      const seen = new Set(prev.order);
+      const nextOrder = [...prev.order];
+      let changed = false;
 
-  if (loading) return null;
-
-  // ---------- helpers ----------
-  const CH_CAT = { must: 3, good: 2, nice: 1 };
-  const TOP_CAT = { must: 3, good: 2, nice: 1 };
-
-  const chKey = (it) => `${it.section}__${getChapterId(it)}`;      // e.g. "Breast__1"
-  const tpKey = (it) => `${it.section}__${it.level === "topic" ? it.itemId : (it.parentId || "")}`; // e.g. "Breast__1.3"
-
-  function ensureChapterMeta(rows, meta) {
-    const missing = new Set();
-    for (const it of rows) {
-      const key = chKey(it);
-      if (!meta[key]) {
-        const chapDocId = key; // "Section__1"
-        const found = rows.find(r => r.id === chapDocId && r.level === "chapter");
-        if (found) {
-          meta[key] = {
-            categoryNorm: found.categoryNorm,
-            order: found.order,
-            name: found.name,
-          };
-        } else {
-          missing.add(chapDocId);
+      for (const s of allSections) {
+        if (!seen.has(s)) {
+          nextOrder.push(s);
+          changed = true;
         }
       }
-    }
-    return missing;
-  }
-
-  function ensureTopicMeta(rows, meta) {
-    const missing = new Set();
-    for (const it of rows) {
-      if (it.level === "chapter") continue;
-      const key = tpKey(it);
-      if (!meta[key]) {
-        const [section, tid] = key.split("__");
-        const topicDocId = `${section}__${tid}`;
-        const found = rows.find(r => r.id === topicDocId && r.level === "topic");
-        if (found) {
-          meta[key] = {
-            categoryNorm: found.categoryNorm,
-            order: found.order,
-            name: found.name,
-          };
-        } else {
-          missing.add(topicDocId);
-        }
+      const nextIncluded = { ...prev.included };
+      for (const s of allSections) {
+        if (nextIncluded[s] === undefined) nextIncluded[s] = true;
       }
-    }
-    return missing;
-  }
-
-  async function fetchMissingMeta(missingIds, meta) {
-    if (!missingIds.size) return;
-    await Promise.all(
-      Array.from(missingIds).map(async (fullId) => {
-        const ref = doc(db, "study_items", fullId);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          const data = snap.data();
-          meta[fullId] = {
-            categoryNorm: data.categoryNorm || "good",
-            order: data.order ?? 9999,
-            name: data.name || "",
-          };
-        } else {
-          meta[fullId] = { categoryNorm: "good", order: 9999 };
-        }
-      })
-    );
-  }
-
-  // Build the strict order list by grouping then sorting groups
-  function buildStrictOrder(rows, cMeta, tMeta) {
-    // 1) Filter out chapter nodes; we schedule topics & subtopics
-    const items = rows.filter(r => r.level !== "chapter");
-
-    // 2) Group by Section → Chapter
-    const chapterGroups = new Map(); // key = `${section}__${chapterId}` -> array of items
-    for (const it of items) {
-      const key = chKey(it);
-      if (!chapterGroups.has(key)) chapterGroups.set(key, []);
-      chapterGroups.get(key).push(it);
-    }
-
-    // 3) Sort chapter groups by (chapter.category desc, chapter.order asc, section asc)
-    const sortedChapterKeys = Array.from(chapterGroups.keys()).sort((A, B) => {
-    // Keys look like "Breast__1", "Breast__2", "Cardiovascular__1", etc.
-    const [sectionA, chapA] = A.split("__");
-    const [sectionB, chapB] = B.split("__");
-
-    // NEW: within the SAME section, force chapter "1" to be first
-    if (sectionA === sectionB) {
-        const isAFirst = chapA === "1";
-        const isBFirst = chapB === "1";
-        if (isAFirst !== isBFirst) return isAFirst ? -1 : 1; // put "1" before anything else
-    }
-
-  // Existing logic: category (must>good>nice), then chapter.order (asc)
-    const ca = cMeta[A] || {};
-    const cb = cMeta[B] || {};
-    const ra = CH_CAT[ca.categoryNorm] ?? 0;
-    const rb = CH_CAT[cb.categoryNorm] ?? 0;
-    if (ra !== rb) return rb - ra;
-
-    const oa = Number(ca.order ?? 9999);
-    const ob = Number(cb.order ?? 9999);
-    if (oa !== ob) return oa - ob;
-
-    return A.localeCompare(B); // deterministic tie-breaker
+      return changed ? { order: nextOrder, included: nextIncluded } : prev;
     });
+  }, [allSections, setPrefs]);
 
-    // 4) For each chapter, group by topic, sort topics, then flatten topic then its subtopics (by subtopic.order)
-    const result = [];
-    for (const cKey of sortedChapterKeys) {
-      const itemsInChapter = chapterGroups.get(cKey) || [];
-
-      // 4a) group by topic
-      const topicGroups = new Map(); // key = `${section}__${topicId}`
-      for (const it of itemsInChapter) {
-        const key = tpKey(it);
-        if (!topicGroups.has(key)) topicGroups.set(key, []);
-        topicGroups.get(key).push(it);
-      }
-
-      // 4b) sort topics: INTRO (order==1) first, then topic.category (must>good>nice), then topic.order
-      const sortedTopicKeys = Array.from(topicGroups.keys()).sort((A, B) => {
-        const ta = tMeta[A] || {};
-        const tb = tMeta[B] || {};
-
-      // Helper: is the topic an "intro"?
-      // We check (a) order === 1, or (b) topicId ends with ".1", or (c) name contains "intro"
-        const topicIdA = A.split("__")[1] || "";
-        const topicIdB = B.split("__")[1] || "";
-        const isIntroA =
-            Number(ta.order) === 1 ||
-            topicIdA.split(".")[1] === "1" ||
-            String(ta.name || "").toLowerCase().includes("intro");
-        const isIntroB =
-            Number(tb.order) === 1 ||
-            topicIdB.split(".")[1] === "1" ||
-            String(tb.name || "").toLowerCase().includes("intro");
-
-        // NEW RULE: Intro first inside the chapter
-        if (isIntroA !== isIntroB) return isIntroA ? -1 : 1;
-
-        // Then by topic category (must > good > nice)
-        const ra = TOP_CAT[ta.categoryNorm] ?? 0;
-        const rb = TOP_CAT[tb.categoryNorm] ?? 0;
-        if (ra !== rb) return rb - ra;
-
-        // Then by topic.order (earlier first)
-        const oa = Number(ta.order ?? 9999);
-        const ob = Number(tb.order ?? 9999);
-        if (oa !== ob) return oa - ob;
-
-        // Deterministic fallback
-        return A.localeCompare(B);
-    });
-
-
-      // 4c) inside each topic: topic first, then subtopics by subtopic.order asc
-      for (const tKey of sortedTopicKeys) {
-        const bunch = topicGroups.get(tKey) || [];
-        const topicNode = bunch.find(x => x.level === "topic");
-        const subNodes = bunch.filter(x => x.level === "subtopic")
-                              .sort((a, b) => (Number(a.order ?? 9999) - Number(b.order ?? 9999)));
-
-        if (topicNode) result.push(topicNode);
-        result.push(...subNodes);
-      }
-    }
-
-    return result;
-    }
-
-  // ---------- actions ----------
-  async function generatePreview() {
-    const res = {
-      message: "Read-only preview (Phase 2). No writes to Firestore.",
-      inputs: { start, end, dailyCap },
-      flags,
-      timestamp: new Date().toISOString(),
-    };
-    setPreview(res);
-  }
-
-  async function loadSuggestions() {
-    setLoadingSuggestions(true);
-    try {
-      const base = collection(db, "study_items");
-      const q = sectionFilter
-        ? query(base, where("section", "==", sectionFilter), limit(Number(sampleSize)))
-        : query(base, limit(Number(sampleSize)));
-
-      const snap = await getDocs(q);
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-      // Build/complete meta
-      const cMeta = { ...chapterMeta };
-      const tMeta = { ...topicMeta };
-
-      const missingCh = ensureChapterMeta(rows, cMeta);
-      const missingTp = ensureTopicMeta(rows, tMeta);
-
-      // Fetch any missing chapter/topic docs
-      await fetchMissingMeta(missingCh, cMeta);
-      await fetchMissingMeta(missingTp, tMeta);
-
-      setChapterMeta(cMeta);
-      setTopicMeta(tMeta);
-
-      // Strict hierarchical build
-      const ordered = buildStrictOrder(rows, cMeta, tMeta)
-        .slice(0, 60); // cap for preview readability
-      setRankedTop(ordered);
-      setPackedDay(null);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  }
-
-  // Greedy pack under dailyCap using the already ordered list
-  function packOneDay() {
-    let remaining = Number(dailyCap) || 0;
-    const chosen = [];
-    for (const it of rankedTop) {
-      const mins = Number(it.estimatedMinutes) || 0;
-      if (mins <= remaining) {
-        chosen.push(it);
-        remaining -= mins;
-      }
-    }
-    setPackedDay({
-      total: (Number(dailyCap) || 0) - remaining,
-      remaining,
-      items: chosen.map((x) => ({
-        id: x.id,
-        name: x.name,
-        section: x.section,
-        minutes: x.estimatedMinutes,
-        scoreFallback: computePriority(x),
-        level: x.level,
-        category: x.categoryNorm,
-        chapterId: getChapterId(x),
-        chapterCategory: (chapterMeta[chKey(x)] || {}).categoryNorm ?? null,
-        chapterOrder: (chapterMeta[chKey(x)] || {}).order ?? null,
-        topicId: tpKey(x).split("__")[1],
-        topicCategory: (topicMeta[tpKey(x)] || {}).categoryNorm ?? null,
-        topicOrder: (topicMeta[tpKey(x)] || {}).order ?? null,
-        subtopicOrder: x.level === "subtopic" ? (x.order ?? null) : null,
-      })),
+  function move(name, dir) {
+    setPrefs((prev) => {
+      const idx = prev.order.indexOf(name);
+      if (idx < 0) return prev;
+      const to = dir === "up" ? idx - 1 : idx + 1;
+      if (to < 0 || to >= prev.order.length) return prev;
+      const next = [...prev.order];
+      [next[idx], next[to]] = [next[to], next[idx]];
+      return { ...prev, order: next };
     });
   }
 
-  const canExportDoc = customPath && customPath.includes("/");
-  const canExportCollection = Boolean(customPath);
+  function toggle(name) {
+    setPrefs((prev) => ({
+      ...prev,
+      included: { ...prev.included, [name]: !prev.included[name] },
+    }));
+  }
 
   return (
-    <div style={{ maxWidth: 980, margin: "24px auto", padding: 16 }}>
-      <h1 style={{ marginBottom: 4 }}>Planner Preview (Read-only)</h1>
-      <p style={{ color: "#666", marginTop: 0 }}>
-        Sandbox to try ideas. Nothing here writes to Firestore.
-      </p>
-
-      {/* Inputs */}
-      <div
-        style={{
-          display: "grid",
-          gap: 12,
-          marginTop: 16,
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-        }}
-      >
-        <label>
-          Start date
-          <input
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            style={{ display: "block", marginTop: 4 }}
-          />
-        </label>
-        <label>
-          End date
-          <input
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            style={{ display: "block", marginTop: 4 }}
-          />
-        </label>
-        <label>
-          Daily capacity (mins)
-          <input
-            type="number"
-            value={dailyCap}
-            onChange={(e) => setDailyCap(Number(e.target.value))}
-            min={30}
-            step={5}
-            style={{ display: "block", marginTop: 4 }}
-          />
-        </label>
-      </div>
-
-      <button onClick={generatePreview} style={{ marginTop: 12 }}>
-        Generate Preview
-      </button>
-
-      {preview && (
-        <pre
-          style={{
-            marginTop: 12,
-            background: "#f7f7f7",
-            padding: 12,
-            borderRadius: 8,
-            overflowX: "auto",
-          }}
+    <div style={{ marginTop: 12, padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <h3 style={{ margin: 0 }}>Sections (pick & reorder)</h3>
+        <button
+          onClick={onApply}
+          className="px-3 py-1.5 bg-gray-900 text-white rounded"
+          title="Apply this section order to the preview below"
         >
-          {JSON.stringify(preview, null, 2)}
-        </pre>
-      )}
-
-      {/* Suggestions */}
-      <hr style={{ margin: "24px 0" }} />
-      <h2>Suggestions (read-only, strict hierarchy)</h2>
-      <div
-        style={{
-          display: "grid",
-          gap: 12,
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-        }}
-      >
-        <label>
-          Filter by section (optional)
-          <input
-            type="text"
-            placeholder='e.g. "Breast" (leave blank = all)'
-            value={sectionFilter}
-            onChange={(e) => setSectionFilter(e.target.value)}
-            style={{ display: "block", marginTop: 4 }}
-          />
-        </label>
-        <label>
-          Sample size
-          <input
-            type="number"
-            min={100}
-            max={1000}
-            step={50}
-            value={sampleSize}
-            onChange={(e) => setSampleSize(Number(e.target.value))}
-            style={{ display: "block", marginTop: 4 }}
-          />
-        </label>
-        <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
-          <button onClick={loadSuggestions} disabled={loadingSuggestions}>
-            {loadingSuggestions ? "Loading…" : "Load Suggestions"}
-          </button>
-          <button onClick={packOneDay} disabled={!rankedTop.length}>
-            Pack One Day
-          </button>
-        </div>
+          Apply Section Order
+        </button>
       </div>
-
-      {!!rankedTop.length && (
-        <>
-          <h3 style={{ marginTop: 16 }}>
-            Top (chapter → topic → subtopic, showing {rankedTop.length})
-          </h3>
-          <pre
-            style={{
-              background: "#f6f6f6",
-              padding: 12,
-              borderRadius: 8,
-              overflowX: "auto",
-            }}
-          >
-            {JSON.stringify(
-              rankedTop.map((x) => ({
-                id: x.id,
-                name: x.name,
-                section: x.section,
-                level: x.level,
-                minutes: x.estimatedMinutes,
-                chapterId: getChapterId(x),
-                chapterCategory: (chapterMeta[chKey(x)] || {}).categoryNorm ?? null,
-                chapterOrder: (chapterMeta[chKey(x)] || {}).order ?? null,
-                topicId: tpKey(x).split("__")[1],
-                topicCategory: (topicMeta[tpKey(x)] || {}).categoryNorm ?? null,
-                topicOrder: (topicMeta[tpKey(x)] || {}).order ?? null,
-                subtopicOrder: x.level === "subtopic" ? (x.order ?? null) : null,
-              })),
-              null,
-              2
-            )}
-          </pre>
-        </>
-      )}
-
-      {packedDay && (
-        <>
-          <h3 style={{ marginTop: 16 }}>
-            Packed Day (greedy under {dailyCap} mins)
-          </h3>
-          <pre
-            style={{
-              background: "#eef7ff",
-              padding: 12,
-              borderRadius: 8,
-              overflowX: "auto",
-            }}
-          >
-            {JSON.stringify(packedDay, null, 2)}
-          </pre>
-        </>
-      )}
-
-      {/* Export / Backup */}
-      <hr style={{ margin: "24px 0" }} />
-      <h3 style={{ marginBottom: 8 }}>Backup / Export (JSON)</h3>
-      <p style={{ color: "#666", marginTop: 0 }}>
-        Downloads a JSON file locally (still read-only).
+      <p style={{ color: "#666", marginTop: 6 }}>
+        We schedule <b>all "must" chapters first across your selected sections</b>, then "good",
+        then "nice", following the section order you set here. Inside each chapter we keep the book
+        flow (Intro â†’ numeric topic index).
       </p>
-
-      <div style={{ display: "grid", gap: 8, maxWidth: 680, marginTop: 8 }}>
-        <label>
-          Firestore path to export (doc or collection)
-          <input
-            type="text"
-            placeholder="e.g. plans/USER_ID  or  plans/USER_ID/weeks"
-            value={customPath}
-            onChange={(e) => setCustomPath(e.target.value)}
-            style={{ display: "block", marginTop: 4, width: "100%" }}
-          />
-        </label>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={() => exportDocumentJSON(customPath)} disabled={!canExportDoc}>
-            Export Document
-          </button>
-          <button onClick={() => exportCollectionJSON(customPath)} disabled={!canExportCollection}>
-            Export Collection
-          </button>
-        </div>
-
-        <small style={{ color: "#999" }}>
-          Tip: Try <code>plans/&lt;uid&gt;</code>. If you store per week, use{" "}
-          <code>plans/&lt;uid&gt;/weeks</code>.
-        </small>
-      </div>
-
-      <p style={{ fontSize: 12, color: "#999", marginTop: 16 }}>
-        Phase 2: This screen never writes to Firestore.
-      </p>
+      {!allSections.length ? (
+        <div style={{ color: "#999" }}>Loading sections...</div>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {prefs.order.map((s) => (
+            <li
+              key={s}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 0",
+                borderBottom: "1px dashed #eee",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!!prefs.included[s]}
+                onChange={() => toggle(s)}
+                title="Include this section"
+              />
+              <div style={{ width: 32, textAlign: "center", color: "#666" }}>
+                {prefs.order.indexOf(s) + 1}
+              </div>
+              <div style={{ flex: 1 }}>{s}</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className="px-2 py-1 border rounded"
+                  onClick={() => move(s, "up")}
+                  disabled={prefs.order.indexOf(s) === 0}
+                >
+                  â†‘
+                </button>
+                <button
+                  className="px-2 py-1 border rounded"
+                  onClick={() => move(s, "down")}
+                  disabled={prefs.order.indexOf(s) === prefs.order.length - 1}
+                >
+                  â†“
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
+
+/* ======================= component ======================= */
+export default function PlannerPreview() {
+  const { flags, loading: flagsLoading } = useSchedulerFlags();
+  const auth = getAuth();
+
+  // Inputs
+  const [startDate, setStartDate] = useState(todayISO());
+  const [dailyCap, setDailyCap] = useState(270);
+
+  // Data
+  const [rawBlocks, setRawBlocks] = useState([]);
+  const [blocks, setBlocks] = useState([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(true);
+  const [error, setError] = useState("");
+
+  // Section prefs (persist to localStorage)
+  const [sectionPrefs, setSectionPrefs] = useState(() => {
+    try {
+      const saved = localStorage.getItem("planner.sectionPrefs");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { order: [], included: {} };
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("planner.sectionPrefs", JSON.stringify(sectionPrefs));
+    } catch {}
+  }, [sectionPrefs]);
+
+  // Default daily cap from flags
+  useEffect(() => {
+    if (!flagsLoading && flags?.dailyCapacityMinsDefault) {
+      setDailyCap(flags.dailyCapacityMinsDefault);
+    }
+  }, [flagsLoading, flags]);
+
+  // Load raw blocks once
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingBlocks(true);
+        const list = await buildTopicBlocksRaw();
+        if (!mounted) return;
+
+        setRawBlocks(list);
+
+        const allSections = Array.from(new Set(list.map((b) => b.section))).sort();
+        setSectionPrefs((prev) => {
+          const seen = new Set(prev.order);
+          const nextOrder = prev.order.slice();
+          let changed = false;
+          for (const s of allSections) {
+            if (!seen.has(s)) {
+              nextOrder.push(s);
+              changed = true;
+            }
+          }
+          const included = { ...prev.included };
+          for (const s of allSections) {
+            if (included[s] === undefined) included[s] = true;
+          }
+          return changed ? { order: nextOrder, included } : { order: nextOrder, included };
+        });
+
+        const initial = applyOrdering(list, {
+          order:
+            sectionPrefs.order.length > 0
+              ? sectionPrefs.order
+              : Array.from(new Set(list.map((b) => b.section))).sort(),
+          included:
+            Object.keys(sectionPrefs.included).length > 0
+              ? sectionPrefs.included
+              : Object.fromEntries(allSections.map((s) => [s, true])),
+        });
+        setBlocks(initial);
+      } catch (e) {
+        console.error(e);
+        if (mounted) setError(e.message || "Failed to load planner preview");
+      } finally {
+        if (mounted) setLoadingBlocks(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function applySectionOrderNow() {
+    if (!rawBlocks.length) return;
+    const next = applyOrdering(rawBlocks, sectionPrefs);
+    setBlocks(next);
+  }
+
+
+  // Write master plan
+  async function handleBuildAndSaveMaster() {
+  if (!auth.currentUser) {
+    alert("Please sign in first.");
+    return;
+  }
+  const uid = auth.currentUser.uid;
+
+  try {
+    // Rebuild with current prefs
+    const freshRaw = await buildTopicBlocksRaw();
+    const ordered = applyOrdering(freshRaw, sectionPrefs);
+
+    // 1) Clear existing queue at: plans/{uid}/masterQueue  âœ… valid collection path
+    const queueCol = collection(db, "plans", uid, "masterQueue");
+    const snap = await getDocs(queueCol);
+    {
+      const docs = snap.docs;
+      let i = 0;
+      while (i < docs.length) {
+        const end = Math.min(i + 450, docs.length);
+        const batch = writeBatch(db);
+        for (let j = i; j < end; j++) batch.delete(docs[j].ref);
+        await batch.commit();
+        i = end;
+      }
+    }
+
+    // 2) Write meta (your existing path is fine)
+    const totalMinutes = ordered.reduce((a, b) => a + (Number(b.minutes) || 0), 0);
+    const metaBatch = writeBatch(db);
+    metaBatch.set(doc(db, "plans", uid, "master", "meta"), {
+      startDate,
+      dailyCap: Number(dailyCap) || 0,
+      sectionPrefs,
+      totals: {
+        topicBlocks: ordered.length,
+        minutes: totalMinutes,
+        hours: totalMinutes / 60,
+        daysAtCap: (Number(dailyCap) || 0) ? totalMinutes / Number(dailyCap) : 0,
+      },
+      strategyVersion: "v3-chapterCategoryOnly-preserveChapterFlow",
+      generatedAt: serverTimestamp(),
+    });
+    await metaBatch.commit();
+
+    // 3) Write queue items to plans/{uid}/masterQueue (chunked)
+    let i = 0;
+    while (i < ordered.length) {
+      const end = Math.min(i + 450, ordered.length);
+      const batch = writeBatch(db);
+      for (let j = i; j < end; j++) {
+        const seq = padSeq(j + 1);
+        const b = ordered[j];
+        batch.set(
+          doc(queueCol, seq),
+          {
+            seq,
+            section: b.section,
+            chapterId: b.chapterId,
+            topicId: b.topicId,
+            topicName: b.topicName,
+            minutes: b.minutes,
+            subtopicIds: b.subtopicIds,
+            status: "pending",
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+      i = end;
+    }
+
+    alert("Master Plan saved!");
+  } catch (e) {
+    console.error(e);
+    alert(`Failed to save Master Plan: ${e.message}`);
+  }
+}
+
+  // sections list for editor
+  const allSections = useMemo(
+    () => Array.from(new Set(rawBlocks.map((b) => b.section))).sort(),
+    [rawBlocks]
+  );
+
+  return (
+    <div style={{ maxWidth: 1120, margin: "24px auto", padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <h1 style={{ marginBottom: 8, flex: "0 0 auto" }}>Planner Preview</h1>
+        <button
+          className="text-blue-600 underline"
+          onClick={() => (window.location.href = "/planner/time")}
+        >
+          Time Report
+        </button>
+      </div>
+
+      <p style={{ color: "#666", marginTop: 0 }}>
+        Global ordering is by <b>chapter category</b> (mustâ†’goodâ†’nice) across your selected
+        sections and order. Inside each chapter we preserve the book's flow:
+        <b> Intro first</b>, then <b>numeric topic index</b>, then a small <code>topicOrder</code>{" "}
+        fallback.
+      </p>
+
+      {/* Inputs */}
+      <div style={{ display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap", marginTop: 12 }}>
+        <label className="text-sm">
+          Start date
+          <input
+            type="date"
+            className="block border rounded px-2 py-1"
+            value={todayISO() > startDate ? todayISO() : startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            style={{ display: "block", marginTop: 4 }}
+          />
+        </label>
+
+        <label className="text-sm">
+          Daily capacity (mins)
+          <input
+            type="number"
+            min={30}
+            step={5}
+            className="block border rounded px-2 py-1"
+            value={dailyCap}
+            onChange={(e) => setDailyCap(Number(e.target.value))}
+            style={{ display: "block", marginTop: 4 }}
+          />
+        </label>
+
+        <button
+          onClick={handleBuildAndSaveMaster}
+          disabled={loadingBlocks}
+          className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-blue-300"
+        >
+          Build & Save Master Plan
+        </button>
+      </div>
+
+      {/* Section picker + reorder */}
+      <SectionOrderEditor
+        prefs={sectionPrefs}
+        setPrefs={setSectionPrefs}
+        allSections={allSections}
+        onApply={applySectionOrderNow}
+      />
+
+      {/* Totals */}
+      <div style={{ marginTop: 16, background: "#f7f8fa", padding: 12, borderRadius: 8 }}>
+        <div>
+          Total blocks (preview): <b>{blocks.length}</b>
+        </div>
+        <div>
+          Total minutes:{" "}
+          <b>
+            {Math.round(blocks.reduce((a, b) => a + (b.minutes || 0), 0)).toLocaleString()}
+          </b>{" "}
+          (~{" "}
+          <b>
+            {(
+              Math.round(
+                (blocks.reduce((a, b) => a + (b.minutes || 0), 0) / 60) * 10
+              ) / 10
+            ).toLocaleString()}
+          </b>{" "}
+          hours)
+        </div>
+        <div>
+          Days @ {dailyCap} min/day:{" "}
+          <b>
+            {(
+              Math.round(
+                ((blocks.reduce((a, b) => a + (b.minutes || 0), 0) / (dailyCap || 1)) || 0) * 100
+              ) / 100
+            ).toLocaleString()}
+          </b>
+        </div>
+      </div>
+
+      {/* Errors */}
+      {error ? (
+        <div style={{ marginTop: 12, color: "#b00020" }}>Error: {error}</div>
+      ) : null}
+
+      {/* Preview table */}
+      <h3 style={{ marginTop: 20 }}>Preview (first 100)</h3>
+      {loadingBlocks ? (
+        <p>Loading...</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={th}>#</th>
+              <th style={th}>Section</th>
+              <th style={th}>Chapter</th>
+              <th style={th}>Topic</th>
+              <th style={thRight}>Minutes</th>
+              <th style={th}>Subtopics</th>
+            </tr>
+          </thead>
+          <tbody>
+            {blocks.slice(0, 100).map((b, idx) => (
+              <tr key={`${b.section}__${b.topicId}`}>
+                <td style={tdCenter}>{idx + 1}</td>
+                <td style={td}>{b.section}</td>
+                <td style={td}>{b.chapterId}</td>
+                <td style={td}>
+                  {b.topicId} - {b.topicName}
+                </td>
+                <td style={tdRight}>{Math.round(b.minutes)}</td>
+                <td style={td}>
+                  {b.subtopicIds.length ? b.subtopicIds.join(", ") : "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/* ============== table styles ============== */
+const th = { textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 6px" };
+const thRight = { ...th, textAlign: "right" };
+const td = { borderBottom: "1px solid #eee", padding: "8px 6px" };
+const tdRight = { ...td, textAlign: "right" };
+const tdCenter = { ...td, textAlign: "center" };
