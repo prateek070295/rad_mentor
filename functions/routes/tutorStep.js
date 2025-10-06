@@ -146,7 +146,13 @@ router.post("/", express.json(), async (req, res) => {
                     feedbackMessage = `**Rationale:** ${checkpointData.rationale_md}`;
                 } else if (checkpointData.type === 'short') {
                     const genAI = getGenAI();
-                    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", generationConfig: { responseMimeType: "application/json" } });
+                    const model = genAI.getGenerativeModel(
+                      {
+                        model: "models/gemini-1.5-flash",
+                        generationConfig: { responseMimeType: "application/json" },
+                      },
+                      { apiVersion: "v1" }
+                    );
                     const gradingPrompt = `You are an expert radiology proctor. CONTEXT: - Question: "${checkpointData.question_md}" - Key Concepts: "${checkpointData.rationale_md}" - Student's Answer: "${userInput}" TASK: 1. Evaluate the student's answer. 2. Determine a 'verdict': "correct", "partially_correct", or "incorrect". 3. Write a concise 'feedback' message. If 'partially_correct', praise the correct parts and explain what was missing. 4. **IMPORTANT**: Do NOT use "Key Concepts". Your response MUST be a valid JSON object: { "verdict": "...", "feedback": "..." }`;
                     const result = await model.generateContent(gradingPrompt);
                     const gradingResponse = JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
@@ -201,7 +207,10 @@ router.post("/", express.json(), async (req, res) => {
         } else {
             const sectionData = sectionSnapshot.docs[0].data();
             const genAI = getGenAI();
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+            const model = genAI.getGenerativeModel(
+              { model: "models/gemini-1.5-flash" },
+              { apiVersion: "v1" }
+            );
             const prompt = socraticTeachPrompt(sectionData.title, sectionData.body_md);
             const result = await model.generateContent(prompt);
             let message = result.response.text();
@@ -220,7 +229,10 @@ router.post("/", express.json(), async (req, res) => {
           } else {
               const sectionData = sectionSnapshot.docs[0].data();
               const genAI = getGenAI();
-              const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+              const model = genAI.getGenerativeModel(
+                { model: "models/gemini-1.5-flash" },
+                { apiVersion: "v1" }
+              );
               const prompt = socraticEvaluationPrompt(sectionData.body_md, userInput);
               const result = await model.generateContent(prompt);
               uiResponse = { type: 'TRANSITION_CARD', title: "Let's review your thoughts", message: result.response.text() };

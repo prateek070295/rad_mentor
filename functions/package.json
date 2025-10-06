@@ -15,7 +15,7 @@
   },
   "main": "index.js",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/generative-ai": "^0.11.5",
     "ajv": "^8.17.1",
     "busboy": "^1.6.0",
     "cors": "^2.8.5",

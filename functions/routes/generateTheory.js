@@ -43,9 +43,12 @@ router.post("/", express.json(), async (req, res) => {
         .status(404)
         .json({ error: `No study material found for section '${sectionName}'.` });
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest",
-    });
+    const model = genAI.getGenerativeModel(
+      {
+        model: "models/gemini-1.5-flash",
+      },
+      { apiVersion: "v1" }
+    );
     const prompt = `
 You are an examiner for the DNB Radiodiagnosis theory exam.
 Based ONLY on the <Reference_Material>, generate 10 short-note style theory questions.

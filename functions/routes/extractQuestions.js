@@ -57,7 +57,10 @@ router.post("/", (req, res) => {
         response_mime_type: "application/json",
         temperature: 0.2,
       };
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest", generationConfig });
+      const model = genAI.getGenerativeModel(
+        { model: "models/gemini-1.5-pro", generationConfig },
+        { apiVersion: "v1" }
+      );
       
       // ✅ **FIX**: Upgraded prompt to include 'questionNumber'
       const extractionPrompt = `

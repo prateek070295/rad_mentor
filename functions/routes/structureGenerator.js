@@ -46,10 +46,13 @@ router.post("/", express.json(), async (req, res) => {
 
   try {
     const genAI = getGenAI();
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest",
-      generationConfig: { responseMimeType: "application/json" },
-    });
+    const model = genAI.getGenerativeModel(
+      {
+        model: "models/gemini-1.5-flash",
+        generationConfig: { responseMimeType: "application/json" },
+      },
+      { apiVersion: "v1" }
+    );
 
     const result = await model.generateContent(fullPrompt);
     const response = await result.response;
