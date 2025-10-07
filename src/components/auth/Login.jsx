@@ -485,26 +485,16 @@ const Login = () => {
                     <span className="flex-1 border-t border-gray-200" />
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3">
                     <button
                       type="button"
-                      className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"
+                      className="flex items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"
                       disabled
                     >
-                      <span role="img" aria-label="Google">
-                        dY"'
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-base font-semibold text-blue-600">
+                        G
                       </span>
-                      Google
-                    </button>
-                    <button
-                      type="button"
-                      className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"
-                      disabled
-                    >
-                      <span role="img" aria-label="GitHub">
-                        dY"'
-                      </span>
-                      GitHub
+                      <span>Google</span>
                     </button>
                   </div>
                 </div>
