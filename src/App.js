@@ -6,7 +6,6 @@ import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 
 // --- Component Imports ---
 import Dashboard from './components/Dashboard'; 
-import PlanTab from './components/PlanTab';     
 import LearnTab from './components/LearnTab'; 
 import TestTab from './components/TestTab';
 import AdminPanel from './components/AdminPanel';
@@ -411,8 +410,6 @@ function App() {
       case 'dashboard':
         return <Dashboard {...dashboardData} />;
       case 'plan':
-        return <PlanTab organSystems={organSystems} />;
-      case 'planV2':                       // ⬅️ add this block
         return <PlanTabV2 />;
       case 'learn':
         return (
@@ -454,12 +451,6 @@ function App() {
                 onClick={() => setActiveTab('plan')}
               >
                 Plan
-              </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'planV2' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('planV2')}
-              >
-                Plan (V2)
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
