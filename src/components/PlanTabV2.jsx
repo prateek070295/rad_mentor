@@ -88,7 +88,12 @@ export default function PlanTabV2() {
 
   // load queue summary for overview card
   useEffect(() => {
-    if (!uid || metaLoading || showWizard) {
+    if (!uid) {
+      setQueueSummaryRows([]);
+      setQueueSummaryLoading(false);
+      return;
+    }
+    if (metaLoading || showWizard) {
       return;
     }
     let active = true;
