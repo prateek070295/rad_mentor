@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 // Optional flags hook (kept because it exists in your project)
 import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
+import { useUnsavedChanges } from "../context/UnsavedChangesContext";
 
 // Services
 import {
@@ -15,7 +16,6 @@ import {
   weekKeyFromDate,
   autoFillWeekFromMaster,
   listMasterQueueLinear,
-  scheduleSubtopicToDay,
   resetPlanData,
 } from "../services/planV2Api";
 
@@ -71,6 +71,32 @@ const weekDatesFromKeyLocal = (weekKey) => {
   );
 };
 
+const buildAlreadySet = (topicDoc = {}) => {
+  const scheduled = Object.values(topicDoc?.scheduledDates || {});
+  const out = new Set();
+  scheduled.forEach((list) => {
+    if (!Array.isArray(list)) return;
+    list.forEach((value) => {
+      const num = Number(value);
+      if (Number.isFinite(num)) {
+        out.add(num);
+      }
+    });
+  });
+
+  const completed = Array.isArray(topicDoc?.completedSubIdx)
+    ? topicDoc.completedSubIdx
+    : [];
+  completed.forEach((value) => {
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+      out.add(num);
+    }
+  });
+
+  return out;
+};
+
 export default function PlanTabV2() {
   const [uid, setUid] = useState("");
   const [meta, setMeta] = useState(null);
@@ -85,10 +111,39 @@ export default function PlanTabV2() {
   const [queueSummaryLoading, setQueueSummaryLoading] = useState(false);
 
   const flags = useSchedulerFlags?.() || {};
+  const { beginPending, endPending, markDirty, markClean } =
+    useUnsavedChanges() || {};
+
+  const runWithPending = useCallback(
+    async (operation, options = {}) => {
+      if (typeof operation !== "function") {
+        return undefined;
+      }
+      const { markAsDirty = false } = options;
+      beginPending?.();
+      if (markAsDirty) {
+        markDirty?.();
+      }
+      try {
+        return await operation();
+      } finally {
+        endPending?.();
+        if (markAsDirty) {
+          markClean?.();
+        }
+      }
+    },
+    [beginPending, endPending, markDirty, markClean],
+  );
 
   // load queue summary for overview card
   useEffect(() => {
-    if (!uid || metaLoading || showWizard) {
+    if (!uid) {
+      setQueueSummaryRows([]);
+      setQueueSummaryLoading(false);
+      return;
+    }
+    if (metaLoading || showWizard) {
       return;
     }
     let active = true;
@@ -249,120 +304,139 @@ export default function PlanTabV2() {
         return;
       }
     }
-    try {
-      await resetPlanData(uid);
-      setQueueSummaryRows([]);
-      setMeta(null);
-      setWeekDoc(null);
-      setWeekKey("");
-      setShowWizard(true);
-      refreshAll();
-    } catch (err) {
-      console.error(err);
-      if (typeof window !== "undefined") {
-        window.alert(err?.message || "Failed to reset plan");
-      }
-    }
-  }, [uid, refreshAll]);
+    await runWithPending(
+      async () => {
+        try {
+          await resetPlanData(uid);
+          setQueueSummaryRows([]);
+          setMeta(null);
+          setWeekDoc(null);
+          setWeekKey("");
+          setShowWizard(true);
+          refreshAll();
+        } catch (err) {
+          console.error(err);
+          if (typeof window !== "undefined") {
+            window.alert(err?.message || "Failed to reset plan");
+          }
+          throw err;
+        }
+      },
+      { markAsDirty: true },
+    );
+  }, [uid, refreshAll, runWithPending]);
 
   const handleSaveWizard = async (form, setBusyText, sectionOrder) => {
     if (!uid) return;
-    try {
-      setBusyText?.("Saving plan...");
-      await savePlanMeta(uid, {
-        startDate: form.startDate,
-        examDate: form.examDate || "",
-        dailyMinutes: Number(form.dailyMinutes || 0),
-        hasCompletedSetup: true,
-        sectionOrder: Array.isArray(sectionOrder) ? sectionOrder : [],
-        currentDayISO: form.startDate
-          ? toISO(form.startDate)
-          : toISO(new Date()),
-        updatedAt: new Date().toISOString(),
-      });
+    await runWithPending(
+      async () => {
+        try {
+          setBusyText?.("Saving plan...");
+          await savePlanMeta(uid, {
+            startDate: form.startDate,
+            examDate: form.examDate || "",
+            dailyMinutes: Number(form.dailyMinutes || 0),
+            hasCompletedSetup: true,
+            sectionOrder: Array.isArray(sectionOrder) ? sectionOrder : [],
+            currentDayISO: form.startDate
+              ? toISO(form.startDate)
+              : toISO(new Date()),
+            updatedAt: new Date().toISOString(),
+          });
 
-      setBusyText?.("Building Master Plan...");
-      await buildAndSaveMasterPlan(uid, {
-        sectionPrefs: Array.isArray(sectionOrder) ? sectionOrder : [],
-        forceRebuild: true,
-      });
+          setBusyText?.("Building Master Plan...");
+          await buildAndSaveMasterPlan(uid, {
+            sectionPrefs: Array.isArray(sectionOrder) ? sectionOrder : [],
+            forceRebuild: true,
+          });
 
-      setBusyText?.("Preparing This Week...");
-      // Use the week that contains today's date; if you want startDate week, swap below to form.startDate
-      const wk = weekKeyFromDate
-        ? weekKeyFromDate(new Date())
-        : toISO(startOfWeekSun(new Date()));
-      setWeekKey(wk);
-      const wizardDaily = Math.max(
-        0,
-        Number(form.dailyMinutes || defaultDailyMinutes),
-      );
-      await loadOrInitWeek(uid, wk, wizardDaily);
+          setBusyText?.("Preparing This Week...");
+          const wk = weekKeyFromDate
+            ? weekKeyFromDate(new Date())
+            : toISO(startOfWeekSun(new Date()));
+          setWeekKey(wk);
+          const wizardDaily = Math.max(
+            0,
+            Number(form.dailyMinutes || defaultDailyMinutes),
+          );
+          await loadOrInitWeek(uid, wk, wizardDaily);
 
-      setBusyText?.("Refreshing...");
-      setShowWizard(false);
-      refreshAll();
-    } catch (e) {
-      console.error(e);
-      setBusyText?.(e?.message || "Failed to save plan");
-    }
+          setBusyText?.("Refreshing...");
+          setShowWizard(false);
+          refreshAll();
+        } catch (e) {
+          console.error(e);
+          setBusyText?.(e?.message || "Failed to save plan");
+          throw e;
+        }
+      },
+      { markAsDirty: true },
+    );
   };
 
   const handleToggleOffDay = async (iso) => {
     if (!uid || !weekKey) return;
-    const next = !offDays[iso];
-    await patchWeek(uid, weekKey, { [`offDays.${iso}`]: next });
-    refreshAll();
+    await runWithPending(async () => {
+      const next = !offDays[iso];
+      await patchWeek(uid, weekKey, { [`offDays.${iso}`]: next });
+      refreshAll();
+    });
   };
 
   const handleUpdateDayCap = async (iso, minutes) => {
     if (!uid || !weekKey) return;
-    const m = Math.max(0, Number(minutes || 0));
-    await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: m });
-    refreshAll();
+    await runWithPending(async () => {
+      const m = Math.max(0, Number(minutes || 0));
+      await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: m });
+      refreshAll();
+    });
   };
 
   const handleAdjustDayCap = async (iso, delta) => {
     if (!uid || !weekKey) return;
-    const cur = Number(dayCaps?.[iso] || 0);
-    const m = Math.max(0, cur + Number(delta || 0));
-    await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: m });
-    refreshAll();
+    await runWithPending(async () => {
+      const cur = Number(dayCaps?.[iso] || 0);
+      const m = Math.max(0, cur + Number(delta || 0));
+      await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: m });
+      refreshAll();
+    });
   };
 
   const handleMarkDayDone = async (iso) => {
     if (!uid || !weekKey) return null;
 
-    try {
-      const result = await completeDayAndAdvance(uid, weekKey, iso);
+    return runWithPending(async () => {
+      try {
+        const result = await completeDayAndAdvance(uid, weekKey, iso);
 
-      setWeekDoc((prev) => {
-        if (!prev) return prev;
-        const nextDoneDays = { ...(prev.doneDays || {}), [iso]: true };
-        return { ...prev, doneDays: nextDoneDays };
-      });
+        setWeekDoc((prev) => {
+          if (!prev) return prev;
+          const nextDoneDays = { ...(prev.doneDays || {}), [iso]: true };
+          return { ...prev, doneDays: nextDoneDays };
+        });
 
-      if (result?.nextISO) {
-        setMeta((prev) =>
-          prev
-            ? {
-                ...prev,
-                currentDayISO: result.nextISO,
-                updatedAt: new Date().toISOString(),
-              }
-            : prev,
-        );
+        if (result?.nextISO) {
+          setMeta((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  currentDayISO: result.nextISO,
+                  updatedAt: new Date().toISOString(),
+                }
+              : prev,
+          );
+        }
+
+        refreshAll();
+        return result;
+      } catch (err) {
+        console.error(err);
+        if (typeof window !== "undefined") {
+          window.alert(err?.message || "Failed to mark the day as done");
+        }
+        throw err;
       }
-
-      refreshAll();
-      return result;
-    } catch (err) {
-      console.error(err);
-      if (typeof window !== "undefined") {
-        window.alert(err?.message || "Failed to mark the day as done");
-      }
-      throw err;
-    }
+    });
   };
 
   const calcRemaining = (iso) => {
@@ -379,54 +453,98 @@ export default function PlanTabV2() {
    */
   const handleAddFromMaster = async (iso) => {
     if (!uid || !weekKey) return;
-    let remaining = calcRemaining(iso);
-    if (remaining <= 0) return;
 
-    try {
-      // get runs (inProgress, then queued)
-      const [ip, qd] = await Promise.all([
-        listMasterQueueLinear(uid, { filter: "inProgress" }),
-        listMasterQueueLinear(uid, { filter: "queued" }),
-      ]);
-      const runs = [...(ip || []), ...(qd || [])];
+    await runWithPending(async () => {
+      let remaining = calcRemaining(iso);
+      if (remaining <= 0) return;
 
-      // schedule subtopics in order until we run out of space
-      outer: for (const run of runs) {
-        if (remaining <= 0) break;
-        const subs = Array.isArray(run.subtopics) ? run.subtopics : [];
-        // Build a set of already-scheduled subIdx across all days (skip dupes)
-        const scheduledDates = run.scheduledDates || {};
-        const already = new Set(
-          Object.values(scheduledDates)
-            .flat()
-            .map((x) => Number(x))
-            .filter((x) => Number.isFinite(x)),
-        );
+      try {
+        const [ip, qd] = await Promise.all([
+          listMasterQueueLinear(uid, { filter: "inProgress" }),
+          listMasterQueueLinear(uid, { filter: "queued" }),
+        ]);
+        const runs = [...(ip || []), ...(qd || [])];
 
-        for (const s of subs) {
-          if (remaining <= 0) break outer;
-          const subIdx = Number(s.subIdx);
-          const minutes = Number(s.minutes || 0);
-          if (!Number.isFinite(subIdx) || minutes <= 0) continue;
-          if (already.has(subIdx)) continue; // skip scheduled slices
+        if (!runs.length) {
+          if (typeof window !== "undefined") {
+            window.alert("Master queue is empty.");
+          }
+          return;
+        }
 
-          if (minutes <= remaining) {
-            // schedule this specific subtopic into the day
-            await scheduleSubtopicToDay(uid, iso, run.seq, subIdx);
-            remaining -= minutes;
-          } else {
-            // not enough room for this slice; try next run
-            break;
+        const dayAssignments = Array.isArray(assigned?.[iso]) ? assigned[iso] : [];
+        const existingSeqs = new Set(dayAssignments.map((a) => String(a.seq || "")));
+
+        const newAssignments = [];
+        let fillCount = 0;
+
+        for (const topic of runs) {
+          if (remaining <= 0) break;
+          const subs = Array.isArray(topic.subtopics) ? topic.subtopics : [];
+          const already = buildAlreadySet(topic);
+
+          for (let idx = 0; idx < subs.length && remaining > 0; idx += 1) {
+            if (already.has(idx)) continue;
+            const sub = subs[idx];
+            const mins = Number(sub?.minutes || 0);
+            if (!Number.isFinite(mins) || mins <= 0) continue;
+            if (mins > remaining) continue;
+
+            const assignment = {
+              seq: topic.seq || "",
+              section: topic.section || "",
+              chapterId: topic.chapterId || "",
+              chapterName: topic.chapterName || "",
+              topicId: topic.topicId || "",
+              title: topic.topicName || "",
+              subIdx: idx,
+              subId: sub?.itemId || "",
+              subName: sub?.name || "",
+              minutes: mins,
+            };
+
+            newAssignments.push(assignment);
+            remaining -= mins;
+            fillCount += 1;
+
+            if (!existingSeqs.has(String(topic.seq || ""))) {
+              existingSeqs.add(String(topic.seq || ""));
+            }
           }
         }
-      }
 
-      // refresh UI
-      refreshAll();
-    } catch (e) {
-      console.error(e);
-      // swallow; UI shows current state anyway
-    }
+        if (!newAssignments.length) {
+          if (typeof window !== "undefined") {
+            window.alert("Unable to add more items within today's capacity.");
+          }
+          return;
+        }
+
+        const batchUpdate = {};
+        batchUpdate[`assigned.${iso}`] = [
+          ...dayAssignments,
+          ...newAssignments.map((item, idx) => ({
+            ...item,
+            minutes: Number(item.minutes || 0),
+            addedAt: Date.now(),
+            seq: item.seq || `tmp-${Date.now()}-${idx}`,
+          })),
+        ];
+
+        await patchWeek(uid, weekKey, batchUpdate);
+        refreshAll();
+
+        if (typeof window !== "undefined") {
+          window.alert(`Added ${fillCount} study blocks to ${iso}.`);
+        }
+      } catch (err) {
+        console.error(err);
+        if (typeof window !== "undefined") {
+          window.alert(err?.message || "Failed to add from the master queue");
+        }
+        throw err;
+      }
+    });
   };
 
   // labels/metrics

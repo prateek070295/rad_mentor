@@ -4,6 +4,12 @@ import Quill from 'quill';
 const QuillEditor = ({ value, onChange }) => {
   const editorRef = useRef(null);
   const quillInstanceRef = useRef(null);
+  const latestOnChangeRef = useRef(onChange);
+  const initialValueRef = useRef(value);
+
+  useEffect(() => {
+    latestOnChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (editorRef.current) {
@@ -23,13 +29,13 @@ const QuillEditor = ({ value, onChange }) => {
         });
 
         quillInstanceRef.current.on('text-change', () => {
-          onChange(quillInstanceRef.current.getContents());
+          const handler = latestOnChangeRef.current;
+          handler?.(quillInstanceRef.current.getContents());
         });
-      }
 
-      // Set initial content
-      if (value) {
-        quillInstanceRef.current.setContents(value, 'silent');
+        if (initialValueRef.current) {
+          quillInstanceRef.current.setContents(initialValueRef.current, 'silent');
+        }
       }
     }
   }, []); // Run only once on mount

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 // --- Firebase Imports ---
 import { db, auth } from './firebase'; 
 import { collection, getDocs, getDoc, query, orderBy, doc, where, onSnapshot } from 'firebase/firestore'; 
-import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
+import { onAuthStateChanged, sendPasswordResetEmail } from "firebase/auth";
 
 // --- Component Imports ---
 import Dashboard from './components/Dashboard'; 
@@ -15,6 +15,10 @@ import PlannerPreview from './pages/PlannerPreview';
 import StudyItemsDebug from './pages/StudyItemsDebug';
 import PlanTabV2 from './components/PlanTabV2';
 import TimeReport from './pages/TimeReport.jsx';
+import Login from './components/auth/Login';
+import ProfileMenu from './components/ProfileMenu';
+import AccountSettings from './pages/AccountSettings';
+import { UnsavedChangesProvider, useUnsavedChanges } from './context/UnsavedChangesContext';
 
 
 
@@ -53,6 +57,18 @@ const buildDefaultFocus = () => ({
     focusText: "No topic scheduled for today.",
     focusDetails: [],
 });
+
+const initialDashboardState = {
+  userName: "User",
+  todayFocus: "No topic scheduled for today.",
+  todayFocusDetails: [],
+  syllabusCompletion: 0,
+  testScores: [80, 75, 85, 90, 82, 88],
+  topTopics: ["Breast", "MSK", "GIT"],
+  bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
+  daysUntilExam: 'N/A',
+  daysUntilWeeklyTest: 5,
+};
 
 const buildPlanV2Focus = async (uid, todayIso) => {
     if (!uid || !todayIso) {
@@ -164,40 +180,39 @@ const buildPlanV2Focus = async (uid, todayIso) => {
 };
 
 
-function App() {
+function AppShell() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isFocusMode, setIsFocusMode] = useState(false); // State for focus mode
-  
+
   const [organSystems, setOrganSystems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [planV2Context, setPlanV2Context] = useState({ uid: null, weekKey: null, todayIso: null });
+  const [authReady, setAuthReady] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const { hasUnsavedChanges, markClean } = useUnsavedChanges();
+
+  const currentUid = currentUser?.uid || null;
+  const storageKey = useMemo(
+    () => (currentUid ? `radmentor:lastTab:${currentUid}` : null),
+    [currentUid],
+  );
+
+  const persistTabSelection = useCallback(
+    (nextTab) => {
+      setActiveTab(nextTab);
+      if (storageKey && typeof window !== "undefined") {
+        window.localStorage.setItem(storageKey, nextTab);
+      }
+    },
+    [storageKey, setActiveTab],
+  );
 
   // --- State for all dashboard-related data ---
-  const [dashboardData, setDashboardData] = useState({
-    userName: "User",
-    todayFocus: "No topic scheduled for today.",
-    todayFocusDetails: [],
-    syllabusCompletion: 0,
-    testScores: [80, 75, 85, 90, 82, 88], 
-    topTopics: ["Breast", "MSK", "GIT"], 
-    bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
-    daysUntilExam: 'N/A',
-    daysUntilWeeklyTest: 5,
-  });
-
-  // --- TEMPORARY: AUTO-LOGIN FOR TESTING ---
-  useEffect(() => {
-    const autoLogin = async () => {
-      try {
-        await signInWithEmailAndPassword(auth, "test@test.com", "123456");
-      } catch (error) {
-        // This is expected if already logged in.
-      }
-    };
-    autoLogin();
-  }, []);
-
+  const [dashboardData, setDashboardData] = useState(initialDashboardState);
   // --- Main Data Fetching Effect ---
+
   useEffect(() => {
     let planUnsubscribe = null;
     let isMounted = true;
@@ -208,121 +223,135 @@ function App() {
         planUnsubscribe = null;
       }
 
-      if (user) {
-        try {
-          const sectionsCollectionRef = collection(db, 'sections');
-          const sectionsQuery = query(sectionsCollectionRef, orderBy("title"));
-          const sectionsSnapshot = await getDocs(sectionsQuery);
+      setCurrentUser(user);
+      setAuthReady(true);
 
-          const systemsList = [];
-          for (const sectionDoc of sectionsSnapshot.docs) {
-            const sectionData = sectionDoc.data();
-            const nodesRef = collection(db, 'sections', sectionDoc.id, 'nodes');
-            const chaptersQuery = query(nodesRef, where("parentId", "==", null));
-            const chaptersSnapshot = await getDocs(chaptersQuery);
-
-            systemsList.push({
-              id: sectionDoc.id,
-              name: sectionData.title,
-              defaultDays: chaptersSnapshot.size
-            });
-          }
-          if (isMounted) {
-            setOrganSystems(systemsList);
-          }
-
-          const planRef = doc(db, 'plans', user.uid);
-          planUnsubscribe = onSnapshot(planRef, async (planSnap) => {
-            if (!isMounted) return;
-
-            const today = getLocalDate();
-            const defaultFocus = buildDefaultFocus();
-
-            if (planSnap.exists()) {
-              const planData = planSnap.data() || {};
-              const update = {
-                userName: user.displayName || "Dr. Test",
-                todayFocus: defaultFocus.focusText,
-                todayFocusDetails: [],
-                syllabusCompletion: 0,
-                daysUntilExam: 'N/A',
-              };
-
-              if (planData.examDate) {
-                update.daysUntilExam = daysBetween(today, planData.examDate);
-              }
-
-              const hasSchedule =
-                planData.schedule && Object.keys(planData.schedule).length > 0;
-
-              if (hasSchedule) {
-                setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
-                const schedule = planData.schedule;
-                if (schedule[today] && schedule[today].topic) {
-                  update.todayFocus = schedule[today].topic;
-                } else {
-                  update.todayFocus = defaultFocus.focusText;
-                }
-                const totalTopics = Object.keys(schedule).length;
-                const completedTopics = Object.values(schedule).filter(
-                  (day) => day.completed,
-                ).length;
-                update.syllabusCompletion =
-                  totalTopics > 0
-                    ? Math.round((completedTopics / totalTopics) * 100)
-                    : 0;
-              } else {
-                const focus = await buildPlanV2Focus(user.uid, today);
-                update.todayFocus = focus.focusText;
-                update.todayFocusDetails = focus.focusDetails;
-                setPlanV2Context({
-                  uid: user.uid,
-                  weekKey: getWeekStartKey(today),
-                  todayIso: today,
-                });
-              }
-
-              if (!isMounted) return;
-              setDashboardData((prev) => ({
-                ...prev,
-                ...update,
-              }));
-            } else {
-              setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
-              if (!isMounted) return;
-              setDashboardData((prev) => ({
-                ...prev,
-                userName: user.displayName || "Dr. Test",
-                todayFocus: "No plan created yet.",
-                todayFocusDetails: [],
-                daysUntilExam: 'N/A',
-                syllabusCompletion: 0,
-              }));
-            }
-          });
-        } catch (error) {
-          console.error("Failed to fetch user data:", error);
-        } finally {
-          if (isMounted) {
-            setIsLoading(false);
-          }
+      if (!user) {
+        if (isMounted) {
+          setIsAdmin(false);
+          setOrganSystems([]);
+          setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
+          setDashboardData(initialDashboardState);
+          setIsLoading(false);
+          setActiveTab("dashboard");
         }
-      } else {
+        markClean?.();
+        return;
+      }
+
+      if (isMounted) {
+        setIsLoading(true);
+      }
+
+      let adminStatus = false;
+      try {
+        const adminSnapshot = await getDoc(doc(db, "admins", user.uid));
+        adminStatus = adminSnapshot.exists();
+      } catch (adminError) {
+        console.error("Failed to fetch admin status:", adminError);
+      }
+      if (isMounted) {
+        setIsAdmin(adminStatus);
+      }
+
+      try {
+        const sectionsCollectionRef = collection(db, "sections");
+        const sectionsQuery = query(sectionsCollectionRef, orderBy("title"));
+        const sectionsSnapshot = await getDocs(sectionsQuery);
+
+        const systemsList = [];
+        for (const sectionDoc of sectionsSnapshot.docs) {
+          const sectionData = sectionDoc.data();
+          const nodesRef = collection(db, "sections", sectionDoc.id, "nodes");
+          const chaptersQuery = query(nodesRef, where("parentId", "==", null));
+          const chaptersSnapshot = await getDocs(chaptersQuery);
+
+          systemsList.push({
+            id: sectionDoc.id,
+            name: sectionData.title,
+            defaultDays: chaptersSnapshot.size,
+          });
+        }
+        if (isMounted) {
+          setOrganSystems(systemsList);
+        }
+
+        const displayName = user.displayName || user.email || "Rad Mentor";
+        const planRef = doc(db, "plans", user.uid);
+        planUnsubscribe = onSnapshot(planRef, async (planSnap) => {
+          if (!isMounted) return;
+
+          const today = getLocalDate();
+          const defaultFocus = buildDefaultFocus();
+
+          if (planSnap.exists()) {
+            const planData = planSnap.data() || {};
+            const update = {
+              userName: displayName,
+              todayFocus: defaultFocus.focusText,
+              todayFocusDetails: [],
+              syllabusCompletion: 0,
+              daysUntilExam: "N/A",
+            };
+
+            if (planData.examDate) {
+              update.daysUntilExam = daysBetween(today, planData.examDate);
+            }
+
+            const hasSchedule =
+              planData.schedule && Object.keys(planData.schedule).length > 0;
+
+            if (hasSchedule) {
+              setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
+              const schedule = planData.schedule;
+              if (schedule[today] && schedule[today].topic) {
+                update.todayFocus = schedule[today].topic;
+              } else {
+                update.todayFocus = defaultFocus.focusText;
+              }
+              const totalTopics = Object.keys(schedule).length;
+              const completedTopics = Object.values(schedule).filter(
+                (day) => day.completed,
+              ).length;
+              update.syllabusCompletion =
+                totalTopics > 0
+                  ? Math.round((completedTopics / totalTopics) * 100)
+                  : 0;
+            } else {
+              const focus = await buildPlanV2Focus(user.uid, today);
+              update.todayFocus = focus.focusText;
+              update.todayFocusDetails = focus.focusDetails;
+              setPlanV2Context({
+                uid: user.uid,
+                weekKey: getWeekStartKey(today),
+                todayIso: today,
+              });
+            }
+
+            if (!isMounted) return;
+            setDashboardData((prev) => ({
+              ...prev,
+              ...update,
+            }));
+          } else {
+            setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
+            if (!isMounted) return;
+            setDashboardData((prev) => ({
+              ...prev,
+              userName: displayName,
+              todayFocus: "No plan created yet.",
+              todayFocusDetails: [],
+              daysUntilExam: "N/A",
+              syllabusCompletion: 0,
+            }));
+          }
+        });
+      } catch (error) {
+        console.error("Failed to fetch user data:", error);
+      } finally {
         if (isMounted) {
           setIsLoading(false);
         }
-        setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
-        setDashboardData({
-            userName: "User",
-            todayFocus: "Please log in.",
-            todayFocusDetails: [],
-            daysUntilExam: 'N/A',
-          syllabusCompletion: 0,
-          testScores: [80, 75, 85, 90, 82, 88],
-          topTopics: ["Breast", "MSK", "GIT"],
-          bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
-          daysUntilWeeklyTest: 5,
-        });
       }
     });
 
@@ -333,7 +362,32 @@ function App() {
         planUnsubscribe();
       }
     };
-  }, []);
+  }, [markClean]);
+
+  useEffect(() => {
+    if (!authReady || !storageKey) {
+      return;
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+    const storedTab = window.localStorage.getItem(storageKey);
+    if (storedTab && (storedTab !== "admin" || isAdmin)) {
+      setActiveTab(storedTab);
+    }
+  }, [authReady, storageKey, isAdmin]);
+
+  useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+    if (!isAdmin && activeTab === "admin") {
+      if (typeof window !== "undefined" && storageKey) {
+        window.localStorage.setItem(storageKey, "dashboard");
+      }
+      setActiveTab("dashboard");
+    }
+  }, [isAdmin, activeTab, storageKey, authReady]);
 
   useEffect(() => {
     if (
@@ -372,6 +426,86 @@ function App() {
     };
   }, [planV2Context]);
 
+  const userDisplayName =
+    currentUser?.displayName || currentUser?.email || "User";
+  const userEmail = currentUser?.email || "";
+  const userInitials = useMemo(() => {
+    return (
+      userDisplayName
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "U"
+    );
+  }, [userDisplayName]);
+
+  const handleProfileUpdated = useCallback(
+    (nextName) => {
+      setCurrentUser((prev) => (prev ? { ...prev, displayName: nextName } : prev));
+    },
+    [setCurrentUser],
+  );
+
+  const handleSignOut = useCallback(async () => {
+    if (hasUnsavedChanges && typeof window !== "undefined") {
+      const confirmSignOut = window.confirm(
+        "You have unsaved work. Are you sure you want to sign out?",
+      );
+      if (!confirmSignOut) {
+        return;
+      }
+    }
+    try {
+      await auth.signOut();
+      markClean?.();
+    } catch (signOutError) {
+      console.error("Failed to sign out:", signOutError);
+      if (typeof window !== "undefined") {
+        window.alert(
+          signOutError?.message || "Unable to sign out right now. Please try again.",
+        );
+      }
+    }
+  }, [hasUnsavedChanges, markClean]);
+
+  const handleSendPasswordReset = useCallback(async () => {
+    if (!userEmail) {
+      if (typeof window !== "undefined") {
+        window.alert("No email address is associated with this account.");
+      }
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, userEmail);
+      if (typeof window !== "undefined") {
+        window.alert(`Password reset email sent to ${userEmail}.`);
+      }
+    } catch (resetError) {
+      console.error("Failed to send password reset email:", resetError);
+      if (typeof window !== "undefined") {
+        window.alert(
+          resetError?.message || "Unable to send password reset email right now.",
+        );
+      }
+    }
+  }, [userEmail]);
+
+  const handleNavigateToAccount = useCallback(() => {
+    persistTabSelection("account");
+  }, [persistTabSelection]);
+
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100">
+        <div className="flex flex-col items-center gap-3 text-gray-600">
+          <img src={appLogo} alt="Rad Mentor" className="h-12 w-12 animate-pulse" />
+          <p className="text-sm font-medium">Loading Rad Mentor...</p>
+        </div>
+      </div>
+    );
+  }
+
   const isPreviewPage = window.location.pathname === '/preview';
 
   if (isPreviewPage) {
@@ -395,11 +529,15 @@ function App() {
 
   const isPlanV2Page = window.location.pathname === '/plan-v2';
   if (isPlanV2Page) {
+    if (!currentUser) {
+      return <Login />;
+    }
     return <PlanTabV2 />;
   }
 
-
-
+  if (!currentUser) {
+    return <Login />;
+  }
 
   const renderContent = () => {
     if (isLoading) {
@@ -423,7 +561,20 @@ function App() {
       case 'test':
         return <TestTab organSystems={organSystems} />;
       case 'admin':
-        return <AdminPanel />; 
+        return isAdmin ? (
+          <AdminPanel />
+        ) : (
+          <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+            You need admin access to view this section. Contact your administrator if you believe this is a mistake.
+          </div>
+        );
+      case 'account':
+        return (
+          <AccountSettings
+            user={currentUser}
+            onProfileUpdated={handleProfileUpdated}
+          />
+        );
       default:
         return null;
     }
@@ -442,37 +593,51 @@ function App() {
             <nav className="hidden md:flex space-x-4">
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => persistTabSelection('dashboard')}
               >
                 Dashboard
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'plan' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('plan')}
+                onClick={() => persistTabSelection('plan')}
               >
                 Plan
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('learn')}
+                onClick={() => persistTabSelection('learn')}
               >
                 Learn
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'test' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('test')}
+                onClick={() => persistTabSelection('test')}
               >
                 Test
               </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('admin')}
-              >
-              Admin
-              </button>
+              {isAdmin && (
+                <button
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                  onClick={() => persistTabSelection('admin')}
+                >
+                  Admin
+                </button>
+              )}
             </nav>
-            <div className="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-800 font-semibold text-lg">
-              S
+            <div className="flex items-center space-x-3">
+              <div className="hidden text-right text-sm sm:block">
+                <p className="font-semibold text-gray-700">{userDisplayName}</p>
+                <p className="text-xs text-gray-400">{userEmail || 'Signed in'}</p>
+              </div>
+              <ProfileMenu
+                displayName={userDisplayName}
+                email={userEmail}
+                initials={userInitials}
+                onNavigateToAccount={handleNavigateToAccount}
+                onSignOut={handleSignOut}
+                onSendPasswordReset={handleSendPasswordReset}
+                hasUnsavedChanges={hasUnsavedChanges}
+              />
             </div>
           </div>
         </header>
@@ -487,5 +652,11 @@ function App() {
     </div>
   );
 }
+
+const App = () => (
+  <UnsavedChangesProvider>
+    <AppShell />
+  </UnsavedChangesProvider>
+);
 
 export default App;
