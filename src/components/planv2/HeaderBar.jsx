@@ -22,7 +22,32 @@ const formatDate = (value) => {
   });
 };
 
-export default function PlanSummaryCard({ stats = {}, onReset }) {
+export default function PlanSummaryCard({ stats = {}, onReset, isLoading = false }) {
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-pulse">
+          <div className="space-y-2">
+            <div className="h-6 w-48 rounded bg-gray-200" />
+            <div className="h-4 w-60 rounded bg-gray-200" />
+          </div>
+          <div className="h-8 w-28 rounded border border-gray-200 bg-gray-100" />
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 animate-pulse"
+            >
+              <div className="h-3 w-24 rounded bg-gray-200" />
+              <div className="mt-3 h-5 w-32 rounded bg-gray-200" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const {
     overallProgress = null,
     minutesStudied = 0,

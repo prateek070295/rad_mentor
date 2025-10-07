@@ -82,19 +82,18 @@ export default function PlanTabV2() {
   const [showWizard, setShowWizard] = useState(false);
   const [refreshSignal, setRefreshSignal] = useState(0); // bump to refetch children
   const [queueSummaryRows, setQueueSummaryRows] = useState([]);
+  const [queueSummaryLoading, setQueueSummaryLoading] = useState(false);
 
   const flags = useSchedulerFlags?.() || {};
 
   // load queue summary for overview card
   useEffect(() => {
+    if (!uid || metaLoading || showWizard) {
+      return;
+    }
     let active = true;
-    (async () => {
-      if (!uid) {
-        if (active) {
-          setQueueSummaryRows([]);
-        }
-        return;
-      }
+    setQueueSummaryLoading(true);
+    const timeoutId = setTimeout(async () => {
       try {
         const rows = await listMasterQueueLinear(uid, {});
         if (active) {
@@ -105,12 +104,18 @@ export default function PlanTabV2() {
         if (active) {
           setQueueSummaryRows([]);
         }
+      } finally {
+        if (active) {
+          setQueueSummaryLoading(false);
+        }
       }
-    })();
+    }, 200);
     return () => {
       active = false;
+      clearTimeout(timeoutId);
+      setQueueSummaryLoading(false);
     };
-  }, [uid, refreshSignal]);
+  }, [uid, metaLoading, showWizard, refreshSignal]);
 
   // auth -> uid
   useEffect(() => {
@@ -559,6 +564,8 @@ export default function PlanTabV2() {
     };
   }, [queueSummaryRows, weekDoc, meta]);
 
+  const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
+
   if (!uid) {
     return (
       <div className="p-6">
@@ -569,9 +576,24 @@ export default function PlanTabV2() {
     );
   }
 
-  return (
-    <div className="flex flex-col gap-6">
-      <PlanSummaryCard stats={planOverviewStats} onReset={handleResetPlan} />
+  const SkeletonLayout = () => (
+    <>
+      <div className="h-36 rounded-xl bg-gray-100 animate-pulse" />
+      <div className="h-72 rounded-xl bg-gray-100 animate-pulse" />
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:gap-6">
+        <div className="h-[520px] rounded-xl bg-gray-100 animate-pulse" />
+        <div className="h-[520px] rounded-xl bg-gray-100 animate-pulse" />
+      </div>
+    </>
+  );
+
+  const PlannerContent = () => (
+    <>
+      <PlanSummaryCard
+        stats={planOverviewStats}
+        onReset={handleResetPlan}
+        isLoading={queueSummaryLoading}
+      />
 
       <div className="w-full">
         <MasterGanttTimeline
@@ -621,6 +643,12 @@ export default function PlanTabV2() {
           </div>
         </main>
       </div>
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      {shouldShowSkeleton ? <SkeletonLayout /> : <PlannerContent />}
 
       {showWizard && (
         <PlanSetupWizardV2
