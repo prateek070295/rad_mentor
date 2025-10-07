@@ -17,10 +17,16 @@ import getContentRouter from './routes/getContent.js';
 
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp } from "firebase-admin/app";
+import { getApps, initializeApp } from "firebase-admin/app";
+
+import { recomputeStudyMinutes } from "./scripts/recomputeStudyMinutes.js";
+
 
 setGlobalOptions({ region: "asia-south1" });
-initializeApp();
+if (!getApps().length) {
+ initializeApp();
+}
+
 const db = getFirestore();
 
 const app = express();
@@ -76,3 +82,6 @@ app.use((err, req, res, _next) => {
 });
 
 export const api = onRequest({ secrets: ["GEMINI_API_KEY"] }, app);
+export { mirrorStudyItem } from "./triggers/mirrorStudyItem.js";
+export { backfillStudyItems } from "./scripts/backfillStudyItems.js";
+export { recomputeStudyMinutes };

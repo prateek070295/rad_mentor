@@ -1,4 +1,4 @@
-import { getGenAI, convertDeltaToText } from "../helpers.js";
+import { getGenAI, convertDeltaToText, runWithRetry } from "../helpers.js";
 import express from "express";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -43,9 +43,10 @@ router.post("/", express.json(), async (req, res) => {
         .status(404)
         .json({ error: `No study material found for section '${sectionName}'.` });
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest",
-    });
+    const model = genAI.getGenerativeModel(
+      { model: "models/gemini-2.0-flash-lite-001" },
+      { apiVersion: "v1" }
+    );
     const prompt = `
 You are an examiner for the DNB Radiodiagnosis theory exam.
 Based ONLY on the <Reference_Material>, generate 10 short-note style theory questions.
@@ -62,7 +63,7 @@ ${combinedContent}
 </Reference_Material>
     `.trim();
 
-    const result = await model.generateContent(prompt);
+    const result = await runWithRetry(() => model.generateContent(prompt));
     const jsonText = result
       .response
       .text()
@@ -74,6 +75,11 @@ ${combinedContent}
     res.json({ questions });
   } catch (error) {
     console.error("Error in /api/generate-theory-test endpoint:", error);
+    if (error?.status === 503 || error?.status === 429) {
+      return res
+        .status(503)
+        .json({ error: "Our AI tutor is busy. Please try again in a few seconds." });
+    }
     res
       .status(500)
       .json({ error: "Something went wrong while generating the test." });

@@ -23,3 +23,38 @@ export function getGenAI() {
   if (!key) return null;
   return new GoogleGenerativeAI(key);
 }
+
+export async function runWithRetry(task, options = {}) {
+  const {
+    retries = 3,
+    initialDelayMs = 500,
+    maxDelayMs = 8000,
+    multiplier = 2,
+  } = options;
+
+  let attempt = 0;
+  let delay = initialDelayMs;
+  let lastError;
+
+  while (attempt <= retries) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      const status = error?.status ?? error?.statusCode;
+      const retryableStatus = status === 429 || status === 503;
+      const isNetworkError =
+        error?.name === "TypeError" && /fetch failed/i.test(error?.message || "");
+
+      if (!(retryableStatus || isNetworkError) || attempt === retries) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * multiplier, maxDelayMs);
+      attempt += 1;
+    }
+  }
+
+  throw lastError;
+}

@@ -1,7 +1,17 @@
 // src/components/Dashboard.jsx
 import React from 'react';
 
-const Dashboard = ({ userName, todayFocus, syllabusCompletion, testScores, topTopics, bottomTopics, daysUntilExam, daysUntilWeeklyTest }) => {
+const Dashboard = ({
+  userName,
+  todayFocus,
+  todayFocusDetails = [],
+  syllabusCompletion,
+  testScores,
+  topTopics,
+  bottomTopics,
+  daysUntilExam,
+  daysUntilWeeklyTest,
+}) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr">
       {/* Welcome & Today's Goal Card */}
@@ -9,7 +19,48 @@ const Dashboard = ({ userName, todayFocus, syllabusCompletion, testScores, topTo
         <div>
           <h2 className="text-3xl font-bold mb-2">Welcome back, {userName}! 👋</h2>
           <p className="text-xl font-light mb-4">Today's Focus:</p>
-          <p className="text-2xl font-bold">{todayFocus}</p>
+          {Array.isArray(todayFocusDetails) && todayFocusDetails.length > 0 ? (
+            <div className="flex flex-col gap-4 text-white">
+              {todayFocusDetails.map((item, index) => {
+                const topicSummary = Array.isArray(item.topics)
+                  ? item.topics.filter(Boolean)
+                  : [];
+                return (
+                  <div
+                    key={`${item.sectionName || 'section'}-${item.chapterName || 'chapter'}-${index}`}
+                    className="rounded-lg bg-white/10 backdrop-blur-sm p-3"
+                  >
+                    <p className="text-sm font-medium uppercase tracking-wide text-white/70">
+                      Section
+                    </p>
+                    <p className="text-lg font-semibold mb-2">
+                      {item.sectionName || 'Study Plan'}
+                    </p>
+                    <p className="text-sm font-medium uppercase tracking-wide text-white/70">
+                      Chapter
+                    </p>
+                    <p className="text-lg font-semibold mb-2">
+                      {item.chapterName || topicSummary[0] || 'Session'}
+                    </p>
+                    {topicSummary.length > 0 && (
+                      <>
+                        <p className="text-sm font-medium uppercase tracking-wide text-white/70">
+                          Topics
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 text-base font-medium">
+                          {topicSummary.map((topic) => (
+                            <li key={topic}>{topic}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-2xl font-bold">{todayFocus}</p>
+          )}
         </div>
         <button className="mt-6 w-full md:w-auto self-end bg-white text-blue-700 font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-50 transition duration-300 transform hover:scale-105">
           Start Learning Session
