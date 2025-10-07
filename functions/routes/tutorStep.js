@@ -147,10 +147,7 @@ router.post("/", express.json(), async (req, res) => {
                 } else if (checkpointData.type === 'short') {
                     const genAI = getGenAI();
                     const model = genAI.getGenerativeModel(
-                      {
-                        model: "models/gemini-1.5-flash",
-                        generationConfig: { responseMimeType: "application/json" },
-                      },
+                      { model: "models/gemini-2.0-flash-lite-001" },
                       { apiVersion: "v1" }
                     );
                     const gradingPrompt = `You are an expert radiology proctor. CONTEXT: - Question: "${checkpointData.question_md}" - Key Concepts: "${checkpointData.rationale_md}" - Student's Answer: "${userInput}" TASK: 1. Evaluate the student's answer. 2. Determine a 'verdict': "correct", "partially_correct", or "incorrect". 3. Write a concise 'feedback' message. If 'partially_correct', praise the correct parts and explain what was missing. 4. **IMPORTANT**: Do NOT use "Key Concepts". Your response MUST be a valid JSON object: { "verdict": "...", "feedback": "..." }`;
@@ -208,7 +205,7 @@ router.post("/", express.json(), async (req, res) => {
             const sectionData = sectionSnapshot.docs[0].data();
             const genAI = getGenAI();
             const model = genAI.getGenerativeModel(
-              { model: "models/gemini-1.5-flash" },
+              { model: "models/gemini-2.0-flash-lite-001" },
               { apiVersion: "v1" }
             );
             const prompt = socraticTeachPrompt(sectionData.title, sectionData.body_md);
@@ -230,7 +227,7 @@ router.post("/", express.json(), async (req, res) => {
               const sectionData = sectionSnapshot.docs[0].data();
               const genAI = getGenAI();
               const model = genAI.getGenerativeModel(
-                { model: "models/gemini-1.5-flash" },
+                { model: "models/gemini-2.0-flash-lite-001" },
                 { apiVersion: "v1" }
               );
               const prompt = socraticEvaluationPrompt(sectionData.body_md, userInput);

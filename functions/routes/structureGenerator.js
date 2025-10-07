@@ -47,10 +47,7 @@ router.post("/", express.json(), async (req, res) => {
   try {
     const genAI = getGenAI();
     const model = genAI.getGenerativeModel(
-      {
-        model: "models/gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" },
-      },
+      { model: "models/gemini-2.0-flash-lite-001" },
       { apiVersion: "v1" }
     );
 

@@ -58,7 +58,7 @@ router.post("/", (req, res) => {
         temperature: 0.2,
       };
       const model = genAI.getGenerativeModel(
-        { model: "models/gemini-1.5-pro", generationConfig },
+        { model: "models/gemini-2.0-flash-lite-001" },
         { apiVersion: "v1" }
       );
       

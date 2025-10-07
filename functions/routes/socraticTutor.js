@@ -24,9 +24,7 @@ router.post("/", express.json(), async (req, res) => {
     const lastUserMessage = googleAIHistory.pop();
 
     const model = genAI.getGenerativeModel(
-      {
-        model: "models/gemini-1.5-flash",
-      },
+      { model: "models/gemini-2.0-flash-lite-001" },
       { apiVersion: "v1" }
     );
 

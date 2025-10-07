@@ -44,9 +44,7 @@ router.post("/", express.json(), async (req, res) => {
         .json({ error: `No study material found for section '${sectionName}'.` });
 
     const model = genAI.getGenerativeModel(
-      {
-        model: "models/gemini-1.5-flash",
-      },
+      { model: "models/gemini-2.0-flash-lite-001" },
       { apiVersion: "v1" }
     );
     const prompt = `
