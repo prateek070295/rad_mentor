@@ -42,9 +42,11 @@ export async function runWithRetry(task, options = {}) {
     } catch (error) {
       lastError = error;
       const status = error?.status ?? error?.statusCode;
-      const retryable = status === 429 || status === 503;
+      const retryableStatus = status === 429 || status === 503;
+      const isNetworkError =
+        error?.name === "TypeError" && /fetch failed/i.test(error?.message || "");
 
-      if (!retryable || attempt === retries) {
+      if (!(retryableStatus || isNetworkError) || attempt === retries) {
         break;
       }
 
