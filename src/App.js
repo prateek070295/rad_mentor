@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 // --- Firebase Imports ---
 import { db, auth } from './firebase'; 
 import { collection, getDocs, getDoc, query, orderBy, doc, where, onSnapshot } from 'firebase/firestore'; 
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, sendPasswordResetEmail } from "firebase/auth";
 
 // --- Component Imports ---
 import Dashboard from './components/Dashboard'; 
@@ -16,6 +16,9 @@ import StudyItemsDebug from './pages/StudyItemsDebug';
 import PlanTabV2 from './components/PlanTabV2';
 import TimeReport from './pages/TimeReport.jsx';
 import Login from './components/auth/Login';
+import ProfileMenu from './components/ProfileMenu';
+import AccountSettings from './pages/AccountSettings';
+import { UnsavedChangesProvider, useUnsavedChanges } from './context/UnsavedChangesContext';
 
 
 
@@ -177,7 +180,7 @@ const buildPlanV2Focus = async (uid, todayIso) => {
 };
 
 
-function App() {
+function AppShell() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isFocusMode, setIsFocusMode] = useState(false); // State for focus mode
 
@@ -186,10 +189,30 @@ function App() {
   const [planV2Context, setPlanV2Context] = useState({ uid: null, weekKey: null, todayIso: null });
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const { hasUnsavedChanges, markClean } = useUnsavedChanges();
+
+  const currentUid = currentUser?.uid || null;
+  const storageKey = useMemo(
+    () => (currentUid ? `radmentor:lastTab:${currentUid}` : null),
+    [currentUid],
+  );
+
+  const persistTabSelection = useCallback(
+    (nextTab) => {
+      setActiveTab(nextTab);
+      if (storageKey && typeof window !== "undefined") {
+        window.localStorage.setItem(storageKey, nextTab);
+      }
+    },
+    [storageKey, setActiveTab],
+  );
 
   // --- State for all dashboard-related data ---
   const [dashboardData, setDashboardData] = useState(initialDashboardState);
   // --- Main Data Fetching Effect ---
+
   useEffect(() => {
     let planUnsubscribe = null;
     let isMounted = true;
@@ -205,11 +228,14 @@ function App() {
 
       if (!user) {
         if (isMounted) {
+          setIsAdmin(false);
           setOrganSystems([]);
           setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
           setDashboardData(initialDashboardState);
           setIsLoading(false);
+          setActiveTab("dashboard");
         }
+        markClean?.();
         return;
       }
 
@@ -217,22 +243,33 @@ function App() {
         setIsLoading(true);
       }
 
+      let adminStatus = false;
       try {
-        const sectionsCollectionRef = collection(db, 'sections');
+        const adminSnapshot = await getDoc(doc(db, "admins", user.uid));
+        adminStatus = adminSnapshot.exists();
+      } catch (adminError) {
+        console.error("Failed to fetch admin status:", adminError);
+      }
+      if (isMounted) {
+        setIsAdmin(adminStatus);
+      }
+
+      try {
+        const sectionsCollectionRef = collection(db, "sections");
         const sectionsQuery = query(sectionsCollectionRef, orderBy("title"));
         const sectionsSnapshot = await getDocs(sectionsQuery);
 
         const systemsList = [];
         for (const sectionDoc of sectionsSnapshot.docs) {
           const sectionData = sectionDoc.data();
-          const nodesRef = collection(db, 'sections', sectionDoc.id, 'nodes');
+          const nodesRef = collection(db, "sections", sectionDoc.id, "nodes");
           const chaptersQuery = query(nodesRef, where("parentId", "==", null));
           const chaptersSnapshot = await getDocs(chaptersQuery);
 
           systemsList.push({
             id: sectionDoc.id,
             name: sectionData.title,
-            defaultDays: chaptersSnapshot.size
+            defaultDays: chaptersSnapshot.size,
           });
         }
         if (isMounted) {
@@ -240,7 +277,7 @@ function App() {
         }
 
         const displayName = user.displayName || user.email || "Rad Mentor";
-        const planRef = doc(db, 'plans', user.uid);
+        const planRef = doc(db, "plans", user.uid);
         planUnsubscribe = onSnapshot(planRef, async (planSnap) => {
           if (!isMounted) return;
 
@@ -254,7 +291,7 @@ function App() {
               todayFocus: defaultFocus.focusText,
               todayFocusDetails: [],
               syllabusCompletion: 0,
-              daysUntilExam: 'N/A',
+              daysUntilExam: "N/A",
             };
 
             if (planData.examDate) {
@@ -304,7 +341,7 @@ function App() {
               userName: displayName,
               todayFocus: "No plan created yet.",
               todayFocusDetails: [],
-              daysUntilExam: 'N/A',
+              daysUntilExam: "N/A",
               syllabusCompletion: 0,
             }));
           }
@@ -325,7 +362,32 @@ function App() {
         planUnsubscribe();
       }
     };
-  }, []);
+  }, [markClean]);
+
+  useEffect(() => {
+    if (!authReady || !storageKey) {
+      return;
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+    const storedTab = window.localStorage.getItem(storageKey);
+    if (storedTab && (storedTab !== "admin" || isAdmin)) {
+      setActiveTab(storedTab);
+    }
+  }, [authReady, storageKey, isAdmin]);
+
+  useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+    if (!isAdmin && activeTab === "admin") {
+      if (typeof window !== "undefined" && storageKey) {
+        window.localStorage.setItem(storageKey, "dashboard");
+      }
+      setActiveTab("dashboard");
+    }
+  }, [isAdmin, activeTab, storageKey, authReady]);
 
   useEffect(() => {
     if (
@@ -363,6 +425,75 @@ function App() {
       unsubscribe();
     };
   }, [planV2Context]);
+
+  const userDisplayName =
+    currentUser?.displayName || currentUser?.email || "User";
+  const userEmail = currentUser?.email || "";
+  const userInitials = useMemo(() => {
+    return (
+      userDisplayName
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "U"
+    );
+  }, [userDisplayName]);
+
+  const handleProfileUpdated = useCallback(
+    (nextName) => {
+      setCurrentUser((prev) => (prev ? { ...prev, displayName: nextName } : prev));
+    },
+    [setCurrentUser],
+  );
+
+  const handleSignOut = useCallback(async () => {
+    if (hasUnsavedChanges && typeof window !== "undefined") {
+      const confirmSignOut = window.confirm(
+        "You have unsaved work. Are you sure you want to sign out?",
+      );
+      if (!confirmSignOut) {
+        return;
+      }
+    }
+    try {
+      await auth.signOut();
+      markClean?.();
+    } catch (signOutError) {
+      console.error("Failed to sign out:", signOutError);
+      if (typeof window !== "undefined") {
+        window.alert(
+          signOutError?.message || "Unable to sign out right now. Please try again.",
+        );
+      }
+    }
+  }, [hasUnsavedChanges, markClean]);
+
+  const handleSendPasswordReset = useCallback(async () => {
+    if (!userEmail) {
+      if (typeof window !== "undefined") {
+        window.alert("No email address is associated with this account.");
+      }
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, userEmail);
+      if (typeof window !== "undefined") {
+        window.alert(`Password reset email sent to ${userEmail}.`);
+      }
+    } catch (resetError) {
+      console.error("Failed to send password reset email:", resetError);
+      if (typeof window !== "undefined") {
+        window.alert(
+          resetError?.message || "Unable to send password reset email right now.",
+        );
+      }
+    }
+  }, [userEmail]);
+
+  const handleNavigateToAccount = useCallback(() => {
+    persistTabSelection("account");
+  }, [persistTabSelection]);
 
   if (!authReady) {
     return (
@@ -408,13 +539,6 @@ function App() {
     return <Login />;
   }
 
-  const userDisplayName = currentUser.displayName || currentUser.email || "User";
-  const userInitials = userDisplayName.trim().charAt(0).toUpperCase();
-  const handleSignOut = () => auth.signOut();
-
-
-
-
   const renderContent = () => {
     if (isLoading) {
       return <div className="text-center p-10">Loading Rad Mentor...</div>;
@@ -437,7 +561,20 @@ function App() {
       case 'test':
         return <TestTab organSystems={organSystems} />;
       case 'admin':
-        return <AdminPanel />; 
+        return isAdmin ? (
+          <AdminPanel />
+        ) : (
+          <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+            You need admin access to view this section. Contact your administrator if you believe this is a mistake.
+          </div>
+        );
+      case 'account':
+        return (
+          <AccountSettings
+            user={currentUser}
+            onProfileUpdated={handleProfileUpdated}
+          />
+        );
       default:
         return null;
     }
@@ -456,50 +593,51 @@ function App() {
             <nav className="hidden md:flex space-x-4">
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => persistTabSelection('dashboard')}
               >
                 Dashboard
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'plan' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('plan')}
+                onClick={() => persistTabSelection('plan')}
               >
                 Plan
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('learn')}
+                onClick={() => persistTabSelection('learn')}
               >
                 Learn
               </button>
               <button
                 className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'test' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('test')}
+                onClick={() => persistTabSelection('test')}
               >
                 Test
               </button>
-              <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
-                onClick={() => setActiveTab('admin')}
-              >
-              Admin
-              </button>
+              {isAdmin && (
+                <button
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                  onClick={() => persistTabSelection('admin')}
+                >
+                  Admin
+                </button>
+              )}
             </nav>
             <div className="flex items-center space-x-3">
               <div className="hidden text-right text-sm sm:block">
                 <p className="font-semibold text-gray-700">{userDisplayName}</p>
-                <p className="text-xs text-gray-400">Signed in</p>
+                <p className="text-xs text-gray-400">{userEmail || 'Signed in'}</p>
               </div>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="text-xs font-medium text-gray-500 transition hover:text-blue-600"
-              >
-                Sign out
-              </button>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-200 text-lg font-semibold text-blue-800">
-                {userInitials}
-              </div>
+              <ProfileMenu
+                displayName={userDisplayName}
+                email={userEmail}
+                initials={userInitials}
+                onNavigateToAccount={handleNavigateToAccount}
+                onSignOut={handleSignOut}
+                onSendPasswordReset={handleSendPasswordReset}
+                hasUnsavedChanges={hasUnsavedChanges}
+              />
             </div>
           </div>
         </header>
@@ -514,5 +652,11 @@ function App() {
     </div>
   );
 }
+
+const App = () => (
+  <UnsavedChangesProvider>
+    <AppShell />
+  </UnsavedChangesProvider>
+);
 
 export default App;

@@ -1,59 +1,187 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  createUserWithEmailAndPassword,
+  updateProfile,
 } from "firebase/auth";
 import { auth } from "../../firebase";
 import appLogo from "../../assets/images/logo 1.PNG";
+import authConfig from "../../config/authConfig";
+
+const MIN_PASSWORD_LENGTH = 6;
+
+const maskEmail = (value = "") => {
+  const trimmed = value.trim();
+  if (!trimmed || !trimmed.includes("@")) {
+    return trimmed;
+  }
+
+  const [localPart, ...domainParts] = trimmed.split("@");
+  const domain = domainParts.join("@");
+  if (!domain) {
+    return trimmed;
+  }
+
+  const safeLocal =
+    localPart.length <= 2
+      ? `${localPart.charAt(0) || ""}***`
+      : `${localPart.charAt(0)}${"*".repeat(Math.max(1, localPart.length - 2))}${
+          localPart.slice(-1) || ""
+        }`;
+
+  const segments = domain.split(".");
+  if (segments.length < 2) {
+    return `${safeLocal}@${domain.charAt(0) || ""}***`;
+  }
+
+  const tld = segments.pop();
+  const domainBody = segments.join(".");
+  const maskedDomain =
+    domainBody.length <= 2
+      ? `${domainBody.charAt(0) || ""}***`
+      : `${domainBody.charAt(0)}${"*".repeat(Math.max(1, domainBody.length - 2))}${
+          domainBody.slice(-1) || ""
+        }`;
+
+  return `${safeLocal}@${maskedDomain}.${tld}`;
+};
+
+const normalizeCooldown = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 45;
+  }
+  return Math.max(15, Math.round(numeric));
+};
 
 const Login = () => {
+  const {
+    enableSelfSignup = false,
+    supportEmail = "admin@radmentor.app",
+    passwordResetCooldownSeconds = 45,
+  } = authConfig || {};
+  const resetWindowSeconds = normalizeCooldown(passwordResetCooldownSeconds);
+
+  const [mode, setMode] = useState("signin");
+  const isSignup = enableSelfSignup && mode === "signup";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
+  const [fullNameTouched, setFullNameTouched] = useState(false);
+
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
-
-  const [emailTouched, setEmailTouched] = useState(false);
-  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [resetCooldown, setResetCooldown] = useState(0);
+  const [lastResetEmail, setLastResetEmail] = useState("");
 
   const emailTrimmed = email.trim();
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed);
-  const isPasswordValid = password.length >= 6;
+  const isPasswordValid = password.length >= MIN_PASSWORD_LENGTH;
+  const isFullNameValid = fullName.trim().length >= 2;
+  const passwordsMatch = !isSignup || password === confirmPassword;
 
   const emailValidationMessage =
     emailTouched && !isEmailValid ? "Enter a valid email address." : "";
   const passwordValidationMessage =
     passwordTouched && !isPasswordValid
-      ? "Password must be at least 6 characters."
+      ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
       : "";
+  const fullNameValidationMessage =
+    isSignup && fullNameTouched && !isFullNameValid
+      ? "Please enter your full name."
+      : "";
+  const confirmValidationMessage =
+    isSignup && confirmTouched && !passwordsMatch
+      ? "Passwords do not match."
+      : "";
+
+  const maskedResetEmail = useMemo(
+    () => maskEmail(lastResetEmail || emailTrimmed),
+    [lastResetEmail, emailTrimmed],
+  );
+
+  useEffect(() => {
+    if (!enableSelfSignup && mode !== "signin") {
+      setMode("signin");
+    }
+  }, [enableSelfSignup, mode]);
 
   useEffect(() => {
     if (emailTouched && isEmailValid) {
-      setError((prev) => (prev && prev.toLowerCase().includes("email") ? "" : prev));
+      setError((prev) =>
+        prev && prev.toLowerCase().includes("email") ? "" : prev,
+      );
     }
   }, [emailTouched, isEmailValid]);
+
+  useEffect(() => {
+    if (!resetCooldown) {
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      setResetCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [resetCooldown]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setStatus("");
     setResetSent(false);
+
     setEmailTouched(true);
     setPasswordTouched(true);
+    if (isSignup) {
+      setFullNameTouched(true);
+      setConfirmTouched(true);
+    }
 
-    if (!isEmailValid || !isPasswordValid) {
+    const basicInvalid = !isEmailValid || !isPasswordValid;
+    const signupInvalid =
+      isSignup && (!isFullNameValid || !passwordsMatch);
+    if (basicInvalid || signupInvalid) {
       setError("Please fix the highlighted fields before continuing.");
       return;
     }
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, emailTrimmed, password);
-      setStatus("Welcome back! Redirecting...");
+      if (!isSignup) {
+        await signInWithEmailAndPassword(auth, emailTrimmed, password);
+        setStatus("Welcome back! Redirecting...");
+        return;
+      }
+
+      const credential = await createUserWithEmailAndPassword(
+        auth,
+        emailTrimmed,
+        password,
+      );
+
+      if (credential?.user && fullName.trim()) {
+        try {
+          await updateProfile(credential.user, {
+            displayName: fullName.trim(),
+          });
+        } catch (profileError) {
+          console.warn("Unable to update profile name:", profileError);
+        }
+      }
+
+      setStatus("Account created! You're all set.");
     } catch (err) {
-      switch (err.code) {
+      switch (err?.code) {
         case "auth/user-not-found":
           setError("No account found with that email.");
           break;
@@ -63,11 +191,21 @@ const Login = () => {
         case "auth/invalid-email":
           setError("Please enter a valid email address.");
           break;
+        case "auth/invalid-credential":
+        case "auth/invalid-login-credentials":
+          setError("That email and password combination is not recognised.");
+          break;
+        case "auth/email-already-in-use":
+          setError("An account with this email already exists.");
+          break;
         case "auth/too-many-requests":
           setError("Too many attempts. Please wait a moment and try again.");
           break;
+        case "auth/network-request-failed":
+          setError("We couldn't reach Rad Mentor. Check your connection and try again.");
+          break;
         default:
-          setError("Unable to sign in right now. Please try again.");
+          setError(err?.message || "Unable to sign in right now. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -79,6 +217,11 @@ const Login = () => {
     setStatus("");
     setResetSent(false);
 
+    if (resetCooldown > 0) {
+      setError(`Please wait ${resetCooldown} seconds before requesting another reset email.`);
+      return;
+    }
+
     if (!emailTrimmed) {
       setError("Enter your email above to receive a reset link.");
       return;
@@ -86,25 +229,48 @@ const Login = () => {
 
     try {
       await sendPasswordResetEmail(auth, emailTrimmed);
+      setLastResetEmail(emailTrimmed);
       setResetSent(true);
-      setStatus("Password reset email sent. Check your inbox.");
+      setStatus(`Password reset email sent to ${maskEmail(emailTrimmed)}. Check your inbox (and spam).`);
+      setResetCooldown(resetWindowSeconds);
     } catch (err) {
-      switch (err.code) {
+      switch (err?.code) {
         case "auth/user-not-found":
           setError("We couldn't find an account with that email.");
           break;
         case "auth/invalid-email":
           setError("Please enter a valid email address.");
           break;
+        case "auth/too-many-requests":
+          setError("You've requested too many reset emails. Please try again later.");
+          setResetCooldown(Math.max(resetWindowSeconds, 60));
+          break;
+        case "auth/network-request-failed":
+          setError("We couldn't reach Rad Mentor. Check your connection and try again.");
+          break;
         default:
-          setError("Unable to send reset email right now. Please try again.");
+          setError(err?.message || "Unable to send reset email right now. Please try again.");
       }
     }
+  };
+
+  const handleModeToggle = () => {
+    if (!enableSelfSignup) {
+      return;
+    }
+    setMode((prev) => (prev === "signup" ? "signin" : "signup"));
+    setError("");
+    setStatus("");
+    setResetSent(false);
+    setFullNameTouched(false);
+    setConfirmTouched(false);
   };
 
   const handleCapsLockChange = (event) => {
     setCapsLockOn(event.getModifierState("CapsLock"));
   };
+
+  const supportLink = supportEmail ? `mailto:${supportEmail}` : "";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100">
@@ -134,10 +300,12 @@ const Login = () => {
               <div className="text-center lg:hidden">
                 <img className="mx-auto h-12 w-12" src={appLogo} alt="Rad Mentor logo" />
                 <h1 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
-                  Welcome back
+                  {isSignup ? "Create your account" : "Welcome back"}
                 </h1>
                 <p className="mt-2 text-sm text-gray-600">
-                  Sign in with your Rad Mentor credentials.
+                  {isSignup
+                    ? "Use your work email to get started. You'll be signed in automatically once setup is complete."
+                    : "Sign in with your Rad Mentor credentials."}
                 </p>
               </div>
 
@@ -154,6 +322,31 @@ const Login = () => {
 
               <form className="space-y-6" onSubmit={handleSubmit} noValidate>
                 <div className="space-y-5">
+                  {isSignup && (
+                    <div>
+                      <label htmlFor="full-name" className="block text-sm font-medium text-gray-700">
+                        Full name
+                      </label>
+                      <input
+                        id="full-name"
+                        name="full-name"
+                        type="text"
+                        autoComplete="name"
+                        required
+                        className={`mt-1 block w-full rounded-xl border px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${
+                          fullNameValidationMessage ? "border-red-300" : "border-gray-300"
+                        }`}
+                        placeholder="Dr. Maya Rao"
+                        value={fullName}
+                        onChange={(event) => setFullName(event.target.value)}
+                        onBlur={() => setFullNameTouched(true)}
+                      />
+                      {fullNameValidationMessage && (
+                        <p className="mt-1 text-xs text-red-600">{fullNameValidationMessage}</p>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                       Email address
@@ -185,12 +378,16 @@ const Login = () => {
                       id="password"
                       name="password"
                       type="password"
-                      autoComplete="current-password"
+                      autoComplete={isSignup ? "new-password" : "current-password"}
                       required
                       className={`mt-1 block w-full rounded-xl border px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${
                         passwordValidationMessage ? "border-red-300" : "border-gray-300"
                       }`}
-                      placeholder="••••••••"
+                      placeholder={
+                        isSignup
+                          ? `Create a password (min. ${MIN_PASSWORD_LENGTH} characters)`
+                          : "Enter your password"
+                      }
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       onBlur={() => setPasswordTouched(true)}
@@ -204,17 +401,52 @@ const Login = () => {
                       <p className="mt-1 text-xs font-semibold text-amber-600">Caps Lock is on.</p>
                     )}
                   </div>
+
+                  {isSignup && (
+                    <div>
+                      <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
+                        Confirm password
+                      </label>
+                      <input
+                        id="confirm-password"
+                        name="confirm-password"
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        className={`mt-1 block w-full rounded-xl border px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${
+                          confirmValidationMessage ? "border-red-300" : "border-gray-300"
+                        }`}
+                        placeholder="Re-enter your password"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        onBlur={() => setConfirmTouched(true)}
+                      />
+                      {confirmValidationMessage && (
+                        <p className="mt-1 text-xs text-red-600">{confirmValidationMessage}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
                   <button
                     type="button"
-                    className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                    className="text-sm font-medium text-blue-600 hover:text-blue-500 disabled:text-blue-300"
                     onClick={handleResetPassword}
+                    disabled={loading || resetCooldown > 0}
                   >
                     Forgot password?
                   </button>
-                  {resetSent && <span className="text-xs text-gray-500">Reset email sent.</span>}
+                  {resetSent && (
+                    <span className="text-xs text-gray-500">
+                      Reset link sent to {maskedResetEmail}.
+                    </span>
+                  )}
+                  {!resetSent && resetCooldown > 0 && (
+                    <span className="text-xs text-gray-400">
+                      You can request another link in {resetCooldown}s.
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -223,8 +455,27 @@ const Login = () => {
                     className="flex w-full justify-center rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-400"
                     disabled={loading}
                   >
-                    {loading ? "Signing in..." : "Sign in"}
+                    {loading
+                      ? isSignup
+                        ? "Creating account..."
+                        : "Signing in..."
+                      : isSignup
+                        ? "Create account"
+                        : "Sign in"}
                   </button>
+
+                  {enableSelfSignup && (
+                    <p className="text-center text-xs text-gray-500">
+                      {isSignup ? "Already have an account?" : "Need an account?"}{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-blue-600 transition hover:text-blue-500"
+                        onClick={handleModeToggle}
+                      >
+                        {isSignup ? "Sign in instead" : "Request access"}
+                      </button>
+                    </p>
+                  )}
 
                   <div className="flex items-center gap-3">
                     <span className="flex-1 border-t border-gray-200" />
@@ -240,7 +491,9 @@ const Login = () => {
                       className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"
                       disabled
                     >
-                      <span role="img" aria-label="Google">🔒</span>
+                      <span role="img" aria-label="Google">
+                        dY"'
+                      </span>
                       Google
                     </button>
                     <button
@@ -248,14 +501,44 @@ const Login = () => {
                       className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2 text-sm font-medium text-gray-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"
                       disabled
                     >
-                      <span role="img" aria-label="GitHub">🔒</span>
+                      <span role="img" aria-label="GitHub">
+                        dY"'
+                      </span>
                       GitHub
                     </button>
                   </div>
                 </div>
 
                 <p className="text-center text-xs text-gray-400">
-                  Need access? Contact the administrator to create your account.
+                  {enableSelfSignup ? (
+                    supportEmail ? (
+                      <>
+                        Questions? Reach us at{" "}
+                        <a
+                          href={supportLink}
+                          className="font-medium text-blue-600 hover:text-blue-500"
+                        >
+                          {supportEmail}
+                        </a>
+                        .
+                      </>
+                    ) : (
+                      "Questions? Reach out to your Rad Mentor admin."
+                    )
+                  ) : supportEmail ? (
+                    <>
+                      Access is invite only. Email{" "}
+                      <a
+                        href={supportLink}
+                        className="font-medium text-blue-600 hover:text-blue-500"
+                      >
+                        {supportEmail}
+                      </a>{" "}
+                      to request an account.
+                    </>
+                  ) : (
+                    "Access is invite only. Contact your Rad Mentor administrator to join."
+                  )}
                 </p>
               </form>
             </div>
