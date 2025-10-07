@@ -1,7 +1,7 @@
 import express from "express";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-import { getGenAI } from "../helpers.js";
+import { getGenAI, runWithRetry } from "../helpers.js";
 
 const router = express.Router();
 
@@ -58,7 +58,8 @@ const socraticTeachPrompt = (title, body) => {
     - Preserve the original meaning closely (do not over-rephrase).  
     - Focus on making it easy to understand and engaging.  
     - Use Markdown for structure (titles, bullet points, emphasis).  
-    - End with EXACTLY ONE open-ended Socratic question to invite reflection. 
+    - End with EXACTLY ONE open-ended Socratic question that requires the learner to apply a specific fact, term, or detail you just taught. 
+    - The question must reference at least one concrete concept from your explanation (avoid generic “what do you think?” prompts). 
     Do not add external knowledge.\n\nTEXT TO REPHRASE:\n---\n<title>: ${title}\n<body_md>: """${body}"""\n---`;
 };
 
@@ -73,7 +74,8 @@ const socraticEvaluationPrompt = (lessonText, userAnswer) => {
   3. Your response MUST end with a clear transition to the next step, like "Now, let's move on to a quick checkpoint."
   4. CRITICAL RULE: Do NOT ask another question in your response.
   5. CRITICAL RULE: Do NOT say "The lesson highlights" or refer to the source material. Present the knowledge as your own.
-  
+  6. CRITICAL RULE: Never say "the lesson states" or any phrasing that references notes; speak as if you hold the knowledge directly.
+
   Your response should be a single, concise paragraph.`;
 };
 
@@ -151,7 +153,7 @@ router.post("/", express.json(), async (req, res) => {
                       { apiVersion: "v1" }
                     );
                     const gradingPrompt = `You are an expert radiology proctor. CONTEXT: - Question: "${checkpointData.question_md}" - Key Concepts: "${checkpointData.rationale_md}" - Student's Answer: "${userInput}" TASK: 1. Evaluate the student's answer. 2. Determine a 'verdict': "correct", "partially_correct", or "incorrect". 3. Write a concise 'feedback' message. If 'partially_correct', praise the correct parts and explain what was missing. 4. **IMPORTANT**: Do NOT use "Key Concepts". Your response MUST be a valid JSON object: { "verdict": "...", "feedback": "..." }`;
-                    const result = await model.generateContent(gradingPrompt);
+                    const result = await runWithRetry(() => model.generateContent(gradingPrompt));
                     const gradingResponse = JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
                     isCorrect = gradingResponse.verdict === 'correct' || gradingResponse.verdict === 'partially_correct';
                     feedbackMessage = gradingResponse.feedback;
@@ -209,7 +211,7 @@ router.post("/", express.json(), async (req, res) => {
               { apiVersion: "v1" }
             );
             const prompt = socraticTeachPrompt(sectionData.title, sectionData.body_md);
-            const result = await model.generateContent(prompt);
+            const result = await runWithRetry(() => model.generateContent(prompt));
             let message = result.response.text();
             if (!message.trim().endsWith('?')) {
                 message = `${sectionData.body_md}\n\n**Based on this, what are your thoughts?**`;
@@ -231,7 +233,7 @@ router.post("/", express.json(), async (req, res) => {
                 { apiVersion: "v1" }
               );
               const prompt = socraticEvaluationPrompt(sectionData.body_md, userInput);
-              const result = await model.generateContent(prompt);
+              const result = await runWithRetry(() => model.generateContent(prompt));
               uiResponse = { type: 'TRANSITION_CARD', title: "Let's review your thoughts", message: result.response.text() };
           }
           break;
@@ -335,6 +337,9 @@ router.post("/", express.json(), async (req, res) => {
 
   } catch (error) {
     console.error(`Error in /tutor/step for user ${userId}:`, error);
+    if (error?.status === 503 || error?.status === 429) {
+      return res.status(503).json({ ui: { type: 'ERROR', message: 'Tutor is busy right now. Please try again in a few seconds.' }});
+    }
     res.status(500).json({ ui: { type: 'ERROR', message: 'A critical server error occurred.' }});
   }
 });

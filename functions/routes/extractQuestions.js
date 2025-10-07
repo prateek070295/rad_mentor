@@ -1,4 +1,4 @@
-import { getGenAI } from "../helpers.js";
+import { getGenAI, runWithRetry } from "../helpers.js";
 import express from "express";
 import Busboy from "busboy";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -53,10 +53,6 @@ router.post("/", (req, res) => {
       const genAI = getGenAI();
       if (!genAI) return res.status(500).json({ step: "ai-init", error: "GEMINI_API_KEY not configured" });
       
-      const generationConfig = {
-        response_mime_type: "application/json",
-        temperature: 0.2,
-      };
       const model = genAI.getGenerativeModel(
         { model: "models/gemini-2.0-flash-lite-001" },
         { apiVersion: "v1" }
@@ -88,7 +84,7 @@ router.post("/", (req, res) => {
         Text to Parse:
         ${rawText}`.trim();
 
-      const exResult = await model.generateContent(extractionPrompt);
+      const exResult = await runWithRetry(() => model.generateContent(extractionPrompt));
       const extractedQuestions = JSON.parse(exResult.response.text());
 
       if (!Array.isArray(extractedQuestions) || extractedQuestions.length === 0) {
@@ -103,7 +99,7 @@ router.post("/", (req, res) => {
         [{ "questionNumber": number, "questionText": string, "marks": number, "marksDistribution": string, "topic": string }]
         Questions:\n${JSON.stringify(extractedQuestions)}`.trim();
 
-      const tgResult = await model.generateContent(taggingPrompt);
+      const tgResult = await runWithRetry(() => model.generateContent(taggingPrompt));
       const finalQuestions = JSON.parse(tgResult.response.text());
 
       if (!Array.isArray(finalQuestions) || finalQuestions.length === 0) {
@@ -123,6 +119,9 @@ router.post("/", (req, res) => {
       return res.status(200).json(stamped);
     } catch (e) {
       console.error("Error during processing:", e);
+      if (e?.status === 503 || e?.status === 429) {
+        return res.status(503).json({ step: "ai", error: "Our AI tutor is busy. Please try again in a few seconds." });
+      }
       return res.status(500).json({ step: "server", error: String(e?.message || e) });
     }
   });

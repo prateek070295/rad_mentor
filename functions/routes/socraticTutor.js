@@ -1,4 +1,4 @@
-import { getGenAI, convertDeltaToText } from "../helpers.js";
+import { getGenAI, convertDeltaToText, runWithRetry } from "../helpers.js";
 import express from "express";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -75,7 +75,7 @@ ${plainTextContext}
       ],
     });
 
-    const result = await chat.sendMessage(lastUserMessage.parts[0].text);
+    const result = await runWithRetry(() => chat.sendMessage(lastUserMessage.parts[0].text));
     const response = await result.response;
     let text = response.text();
 
@@ -88,6 +88,9 @@ ${plainTextContext}
     res.json({ reply: text, isComplete });
   } catch (error) {
     console.error("Error in /chat endpoint:", error);
+    if (error?.status === 503 || error?.status === 429) {
+      return res.status(503).json({ error: "Our AI tutor is busy. Please try again in a few seconds." });
+    }
     res.status(500).json({ error: "Something went wrong on the server." });
   }
 });

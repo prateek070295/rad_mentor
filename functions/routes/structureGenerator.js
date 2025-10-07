@@ -1,7 +1,7 @@
 // file: functions/routes/structureGenerator.js
 
 import express from "express";
-import { getGenAI } from "../helpers.js";
+import { getGenAI, runWithRetry } from "../helpers.js";
 import { validateStructure } from "../validators/contentSchema.js";
 
 const router = express.Router();
@@ -51,7 +51,7 @@ router.post("/", express.json(), async (req, res) => {
       { apiVersion: "v1" }
     );
 
-    const result = await model.generateContent(fullPrompt);
+    const result = await runWithRetry(() => model.generateContent(fullPrompt));
     const response = await result.response;
     const structuredContent = JSON.parse(response.text());
 
@@ -68,6 +68,9 @@ router.post("/", express.json(), async (req, res) => {
 
   } catch (error) {
     console.error("Error in /api/structure endpoint:", error);
+    if (error?.status === 503 || error?.status === 429) {
+      return res.status(503).json({ error: "Our AI tutor is busy. Please try again in a few seconds." });
+    }
     res.status(500).json({ error: "An unexpected error occurred." });
   }
 });
