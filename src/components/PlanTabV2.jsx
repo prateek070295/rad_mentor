@@ -9,6 +9,8 @@ import { useUnsavedChanges } from "../context/UnsavedChangesContext";
 // Services
 import {
   loadPlanMeta,
+  loadMasterPlanMeta,
+  loadSyllabusTotals,
   savePlanMeta,
   loadOrInitWeek,
   patchWeek,
@@ -109,6 +111,7 @@ export default function PlanTabV2() {
   const [refreshSignal, setRefreshSignal] = useState(0); // bump to refetch children
   const [queueSummaryRows, setQueueSummaryRows] = useState([]);
   const [queueSummaryLoading, setQueueSummaryLoading] = useState(false);
+  const [masterTotals, setMasterTotals] = useState(null);
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -191,7 +194,7 @@ export default function PlanTabV2() {
         const m = await loadPlanMeta(uid);
         if (!active) return;
         setMeta(m || {});
-        setShowWizard(!m?.hasCompletedSetup);
+        setShowWizard((prev) => prev || !m?.hasCompletedSetup);
       } finally {
         active && setMetaLoading(false);
       }
@@ -200,6 +203,59 @@ export default function PlanTabV2() {
       active = false;
     };
   }, [uid, refreshSignal]);
+
+  useEffect(() => {
+    let active = true;
+    if (!uid) {
+      setMasterTotals(null);
+      return () => {
+        active = false;
+      };
+    }
+    (async () => {
+      try {
+        let totals = null;
+        try {
+          const metaDoc = await loadMasterPlanMeta(uid);
+          totals = metaDoc?.totals || null;
+        } catch (_err) {
+          totals = null;
+        }
+
+        if (!totals || !Number(totals.minutes)) {
+          try {
+            const fallback = await loadSyllabusTotals();
+            totals = fallback
+              ? {
+                  minutes: Number(fallback.minutes || 0),
+                  topics: Number(fallback.chapters || 0),
+                }
+              : null;
+          } catch (_err) {
+            totals = null;
+          }
+        }
+
+        if (!active) return;
+        if (totals && Number(totals.minutes) > 0) {
+          setMasterTotals({
+            minutes: Number(totals.minutes || 0),
+            topics: Number(totals.topics || 0),
+          });
+        } else {
+          setMasterTotals(null);
+        }
+      } catch (err) {
+        console.error("Failed to load syllabus totals", err);
+        if (active) {
+          setMasterTotals(null);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [uid, meta?.updatedAt, refreshSignal]);
 
   // choose "This Week" key from today
   useEffect(() => {
@@ -326,47 +382,111 @@ export default function PlanTabV2() {
     );
   }, [uid, refreshAll, runWithPending]);
 
-  const handleSaveWizard = async (form, setBusyText, sectionOrder) => {
-    if (!uid) return;
-    await runWithPending(
+  const handleSaveWizard = async (payload, reportStage) => {
+    if (!uid) return null;
+
+    const normalizeList = (list) =>
+      Array.from(
+        new Set(
+          (Array.isArray(list) ? list : [])
+            .map((value) => (value == null ? "" : String(value).trim()))
+            .filter((value) => value.length > 0),
+        ),
+      );
+
+    return await runWithPending(
       async () => {
+        const form = payload?.form ?? {};
+        const sectionOrder = normalizeList(payload?.sectionOrder);
+        const disabledSections = normalizeList(payload?.disabledSections);
+        const onlyMustChapters = !!payload?.onlyMustChapters;
+        const stageReporter =
+          typeof reportStage === "function" ? reportStage : () => {};
+        const enabledSections = normalizeList(
+          payload?.enabledSections && payload.enabledSections.length
+            ? payload.enabledSections
+            : sectionOrder.filter(
+                (value) => !disabledSections.includes(value),
+              ),
+        );
+        const recommendedDailyValue = Number(payload?.recommendedDaily || 0);
+        const recommendedDaily =
+          Number.isFinite(recommendedDailyValue) && recommendedDailyValue > 0
+            ? recommendedDailyValue
+            : null;
+
         try {
-          setBusyText?.("Saving plan...");
+          stageReporter("prepare", "Saving plan settings...");
+
+          const startDateRaw = form.startDate ? String(form.startDate) : "";
+          const examDateRaw = form.examDate ? String(form.examDate) : "";
+          const startDateKey = startDateRaw ? toISO(startDateRaw) : "";
+          const examDateKey = examDateRaw ? toISO(examDateRaw) : "";
+          const currentIso = startDateKey || toISO(new Date());
+          const dailyMinutes = Math.max(
+            0,
+            Number(form.dailyMinutes ?? defaultDailyMinutes) || 0,
+          );
+
           await savePlanMeta(uid, {
-            startDate: form.startDate,
-            examDate: form.examDate || "",
-            dailyMinutes: Number(form.dailyMinutes || 0),
+            startDate: startDateRaw,
+            examDate: examDateRaw,
+            dailyMinutes,
             hasCompletedSetup: true,
-            sectionOrder: Array.isArray(sectionOrder) ? sectionOrder : [],
-            currentDayISO: form.startDate
-              ? toISO(form.startDate)
-              : toISO(new Date()),
+            sectionOrder,
+            disabledSections,
+            strategy: form.strategy,
+            recommendedDaily,
+            onlyMustChapters,
+            currentDayISO: currentIso,
             updatedAt: new Date().toISOString(),
           });
 
-          setBusyText?.("Building Master Plan...");
+          setMeta((prev) => ({
+            ...(prev || {}),
+            startDate: startDateKey,
+            examDate: examDateKey,
+            dailyMinutes,
+            hasCompletedSetup: true,
+            sectionOrder,
+            disabledSections,
+            strategy: form.strategy,
+            recommendedDaily,
+            onlyMustChapters,
+            currentDayISO: currentIso,
+          }));
+
+          stageReporter("master", "Generating Master Plan...");
           await buildAndSaveMasterPlan(uid, {
-            sectionPrefs: Array.isArray(sectionOrder) ? sectionOrder : [],
+            sectionPrefs: enabledSections,
+            disabledSections,
+            onlyMustChapters,
             forceRebuild: true,
           });
 
-          setBusyText?.("Preparing This Week...");
+          stageReporter("week", "Building weekly blocks...");
           const wk = weekKeyFromDate
             ? weekKeyFromDate(new Date())
             : toISO(startOfWeekSun(new Date()));
           setWeekKey(wk);
-          const wizardDaily = Math.max(
-            0,
-            Number(form.dailyMinutes || defaultDailyMinutes),
-          );
-          await loadOrInitWeek(uid, wk, wizardDaily);
+          const wizardDaily = Math.max(0, dailyMinutes);
+          const nextWeekDoc = await loadOrInitWeek(uid, wk, wizardDaily);
+          setWeekDoc(nextWeekDoc);
 
-          setBusyText?.("Refreshing...");
-          setShowWizard(false);
           refreshAll();
+
+          stageReporter("done", "Plan ready!");
+          return {
+            startDate: startDateRaw || startDateKey,
+            examDate: examDateRaw || "",
+            dailyMinutes,
+            strategy: form.strategy,
+            enabledSections,
+            recommendedDaily,
+            onlyMustChapters,
+          };
         } catch (e) {
           console.error(e);
-          setBusyText?.(e?.message || "Failed to save plan");
           throw e;
         }
       },
@@ -770,13 +890,20 @@ export default function PlanTabV2() {
 
       {showWizard && (
         <PlanSetupWizardV2
+          planMeta={meta}
           initial={{
             startDate: meta?.startDate || "",
             examDate: meta?.examDate || "",
             dailyMinutes:
               meta?.dailyMinutes != null
-                ? Number(meta.dailyMinutes)
-                : Number(flags?.dailyCapacityMinsDefault ?? 90),
+                ? String(meta.dailyMinutes)
+                : "",
+            strategy: meta?.strategy || undefined,
+            disabledSections: meta?.disabledSections || [],
+            sectionOrder: meta?.sectionOrder || [],
+            recommendedDaily: meta?.recommendedDaily ?? undefined,
+            onlyMustChapters: !!meta?.onlyMustChapters,
+            totalMinutes: Number(masterTotals?.minutes || planOverviewStats?.minutesTotal || 0),
           }}
           defaultDaily={Number(flags?.dailyCapacityMinsDefault ?? 90)}
           onCancel={() => setShowWizard(false)}

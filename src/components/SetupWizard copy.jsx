@@ -129,7 +129,18 @@ const SetupWizard = ({ organSystems, onFinish, onSkip }) => {
                     <div key={system.id} className="py-2 border-b">
                         <div className="flex items-center justify-between">
                             <span className="text-gray-800 text-base">{system.name}</span>
-                            <div className="flex space-x-1">{[1, 2, 3, 4, 5].map(star => (<button key={star} className={`text-xl ${star <= confidenceRatings[system.name] ? 'text-yellow-400' : 'text-gray-300'}`} onClick={() => handleRatingChange(system.name, star)}>★</button>))}</div>
+                            <div className="flex space-x-1">
+                                {[1, 2, 3, 4, 5].map(star => (
+                                    <button
+                                        key={star}
+                                        type="button"
+                                        className={`text-xl ${star <= confidenceRatings[system.name] ? 'text-yellow-400' : 'text-gray-300'}`}
+                                        onClick={() => handleRatingChange(system.name, star)}
+                                    >
+                                        {'\u2605'}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
                             (Min: {Math.ceil(system.mustKnowCount / maxChaptersPerDay)}, Ideal: {system.defaultDays} days)
@@ -142,7 +153,7 @@ const SetupWizard = ({ organSystems, onFinish, onSkip }) => {
             )}
             {setupStep === 3 && (
               <div className="flex-grow flex flex-col items-center justify-center text-center">
-                <p className="text-lg text-gray-700 mb-4">Generating your personalized plan... ✨</p>
+                <p className="text-lg text-gray-700 mb-4">Generating your personalized plan...</p>
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
               </div>
             )}

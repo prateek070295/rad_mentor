@@ -181,7 +181,19 @@ function resolveChapterMeta(
 
 export async function buildAndSaveMasterPlan(uid, opts = {}) {
   if (!uid) throw new Error("buildAndSaveMasterPlan: missing uid");
-  const { sectionPrefs = [], forceRebuild = true } = opts;
+  const {
+    sectionPrefs = [],
+    forceRebuild = true,
+    disabledSections = [],
+    onlyMustChapters = false,
+  } = opts;
+  const disabledSet = new Set(
+    (Array.isArray(disabledSections) ? disabledSections : [])
+      .map((value) => normalizeSection(value))
+      .filter(Boolean),
+  );
+  const isSectionDisabled = (section) =>
+    disabledSet.has(normalizeSection(section));
 
   // 1) Load study items
   const { chapters, topics, subtopics } = await loadStudyItems();
@@ -228,7 +240,7 @@ export async function buildAndSaveMasterPlan(uid, opts = {}) {
 
   // 3) Compose topic rows with chapter meta and derived sort keys
   //    Also compute normalized categories for interleaving.
-  const rowsRaw = topics.map((t) => {
+  let rowsRaw = topics.map((t) => {
     const section = normalizeSection(t.section);
     const chFromPath = Array.isArray(t.path) ? String(t.path[1] || "") : "";
     const ch = resolveChapterMeta(
@@ -305,14 +317,26 @@ export async function buildAndSaveMasterPlan(uid, opts = {}) {
     };
   });
 
+  const restrictToMust = !!onlyMustChapters;
+  if (restrictToMust) {
+    rowsRaw = rowsRaw.filter((row) => row.bandCategory === "must");
+  }
+
   // 4) Interleaving build:
   //    category bands in order, within each band iterate sections in wizard order,
   //    within (category, section) group by chapter (respecting chapter rank) and then order topics.
   const allSections = Array.from(new Set(rowsRaw.map((r) => r.section))).sort(
     (a, b) => a.localeCompare(b),
   );
-  const sectionsOrdered = buildSectionOrder(allSections, sectionPrefs);
-  const catOrder = ["must", "good", "nice", "other"];
+  let sectionsOrdered = buildSectionOrder(allSections, sectionPrefs);
+  if (disabledSet.size) {
+    sectionsOrdered = sectionsOrdered.filter(
+      (section) => !isSectionDisabled(section),
+    );
+  }
+  const catOrder = restrictToMust
+    ? ["must"]
+    : ["must", "good", "nice", "other"];
   const catRank = (cat) => {
     const idx = catOrder.indexOf(cat);
     return idx >= 0 ? idx : catOrder.length;
@@ -358,6 +382,7 @@ export async function buildAndSaveMasterPlan(uid, opts = {}) {
     const seenSections = new Set();
 
     for (const sec of sectionsOrdered) {
+      if (isSectionDisabled(sec)) continue;
       const chapterMap = secMap.get(sec);
       if (!chapterMap) continue;
       seenSections.add(sec);
@@ -390,6 +415,7 @@ export async function buildAndSaveMasterPlan(uid, opts = {}) {
     }
 
     for (const [sec, chapterMap] of secMap.entries()) {
+      if (isSectionDisabled(sec)) continue;
       if (seenSections.has(sec)) continue;
 
       const chapters = Array.from(chapterMap.values()).sort((a, b) => {
@@ -528,7 +554,9 @@ export async function buildAndSaveMasterPlan(uid, opts = {}) {
     console.log(
       `[masterPlanBuilder] Built ${rows.length} topics, ${totalMinutes} minutes; sections=${JSON.stringify(
         sectionsOrdered,
-      )}.`,
+      )}; disabled=${JSON.stringify(Array.from(disabledSet))}; scope=${
+        restrictToMust ? "must-only" : "full"
+      }.`,
     );
   }
 
@@ -537,21 +565,31 @@ export async function buildAndSaveMasterPlan(uid, opts = {}) {
 
 /* ------------------------------ Convenience APIs ---------------------------- */
 
-export async function ensureMasterPlan(uid, { sectionPrefs = [] } = {}) {
+export async function ensureMasterPlan(
+  uid,
+  { sectionPrefs = [], disabledSections = [], onlyMustChapters = false } = {},
+) {
   if (!uid) throw new Error("ensureMasterPlan: missing uid");
   const mqColRef = collection(db, "plans", uid, "masterQueue");
   const snap = await getDocs(query(mqColRef, orderBy("seq", "asc")));
   if (!snap.empty) return { built: false };
   const res = await buildAndSaveMasterPlan(uid, {
     sectionPrefs,
+    disabledSections,
+    onlyMustChapters,
     forceRebuild: false,
   });
   return { built: true, ...res };
 }
 
-export async function forceRebuildMasterPlan(uid, { sectionPrefs = [] } = {}) {
+export async function forceRebuildMasterPlan(
+  uid,
+  { sectionPrefs = [], disabledSections = [], onlyMustChapters = false } = {},
+) {
   return await buildAndSaveMasterPlan(uid, {
     sectionPrefs,
+    disabledSections,
+    onlyMustChapters,
     forceRebuild: true,
   });
 }

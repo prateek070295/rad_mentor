@@ -368,6 +368,26 @@ export async function loadPlanMeta(uid) {
   return snap.exists() ? snap.data() || null : null;
 }
 
+export async function loadMasterPlanMeta(uid) {
+  if (!uid) throw new Error("loadMasterPlanMeta: missing uid");
+  const ref = doc(db, "plans", uid, "master", "meta");
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data() || null : null;
+}
+
+export async function loadSyllabusTotals() {
+  const q = query(collection(db, "study_items"), where("level", "==", "chapter"));
+  const snap = await getDocs(q);
+  let minutes = 0;
+  let chapters = 0;
+  snap.forEach((docSnap) => {
+    const data = docSnap.data() || {};
+    minutes += NUM(data.estimatedMinutes, 0);
+    chapters += 1;
+  });
+  return { minutes, chapters };
+}
+
 export async function savePlanMeta(uid, payload = {}) {
   if (!uid) throw new Error("savePlanMeta: missing uid");
   const ref = doc(db, "plans", uid);
@@ -403,6 +423,33 @@ export async function savePlanMeta(uid, payload = {}) {
     Array.isArray(payload.sectionOrder)
   ) {
     data.sectionOrder = payload.sectionOrder;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(payload, "disabledSections") &&
+    Array.isArray(payload.disabledSections)
+  ) {
+    const cleaned = Array.from(
+      new Set(
+        payload.disabledSections
+          .map((value) => (value == null ? "" : String(value).trim()))
+          .filter((value) => value.length > 0),
+      ),
+    );
+    data.disabledSections = cleaned;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "strategy")) {
+    data.strategy = payload.strategy ? String(payload.strategy) : "";
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "recommendedDaily")) {
+    const rec = NUM(payload.recommendedDaily, 0);
+    data.recommendedDaily = rec > 0 ? rec : 0;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "onlyMustChapters")) {
+    data.onlyMustChapters = !!payload.onlyMustChapters;
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "hasCompletedSetup")) {

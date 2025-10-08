@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Modal = ({ isOpen, onClose, children }) => {
+const Modal = ({ isOpen, onClose, children, title = "Modal" }) => {
   if (!isOpen) {
     return null;
   }
@@ -13,11 +13,11 @@ const Modal = ({ isOpen, onClose, children }) => {
     >
       {/* Modal Content */}
       <div
-        className="bg-white rounded-xl shadow-2xl z-50 w-11/12 max-w-4xl h-5/6 flex flex-col"
+        className="bg-white rounded-xl shadow-2xl z-50 w-full max-w-5xl max-h-[90vh] mx-4 flex flex-col"
         onClick={(e) => e.stopPropagation()} // Prevent clicks inside the modal from closing it
       >
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-bold">Reference Material</h2>
+          <h2 className="text-xl font-bold">{title}</h2>
           <button 
             onClick={onClose}
             className="text-2xl font-bold text-gray-500 hover:text-gray-800"
@@ -25,7 +25,7 @@ const Modal = ({ isOpen, onClose, children }) => {
             &times;
           </button>
         </div>
-        <div className="p-4 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-4">
           {children}
         </div>
       </div>
