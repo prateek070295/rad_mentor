@@ -1,9 +1,12 @@
 // src/firebase.js
 
 import { initializeApp } from "firebase/app";
-// ADDED: Import getFirestore and getAuth
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import {
+  browserSessionPersistence,
+  getAuth,
+  initializeAuth,
+} from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -19,10 +22,52 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// ADDED: Initialize Firestore and Auth, then export them
 export const db = getFirestore(app);
-export const auth = getAuth(app);
 
-if (window.location.hostname === "localhost") {
-  window.auth = auth;
+const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
+
+const clearPersistedAuthState = () => {
+  if (!isBrowser) return;
+  try {
+    const storage = window.localStorage;
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (!key) continue;
+      if (
+        key.startsWith("firebase:authUser:") ||
+        key.startsWith("firebase:refreshToken:")
+      ) {
+        storage.removeItem(key);
+      }
+    }
+  } catch (storageError) {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.warn("Unable to clear persisted Firebase auth state", storageError);
+    }
+  }
+};
+
+let authInstance;
+
+if (isBrowser) {
+  clearPersistedAuthState();
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: browserSessionPersistence,
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.warn("initializeAuth failed, falling back to default persistence", error);
+    }
+    authInstance = getAuth(app);
+  }
+  if (window.location.hostname === "localhost") {
+    window.auth = authInstance;
+  }
+} else {
+  authInstance = getAuth(app);
 }
+
+export const auth = authInstance;

@@ -78,9 +78,7 @@ export default function WeeklyBoard({
     return weekDates.length ? toISO(weekDates[0]) : "";
   });
   const [mode, setMode] = useState("week");
-  const [hidePastDays, setHidePastDays] = useState(
-    () => new Date().getDay() === 0,
-  );
+  const [hidePastDays, setHidePastDays] = useState(true);
   const [uiMsg, setUiMsg] = useState("");
   const [autoFillBusy, setAutoFillBusy] = useState(false);
   const autoFillTimerRef = useRef(null);

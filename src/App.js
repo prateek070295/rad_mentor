@@ -365,19 +365,6 @@ function AppShell() {
   }, [markClean]);
 
   useEffect(() => {
-    if (!authReady || !storageKey) {
-      return;
-    }
-    if (typeof window === "undefined") {
-      return;
-    }
-    const storedTab = window.localStorage.getItem(storageKey);
-    if (storedTab && (storedTab !== "admin" || isAdmin)) {
-      setActiveTab(storedTab);
-    }
-  }, [authReady, storageKey, isAdmin]);
-
-  useEffect(() => {
     if (!authReady) {
       return;
     }
