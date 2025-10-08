@@ -199,6 +199,7 @@ export default function PlanSetupWizardV2({
   );
   const startDateRef = useRef(null);
   const examDateRef = useRef(null);
+  const dailyMinutesRef = useRef(null);
   const lastExamDateRef = useRef(initial?.examDate || "");
 
   const planTotalMinutes = useMemo(() => {
@@ -342,6 +343,13 @@ export default function PlanSetupWizardV2({
         ...prev,
         dailyMinutes: cleaned,
       }));
+      if (typeof window !== "undefined" && typeof document !== "undefined") {
+        requestAnimationFrame(() => {
+          if (dailyMinutesRef.current && document.activeElement !== dailyMinutesRef.current) {
+            dailyMinutesRef.current.focus({ preventScroll: true });
+          }
+        });
+      }
       return;
     }
   setForm((prev) => ({
@@ -594,11 +602,12 @@ export default function PlanSetupWizardV2({
 
             <Field label="At a glance">
               <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
-                <span>{timelineMessage}</span>
-                {timelineDays != null && (
-                  <div className="mt-2 text-xs text-blue-700">
+                {timelineDays != null ? (
+                  <span>
                     Study window: {timelineDays} day{timelineDays === 1 ? "" : "s"}
-                  </div>
+                  </span>
+                ) : (
+                  <span>{timelineMessage}</span>
                 )}
               </div>
             </Field>
@@ -661,6 +670,7 @@ export default function PlanSetupWizardV2({
 
           <Field label="Time per day * (minutes)" error={showErrors ? errors.dailyMinutes : ""}>
             <input
+              ref={dailyMinutesRef}
               type="number"
               min={MIN_DAILY_MINUTES}
               max={MAX_DAILY_MINUTES}
@@ -682,7 +692,20 @@ export default function PlanSetupWizardV2({
                     : "border-blue-100 bg-blue-50 text-blue-800"
             }`}
           >
-            {timelineStats.message}
+            {studyWindowDays != null && timelineStats.status !== "error" ? (
+              <>
+                <div>
+                  Study window: {studyWindowDays} day{studyWindowDays === 1 ? "" : "s"}
+                </div>
+                {timelineStats.status !== "ok" ? (
+                  <div className="mt-2 text-xs">
+                    {timelineStats.message}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <span>{timelineStats.message}</span>
+            )}
           </div>
         </div>
       );
