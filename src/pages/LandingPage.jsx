@@ -67,22 +67,22 @@ const Problems = () => (
       <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">The DNB Theory Exam is a Challenge. Your Preparation Shouldn't Be Chaos.</h2>
       <div className="mt-10 grid md:grid-cols-3 gap-6">
         <div className="rounded-xl border bg-white p-6 shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M2.25 4.5c0-1.243 1.007-2.25 2.25-2.25h11.25A2.25 2.25 0 0 1 18 4.5v14.25A2.25 2.25 0 0 0 15.75 21H4.5A2.25 2.25 0 0 1 2.25 18.75V4.5z"/><path d="M18 6h1.5A2.25 2.25 0 0 1 21.75 8.25v12a.75.75 0 0 1-1.2.6L18 19.125V6z"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-2xl" role="img" aria-label="Books">
+            {"\u{1F4DA}"}
           </span>
           <div className="mt-3 text-lg font-semibold text-gray-900">Vast Syllabus</div>
           <p className="mt-1 text-gray-600 text-sm">Feeling overwhelmed trying to cover the vast DNB theory syllabus while managing intense clinical work?</p>
         </div>
         <div className="rounded-xl border bg-white p-6 shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6.75 3a.75.75 0 0 1 .75.75V5.25h9V3.75a.75.75 0 0 1 1.5 0V5.25h.75A2.25 2.25 0 0 1 21.75 7.5v10.5A2.25 2.25 0 0 1 19.5 20.25H4.5A2.25 2.25 0 0 1 2.25 18V7.5A2.25 2.25 0 0 1 4.5 5.25h.75V3.75a.75.75 0 0 1 1.5 0V5.25z"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 text-2xl" role="img" aria-label="Calendar">
+            {"\u{1F4C6}"}
           </span>
           <div className="mt-3 text-lg font-semibold text-gray-900">Unpredictable Schedule</div>
           <p className="mt-1 text-gray-600 text-sm">Struggling to follow a fixed schedule due to unpredictable duties, leaving massive backlogs before exam leave?</p>
         </div>
         <div className="rounded-xl border bg-white p-6 shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm10.5-4.5a.75.75 0 1 0-1.5 0v6a.75.75 0 1 0 1.5 0v-6zm0 9a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0z" clipRule="evenodd"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600 text-2xl" role="img" aria-label="Question mark">
+            {"\u{2753}"}
           </span>
           <div className="mt-3 text-lg font-semibold text-gray-900">Lack of Guidance</div>
           <p className="mt-1 text-gray-600 text-sm">Unsure if you're focusing on the right topics or how to track your progress against the entire syllabus?</p>
@@ -238,36 +238,45 @@ const HowItWorks = () => (
       <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">How It Works</h2>
       <div className="mt-8 grid gap-6 items-center grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
         <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M4.5 3.75A2.25 2.25 0 0 0 2.25 6v12A2.25 2.25 0 0 0 4.5 20.25h9A2.25 2.25 0 0 0 15.75 18V6A2.25 2.25 0 0 0 13.5 3.75h-9z"/><path d="M18 7.5l3 3-9 9H9v-3l9-9z"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-2xl" role="img" aria-label="Checklist">
+            {"\u{1F4DD}"}
           </span>
           <div className="mt-2 font-semibold text-gray-900">Create Your Plan</div>
           <p className="mt-1 text-sm text-gray-600">Answer a few questions - dates, pacing, and focus areas.</p>
         </div>
-        <div className="hidden md:flex items-center justify-center text-gray-400">-&gt;</div>
+        <div className="hidden md:flex items-center justify-center text-gray-400 text-xl" aria-hidden="true">
+          {"\u{2192}"}
+        </div>
         <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6.75 3a.75.75 0 0 1 .75.75V5.25h9V3.75a.75.75 0 0 1 1.5 0V5.25h.75A2.25 2.25 0 0 1 21.75 7.5v10.5A2.25 2.25 0 0 1 19.5 20.25H4.5A2.25 2.25 0 0 1 2.25 18V7.5A2.25 2.25 0 0 1 4.5 5.25h.75V3.75a.75.75 0 0 1 1.5 0V5.25z"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 text-2xl" role="img" aria-label="Calendar board">
+            {"\u{1F4C5}"}
           </span>
           <div className="mt-2 font-semibold text-gray-900">Execute Weekly</div>
           <p className="mt-1 text-sm text-gray-600">Use the Weekly Planner to stay on track and adapt.</p>
         </div>
-        <div className="hidden md:flex items-center justify-center text-gray-400">-&gt;</div>
+        <div className="hidden md:flex items-center justify-center text-gray-400 text-xl" aria-hidden="true">
+          {"\u{2192}"}
+        </div>
         <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-purple-50 text-purple-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M12 2.25a.75.75 0 0 1 .75.75V4.5h3a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5h3V3a.75.75 0 0 1 .75-.75z"/><path d="M4.5 7.5A2.25 2.25 0 0 1 6.75 5.25h10.5A2.25 2.25 0 0 1 19.5 7.5v7.5A2.25 2.25 0 0 1 17.25 17.25H6.75A2.25 2.25 0 0 1 4.5 15z"/><path d="M8.25 19.5h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5z"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-purple-50 text-purple-600 text-2xl" role="img" aria-label="Robot">
+            {"\u{1F916}"}
           </span>
           <div className="mt-2 font-semibold text-gray-900">Learn with AI</div>
           <p className="mt-1 text-sm text-gray-600">Master high-yield topics via our Socratic tutor.</p>
         </div>
-        <div className="hidden md:flex items-center justify-center text-gray-400">-&gt;</div>
+        <div className="hidden md:flex items-center justify-center text-gray-400 text-xl" aria-hidden="true">
+          {"\u{2192}"}
+        </div>
         <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6 2.25a.75.75 0 0 0-.75.75V6A3.75 3.75 0 0 0 9 9.75h6A3.75 3.75 0 0 0 18.75 6V3a.75.75 0 0 0-.75-.75H6z"/><path d="M4.5 6A5.25 5.25 0 0 0 9.75 11.25H14.25A5.25 5.25 0 0 0 19.5 6H21A3 3 0 0 1 18 9c0 2.485-2.239 4.5-5 4.5h-2c-2.761 0-5-2.015-5-4.5A3 3 0 0 1 3 6h1.5z"/></svg>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 text-2xl" role="img" aria-label="Trophy">
+            {"\u{1F3C6}"}
           </span>
           <div className="mt-2 font-semibold text-gray-900">Track & Succeed</div>
           <p className="mt-1 text-sm text-gray-600">See progress and finish strong before exam leave.</p>
         </div>
+      </div>
+      <div className="mt-4 flex md:hidden justify-center text-gray-400 text-xl" aria-hidden="true">
+        <span>{"\u{2193}"}</span>
       </div>
     </div>
   </section>
