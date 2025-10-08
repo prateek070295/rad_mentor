@@ -29,9 +29,9 @@ const Hero = () => (
       <div className="grid lg:grid-cols-2 gap-10 items-center">
         <div>
           <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900">The Smartest Way to Conquer Your DNB Theory Exam.</h1>
-          <p className="mt-4 text-lg text-gray-700">Stop juggling notes and textbooks. Rad Mentor builds a structured, daily study plan to help you systematically cover the entire DNB syllabus and master topics with our AI-powered tutor.</p>
+          <p className="mt-4 text-lg text-gray-700">Stop juggling notes and textbooks. Rad Mentor builds a structured, daily study plan to help you systematically cover the entire DNB'syllabus and master topics with our AI-powered tutor.</p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href="/login" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-5 py-3 font-semibold shadow hover:bg-blue-700">Start Your DNB Plan â€” Itâ€™s Free</a>
+            <a href="/login" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-5 py-3 font-semibold shadow hover:bg-blue-700">Start Your DNB Plan â€" Itâ€™s Free</a>
             <a href="#how-it-works" className="inline-flex items-center rounded-lg border border-gray-300 text-gray-800 px-5 py-3 font-semibold hover:bg-gray-50">See How It Works</a>
           </div>
         </div>
@@ -39,7 +39,7 @@ const Hero = () => (
           <div className="aspect-[16/9] w-full rounded-lg bg-gray-100 border flex items-center justify-center text-gray-500">
             App preview / GIF placeholder
           </div>
-          <div className="mt-3 text-xs text-gray-500 text-center">Map out your DNB syllabus â€¢ Master highâ€‘yield topics</div>
+          <div className="mt-3 text-xs text-gray-500 text-center">Map out your DNB'syllabus â€¢ Master highâ€'yield topics</div>
         </div>
       </div>
     </div>
@@ -62,21 +62,29 @@ const CredBar = () => (
 const Problems = () => (
   <section id="problems" className="bg-white">
     <div className="container mx-auto px-4 sm:px-6 py-14">
-      <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">The DNB Theory Exam is a Challenge. Your Preparation Shouldnâ€™t Be Chaos.</h2>
+      <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">The DNB Theory Exam is a Challenge. Your Preparation Shouldn't Be Chaos.</h2>
       <div className="mt-10 grid md:grid-cols-3 gap-6">
-        {[{
-          icon: "ðŸ“š", title: "Vast Syllabus", text: "Feeling overwhelmed trying to cover the vast DNB theory syllabus while managing intense clinical work?",
-        }, {
-          icon: "ðŸ“…", title: "Unpredictable Schedule", text: "Struggling to follow a fixed schedule due to unpredictable duties, leaving massive backlogs before exam leave?",
-        }, {
-          icon: "â“", title: "Lack of Guidance", text: "Unsure if youâ€™re focusing on the right topics or how to track your progress against the entire syllabus?",
-        }].map((p, idx) => (
-          <div key={idx} className="rounded-xl border bg-white p-6 shadow-sm">
-            <div className="text-3xl">{p.icon}</div>
-            <div className="mt-3 text-lg font-semibold text-gray-900">{p.title}</div>
-            <p className="mt-1 text-gray-600 text-sm">{p.text}</p>
-          </div>
-        ))}
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M2.25 4.5c0-1.243 1.007-2.25 2.25-2.25h11.25A2.25 2.25 0 0 1 18 4.5v14.25A2.25 2.25 0 0 0 15.75 21H4.5A2.25 2.25 0 0 1 2.25 18.75V4.5z"/><path d="M18 6h1.5A2.25 2.25 0 0 1 21.75 8.25v12a.75.75 0 0 1-1.2.6L18 19.125V6z"/></svg>
+          </span>
+          <div className="mt-3 text-lg font-semibold text-gray-900">Vast Syllabus</div>
+          <p className="mt-1 text-gray-600 text-sm">Feeling overwhelmed trying to cover the vast DNB theory syllabus while managing intense clinical work?</p>
+        </div>
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6.75 3a.75.75 0 0 1 .75.75V5.25h9V3.75a.75.75 0 0 1 1.5 0V5.25h.75A2.25 2.25 0 0 1 21.75 7.5v10.5A2.25 2.25 0 0 1 19.5 20.25H4.5A2.25 2.25 0 0 1 2.25 18V7.5A2.25 2.25 0 0 1 4.5 5.25h.75V3.75a.75.75 0 0 1 1.5 0V5.25z"/></svg>
+          </span>
+          <div className="mt-3 text-lg font-semibold text-gray-900">Unpredictable Schedule</div>
+          <p className="mt-1 text-gray-600 text-sm">Struggling to follow a fixed schedule due to unpredictable duties, leaving massive backlogs before exam leave?</p>
+        </div>
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm10.5-4.5a.75.75 0 1 0-1.5 0v6a.75.75 0 1 0 1.5 0v-6zm0 9a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0z" clipRule="evenodd"/></svg>
+          </span>
+          <div className="mt-3 text-lg font-semibold text-gray-900">Lack of Guidance</div>
+          <p className="mt-1 text-gray-600 text-sm">Unsure if you're focusing on the right topics or how to track your progress against the entire syllabus?</p>
+        </div>
       </div>
     </div>
   </section>
@@ -89,16 +97,16 @@ const Features = () => (
       <div className="mt-10 grid lg:grid-cols-3 gap-6">
         {[{
           tag: "The Smart Plan Setup Wizard",
-          benefit: "Map Your Entire DNB Syllabus in Minutes.",
-          desc: "Our wizard is designed for the DNB exam structure. Input your final exam date, and weâ€™ll generate a complete, dayâ€‘byâ€‘day schedule to ensure every topic is covered systematically.",
+          benefit: "Map Your Entire DNB'syllabus in Minutes.",
+          desc: "Our wizard is designed for the DNB exam structure. Input your final exam date, and we'll generate a complete, day-by-day schedule to ensure every topic is covered systematically.",
         }, {
           tag: "The Weekly Planner Board",
           benefit: "Stay on Track, Week After Week.",
-          desc: "Manage the reality of residency. Drag and drop topics, adjust for heavy onâ€‘call days, and ensure youâ€™re consistently making progress towards your DNB goal.",
+          desc: "Manage the reality of residency. Drag and drop topics, adjust for heavy on-call days, and ensure you're consistently making progress toward your DNB goal.",
         }, {
           tag: "Master Queue & Gantt Timeline",
           benefit: "Visualize Your Path to Passing the DNB.",
-          desc: "Get a birdâ€™sâ€‘eye view of your entire preparation timeline. The Gantt view clearly shows what youâ€™ve covered and whatâ€™s left, eliminating guesswork and anxiety.",
+          desc: "Get a bird's-eye view of your entire preparation timeline. The Gantt view clearly shows what you've covered and what's left, eliminating guesswork and anxiety.",
         }].map((f, idx) => (
           <div key={idx} className="rounded-xl border bg-white p-6 shadow-sm">
             <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">{f.tag}</div>
@@ -116,8 +124,8 @@ const TutorSpotlight = () => (
     <div className="container mx-auto px-4 sm:px-6 py-14">
       <div className="grid lg:grid-cols-2 gap-8 items-center">
         <div>
-          <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900">Master Highâ€‘Yield DNB Topics with Your AI Tutor.</h3>
-          <p className="mt-3 text-gray-700">Our AI tutor, powered by Googleâ€™s Gemini AI, helps you build deep conceptual clarityâ€”critical for the DNBâ€™s applicationâ€‘based questions. Go from passive reading to active, engaged learning.</p>
+          <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900">Master Highâ€'Yield DNB Topics with Your AI Tutor.</h3>
+          <p className="mt-3 text-gray-700">Our AI tutor, powered by Googleâ€™s Gemini AI, helps you build deep conceptual clarityâ€"critical for the DNBâ€™s applicationâ€'based questions. Go from passive reading to active, engaged learning.</p>
           <div className="mt-5">
             <a href="/login" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Try the AI Tutor</a>
           </div>
@@ -160,7 +168,7 @@ const Roadmap = () => (
 const Pricing = () => (
   <section id="pricing" className="bg-white">
     <div className="container mx-auto px-4 sm:px-6 py-14">
-      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-800 text-center font-medium">Try Our Premium AI Tutor â€” Free for 7 Days! All new accounts get a oneâ€‘week trial to experience AIâ€‘powered learning.</div>
+      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-800 text-center font-medium">Try Our Premium AI Tutor â€" Free for 7 Days! All new accounts get a oneâ€'week trial to experience AIâ€'powered learning.</div>
       <h3 className="mt-6 text-2xl md:text-3xl font-extrabold text-gray-900 text-center">A Plan for Every DNB Aspirant.</h3>
       <div className="mt-8 grid md:grid-cols-2 gap-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -182,9 +190,9 @@ const Pricing = () => (
           <ul className="mt-2 space-y-2 text-sm text-gray-700 list-disc list-inside">
             <li>ðŸš€ Unlimited access to the AI Socratic Tutor</li>
             <li>ðŸŽ¯ Plan for multiple goals</li>
-            <li>ðŸ“Š Advanced DNBâ€‘focused analytics</li>
+            <li>ðŸ"Š Advanced DNBâ€'focused analytics</li>
           </ul>
-          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your 7â€‘Day Free Trial</a>
+          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your 7â€'Day Free Trial</a>
         </div>
       </div>
     </div>
@@ -198,13 +206,13 @@ const FAQ = () => (
       <div className="mt-8 space-y-3">
         {[{
           q: "Who is this for? Is it only for the DNB exam?",
-          a: "Our initial launch is laserâ€‘focused on the DNB Radiology Theory Exam. We are already working on MD (MUHS) and other university exams next. Check our roadmap!",
+          a: "Our initial launch is laserâ€'focused on the DNB Radiology Theory Exam. We are already working on MD (MUHS) and other university exams next. Check our roadmap!",
         }, {
           q: "Does this cover practicals or viva?",
           a: "Currently, Rad Mentor is designed to help you master the vast syllabus for your theory exam. While a strong theoretical foundation is crucial for practicals, we donâ€™t have specific features for case presentations or viva preparation at this time.",
         }, {
           q: "Can I use this if I am an MD student?",
-          a: "Absolutely! While our current messaging is DNBâ€‘focused, the planning tools are flexible and can be used by anyone. You can set up a custom plan for your universityâ€™s syllabus. Official MD exam templates are coming soon!",
+          a: "Absolutely! While our current messaging is DNBâ€'focused, the planning tools are flexible and can be used by anyone. You can set up a custom plan for your universityâ€™s syllabus. Official MD exam templates are coming soon!",
         }].map((item, idx) => (
           <details key={idx} className="group rounded-lg border bg-white p-4 open:shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
@@ -223,7 +231,7 @@ const FinalCTA = () => (
   <section className="bg-gradient-to-r from-blue-600 to-indigo-600">
     <div className="container mx-auto px-4 sm:px-6 py-14 text-center">
       <h3 className="text-3xl font-extrabold text-white">Walk into Your DNB Exam with Confidence.</h3>
-      <p className="mt-2 text-blue-100">Build a structured study plan, keep your progress synced, and learn with AIâ€‘powered tutoring designed for DNB radiology residents.</p>
+      <p className="mt-2 text-blue-100">Build a structured study plan, keep your progress synced, and learn with AIâ€'powered tutoring designed for DNB radiology residents.</p>
       <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-white text-blue-700 px-6 py-3 text-sm font-semibold shadow hover:bg-blue-50">Start Your Free DNB Plan Today</a>
     </div>
   </section>
@@ -242,7 +250,7 @@ export default function LandingPage() {
       <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
         <div className="text-3xl">📝</div>
         <div className="mt-2 font-semibold text-gray-900">Create Your Plan</div>
-        <p className="mt-1 text-sm text-gray-600">Answer a few questions — dates, pacing, and focus areas.</p>
+        <p className="mt-1 text-sm text-gray-600">Answer a few questions - dates, pacing, and focus areas.</p>
       </div>
       <div className="flex items-center justify-center">
         <span className="hidden md:inline text-2xl text-gray-400">→</span>
@@ -260,7 +268,7 @@ export default function LandingPage() {
       <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
         <div className="text-3xl">🤖</div>
         <div className="mt-2 font-semibold text-gray-900">Learn with AI</div>
-        <p className="mt-1 text-sm text-gray-600">Master high‑yield topics via our Socratic tutor.</p>
+        <p className="mt-1 text-sm text-gray-600">Master High-yield topics via our Socratic tutor.</p>
       </div>
       <div className="flex items-center justify-center">
         <span className="hidden md:inline text-2xl text-gray-400">→</span>
@@ -290,6 +298,10 @@ export default function LandingPage() {
     </div>
   );
 }
+
+
+
+
 
 
 
