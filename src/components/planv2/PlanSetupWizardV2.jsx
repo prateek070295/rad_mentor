@@ -223,7 +223,6 @@ export default function PlanSetupWizardV2({
         form.startDate,
         form.strategy === "exam" ? form.examDate : "",
         planTotalMinutes,
-        defaultDaily,
       ),
     [form.startDate, form.examDate, form.strategy, planTotalMinutes],
   );
@@ -289,7 +288,7 @@ export default function PlanSetupWizardV2({
       capacity: capacityErrors,
       sections: sectionsErrors,
     };
-  }, [form, enabledSections.length, order.length, sectionsLoading]);
+  }, [form, enabledSections.length, order.length, sectionsLoading, dailyMinutesNumber]);
 
   useEffect(() => {
     let active = true;
@@ -595,7 +594,12 @@ export default function PlanSetupWizardV2({
 
             <Field label="At a glance">
               <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
-                {timelineMessage}
+                <span>{timelineMessage}</span>
+                {timelineDays != null && (
+                  <div className="mt-2 text-xs text-blue-700">
+                    Study window: {timelineDays} day{timelineDays === 1 ? "" : "s"}
+                  </div>
+                )}
               </div>
             </Field>
           </div>
