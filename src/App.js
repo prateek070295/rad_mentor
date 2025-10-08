@@ -517,11 +517,21 @@ function AppShell() {
 
   const isPlanV2Page = window.location.pathname === '/plan-v2';
   if (isPlanV2Page) {
-    if (!currentUser) {\r\n    if (typeof window !== 'undefined' && window.location && window.location.pathname === '/login') {\r\n      return <Login />;\r\n    }\r\n    return <LandingPage />;\r\n  }
-    return <PlanTabV2 />;
+  if (!currentUser) {
+    if (typeof window !== 'undefined' && window.location && window.location.pathname === '/login') {
+      return <Login />;
+    }
+    return <LandingPage />;
   }
+  return <PlanTabV2 />;
+}
 
-  if (!currentUser) {\r\n    if (typeof window !== 'undefined' && window.location && window.location.pathname === '/login') {\r\n      return <Login />;\r\n    }\r\n    return <LandingPage />;\r\n  }
+  if (!currentUser) {
+  if (typeof window !== 'undefined' && window.location && window.location.pathname === '/login') {
+    return <Login />;
+  }
+  return <LandingPage />;
+}
 
   const renderContent = () => {
     if (isLoading) {
@@ -644,4 +654,6 @@ const App = () => (
 );
 
 export default App;
+
+
 
