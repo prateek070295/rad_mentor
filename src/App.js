@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 // --- Firebase Imports ---
 import { db, auth } from './firebase'; 
 import { collection, getDocs, getDoc, query, orderBy, doc, where, onSnapshot } from 'firebase/firestore'; 
@@ -17,6 +17,7 @@ import PlanTabV2 from './components/PlanTabV2';
 import TimeReport from './pages/TimeReport.jsx';
 import Login from './components/auth/Login';
 import ProfileMenu from './components/ProfileMenu';
+import LandingPage from './pages/LandingPage';
 import AccountSettings from './pages/AccountSettings';
 import { UnsavedChangesProvider, useUnsavedChanges } from './context/UnsavedChangesContext';
 
@@ -516,15 +517,11 @@ function AppShell() {
 
   const isPlanV2Page = window.location.pathname === '/plan-v2';
   if (isPlanV2Page) {
-    if (!currentUser) {
-      return <Login />;
-    }
+    if (!currentUser) {\r\n    if (typeof window !== 'undefined' && window.location && window.location.pathname === '/login') {\r\n      return <Login />;\r\n    }\r\n    return <LandingPage />;\r\n  }
     return <PlanTabV2 />;
   }
 
-  if (!currentUser) {
-    return <Login />;
-  }
+  if (!currentUser) {\r\n    if (typeof window !== 'undefined' && window.location && window.location.pathname === '/login') {\r\n      return <Login />;\r\n    }\r\n    return <LandingPage />;\r\n  }
 
   const renderContent = () => {
     if (isLoading) {
@@ -647,3 +644,4 @@ const App = () => (
 );
 
 export default App;
+

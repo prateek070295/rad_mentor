@@ -16,8 +16,8 @@ const NavBar = () => (
         <a href="#roadmap" className="hover:text-blue-700">Our Roadmap</a>
       </nav>
       <div className="flex items-center gap-3">
-        <a href="/" className="text-sm text-gray-700 hover:text-blue-700">Login</a>
-        <a href="/" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Plan Your DNB Prep Free</a>
+        <a href="/login" className="text-sm text-gray-700 hover:text-blue-700">Login</a>
+        <a href="/login" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Plan Your DNB Prep Free</a>
       </div>
     </div>
   </header>
@@ -31,7 +31,7 @@ const Hero = () => (
           <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900">The Smartest Way to Conquer Your DNB Theory Exam.</h1>
           <p className="mt-4 text-lg text-gray-700">Stop juggling notes and textbooks. Rad Mentor builds a structured, daily study plan to help you systematically cover the entire DNB syllabus and master topics with our AI-powered tutor.</p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href="/" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-5 py-3 font-semibold shadow hover:bg-blue-700">Start Your DNB Plan — It’s Free</a>
+            <a href="/login" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-5 py-3 font-semibold shadow hover:bg-blue-700">Start Your DNB Plan — It’s Free</a>
             <a href="#how-it-works" className="inline-flex items-center rounded-lg border border-gray-300 text-gray-800 px-5 py-3 font-semibold hover:bg-gray-50">See How It Works</a>
           </div>
         </div>
@@ -119,7 +119,7 @@ const TutorSpotlight = () => (
           <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900">Master High‑Yield DNB Topics with Your AI Tutor.</h3>
           <p className="mt-3 text-gray-700">Our AI tutor, powered by Google’s Gemini AI, helps you build deep conceptual clarity—critical for the DNB’s application‑based questions. Go from passive reading to active, engaged learning.</p>
           <div className="mt-5">
-            <a href="/" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Try the AI Tutor</a>
+            <a href="/login" className="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Try the AI Tutor</a>
           </div>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -172,7 +172,7 @@ const Pricing = () => (
             <li>Weekly planner board & day caps</li>
             <li>Master queue & timeline</li>
           </ul>
-          <a href="/" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Build Your DNB Plan Free</a>
+          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Build Your DNB Plan Free</a>
         </div>
         <div className="rounded-2xl border-2 border-blue-600 bg-white p-6 shadow">
           <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Rad Mentor Premium (Planner + AI Tutor)</div>
@@ -184,7 +184,7 @@ const Pricing = () => (
             <li>🎯 Plan for multiple goals</li>
             <li>📊 Advanced DNB‑focused analytics</li>
           </ul>
-          <a href="/" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your 7‑Day Free Trial</a>
+          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your 7‑Day Free Trial</a>
         </div>
       </div>
     </div>
@@ -224,7 +224,7 @@ const FinalCTA = () => (
     <div className="container mx-auto px-4 sm:px-6 py-14 text-center">
       <h3 className="text-3xl font-extrabold text-white">Walk into Your DNB Exam with Confidence.</h3>
       <p className="mt-2 text-blue-100">Build a structured study plan, keep your progress synced, and learn with AI‑powered tutoring designed for DNB radiology residents.</p>
-      <a href="/" className="mt-6 inline-flex items-center rounded-lg bg-white text-blue-700 px-6 py-3 text-sm font-semibold shadow hover:bg-blue-50">Start Your Free DNB Plan Today</a>
+      <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-white text-blue-700 px-6 py-3 text-sm font-semibold shadow hover:bg-blue-50">Start Your Free DNB Plan Today</a>
     </div>
   </section>
 );
@@ -235,7 +235,7 @@ export default function LandingPage() {
       <NavBar />
       <Hero />
       <CredBar />
-      <section id="how-it-works" className="sr-only">How it works anchor</section>
+      <section id="how-it-works" className="bg-white"><div className="container mx-auto px-4 sm:px-6 py-14"><h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">How It Works</h2><div className="mt-8 grid md:grid-cols-4 gap-6 items-center"><div className="rounded-xl border bg-white p-6 text-center shadow-sm"><div className="text-3xl">📝</div><div className="mt-2 font-semibold text-gray-900">Create Your Plan</div><p className="mt-1 text-sm text-gray-600">Answer a few questions — dates, pacing, and focus areas.</p></div><div className="hidden md:flex items-center justify-center text-2xl text-gray-400">→</div><div className="rounded-xl border bg-white p-6 text-center shadow-sm"><div className="text-3xl">📆</div><div className="mt-2 font-semibold text-gray-900">Execute Weekly</div><p className="mt-1 text-sm text-gray-600">Use the Weekly Planner to stay on track and adapt.</p></div><div className="hidden md:flex items-center justify-center text-2xl text-gray-400">→</div><div className="rounded-xl border bg-white p-6 text-center shadow-sm"><div className="text-3xl">🤖</div><div className="mt-2 font-semibold text-gray-900">Learn with AI</div><p className="mt-1 text-sm text-gray-600">Master high‑yield topics via our Socratic tutor.</p></div><div className="hidden md:flex items-center justify-center text-2xl text-gray-400">→</div><div className="rounded-xl border bg-white p-6 text-center shadow-sm"><div className="text-3xl">🏆</div><div className="mt-2 font-semibold text-gray-900">Track & Succeed</div><p className="mt-1 text-sm text-gray-600">See progress and finish strong before exam leave.</p></div></div></div></section>
       <Problems />
       <Features />
       <TutorSpotlight />
@@ -246,9 +246,11 @@ export default function LandingPage() {
       <footer className="border-t bg-white">
         <div className="container mx-auto px-4 sm:px-6 py-6 text-xs text-gray-500 flex items-center justify-between">
           <span>© {new Date().getFullYear()} Rad Mentor</span>
-          <a className="hover:text-blue-700" href="/">Login</a>
+          <a className="hover:text-blue-700" href="/login">Login</a>
         </div>
       </footer>
     </div>
   );
 }
+
+
