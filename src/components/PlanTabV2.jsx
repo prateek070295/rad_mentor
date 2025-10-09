@@ -189,7 +189,9 @@ export default function PlanTabV2() {
     let active = true;
     (async () => {
       if (!uid) return;
-      setMetaLoading(true);
+      if (!meta) {
+        setMetaLoading(true);
+      }
       try {
         const m = await loadPlanMeta(uid);
         if (!active) return;
