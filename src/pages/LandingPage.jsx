@@ -100,23 +100,23 @@ const Problems = () => (
 const Features = () => (
   <section id="features" className="bg-gray-50">
     <div className="container mx-auto px-4 sm:px-6 py-14">
-      <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">Your Complete Toolkit for DNB Theory Success</h2>
+      <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">Plan • Learn • Test — The Complete DNB Cycle</h2>
       <div className="mt-10 grid lg:grid-cols-3 gap-6">
         {[
           {
-            tag: "The Smart Plan Setup Wizard",
-            benefit: "Map Your Entire DNB Syllabus in Minutes.",
-            desc: "Our wizard is designed for the DNB exam structure. Input your final exam date, and we'll generate a complete, day-by-day schedule to ensure every topic is covered systematically.",
+            tag: "PLAN WITH PRECISION",
+            benefit: "Smart Planner + Weekly Board",
+            desc: "Set your exam date, daily load, and section priorities. The master plan, weekly board, and day caps keep every topic mapped out and adjustable for residency realities.",
           },
           {
-            tag: "The Weekly Planner Board",
-            benefit: "Stay on Track, Week After Week.",
-            desc: "Manage the reality of residency. Drag and drop topics, adjust for heavy on-call days, and ensure you're consistently making progress toward your DNB goal.",
+            tag: "LEARN WITH GUIDANCE",
+            benefit: "AI Socratic Tutor Sessions",
+            desc: "Work through high-yield theory with an AI tutor that explains, questions, evaluates, and summarizes—building real conceptual mastery instead of passive reading.",
           },
           {
-            tag: "Master Queue & Gantt Timeline",
-            benefit: "Visualize Your Path to Passing the DNB.",
-            desc: "Get a bird's-eye view of your entire preparation timeline. The Gantt view clearly shows what you've covered and what's left, eliminating guesswork and anxiety.",
+            tag: "TEST WITH CONFIDENCE",
+            benefit: "Question Banks + AI Feedback",
+            desc: "Solve curated question papers, benchmark yourself, and get instant AI feedback on written answers so you know exactly where to refine before exam day.",
           },
         ].map((f, idx) => (
           <div key={idx} className="rounded-xl border bg-white p-6 shadow-sm">
