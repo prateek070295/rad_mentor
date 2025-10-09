@@ -204,7 +204,7 @@ export default function PlanTabV2() {
     return () => {
       active = false;
     };
-  }, [uid, refreshSignal]);
+  }, [uid, refreshSignal, meta]);
 
   useEffect(() => {
     let active = true;
