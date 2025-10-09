@@ -1,4 +1,4 @@
-// src/components/PlanTabV2.jsx
+﻿// src/components/PlanTabV2.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 
@@ -208,7 +208,7 @@ export default function PlanTabV2() {
     return () => {
       active = false;
     };
-  }, [uid, refreshSignal]);
+  }, [uid]);
   
 
   useEffect(() => {
@@ -356,6 +356,20 @@ export default function PlanTabV2() {
   const refreshAll = useCallback(() => {
     setRefreshSignal((x) => x + 1);
   }, []);
+
+  const handleAutoFillWeek = useCallback(async () => {
+    if (!uid || !weekKey) return;
+    await runWithPending(async () => {
+      const updatedWeek = await autoFillWeekFromMaster(uid, weekKey);
+      if (updatedWeek) {
+        setWeekDoc(updatedWeek);
+      } else {
+        const fallback = await loadOrInitWeek(uid, weekKey, defaultDailyMinutes);
+        setWeekDoc(fallback || {});
+      }
+      refreshAll();
+    });
+  }, [uid, weekKey, defaultDailyMinutes, runWithPending, refreshAll]);
 
   const handleResetPlan = useCallback(async () => {
     if (!uid) return;
@@ -880,10 +894,7 @@ export default function PlanTabV2() {
               onPrevWeek={undefined}
               onNextWeek={undefined}
               onThisWeek={undefined}
-              onAutoFillWeek={async () => {
-                await autoFillWeekFromMaster(uid, weekKey);
-                refreshAll();
-              }}
+              onAutoFillWeek={handleAutoFillWeek}
               weekLabel={weekLabel}
               totalPlannedThisWeek={totalPlannedThisWeek}
             />
