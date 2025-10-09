@@ -594,15 +594,6 @@ export default function WeeklyBoard({
               {autoFillBusy ? "Auto-filling..." : "Auto-fill week"}
             </button>
           )}
-          {onAddFromMaster && expandedISO && (
-            <button
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
-              onClick={() => onAddFromMaster(expandedISO)}
-              disabled={expandedIsDone}
-            >
-              Add from master
-            </button>
-          )}
           <button
             className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
             onClick={openSearchModal}
@@ -749,6 +740,15 @@ export default function WeeklyBoard({
                     >
                       Set capacity
                     </button>
+                    {onAddFromMaster && (
+                      <button
+                        className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
+                        onClick={() => onAddFromMaster(iso)}
+                        disabled={isDone}
+                      >
+                        Autofill day
+                      </button>
+                    )}
                   </div>
                 </div>
               );
