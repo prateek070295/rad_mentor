@@ -38,8 +38,13 @@ const Hero = () => (
           </div>
         </div>
         <div className="rounded-2xl border bg-white shadow-sm p-4">
-          <div className="aspect-[16/9] w-full rounded-lg bg-gray-100 border flex items-center justify-center text-gray-500">
-            App preview / GIF placeholder
+          <div className="aspect-[16/9] w-full overflow-hidden rounded-lg border bg-gray-900/5 flex items-center justify-center">
+            <img
+              src={require("../assets/media/landing-hero.gif")}
+              alt="Rad Mentor plan setup, weekly board, and AI tutor preview"
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
           </div>
           <div className="mt-3 text-xs text-gray-500 text-center">Map out your DNB syllabus - Master high-yield topics</div>
         </div>
