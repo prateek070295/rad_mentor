@@ -352,18 +352,20 @@ export default function WeeklyBoard({
       setUiMsg("Auto-filling...");
       await onAutoFillWeek();
       setUiMsg("Auto-fill complete");
-      onRefresh?.();
     } catch (err) {
       console.error(err);
       setUiMsg(err?.message || "Auto-fill failed");
     } finally {
+      if (autoFillTimerRef.current) {
+        clearTimeout(autoFillTimerRef.current);
+      }
       autoFillTimerRef.current = setTimeout(() => {
         setUiMsg("");
         setAutoFillBusy(false);
         autoFillTimerRef.current = null;
-      }, 1800);
+      }, 1500);
     }
-  }, [onAutoFillWeek, autoFillBusy, onRefresh]);
+  }, [onAutoFillWeek, autoFillBusy]);
 
   const expandedDate = useMemo(() => {
     if (!expandedISO) return null;
