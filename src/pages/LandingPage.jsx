@@ -185,7 +185,7 @@ const Pricing = () => (
     <div className="container mx-auto px-4 sm:px-6 py-14">
       <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-800 text-center font-medium">Try Our Premium AI Tutor - Free for 7 Days! All new accounts get a one-week trial to experience AI-powered learning.</div>
       <h3 className="mt-6 text-2xl md:text-3xl font-extrabold text-gray-900 text-center">A Plan for Every DNB Aspirant.</h3>
-      <div className="mt-8 grid md:grid-cols-2 gap-6">
+      <div className="mt-8 grid md:grid-cols-3 gap-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Free Demo (7-Day Access)</div>
           <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 0 <span className="text-base font-medium text-gray-500">/ 7 days</span></div>
@@ -199,16 +199,27 @@ const Pricing = () => (
         </div>
         <div className="rounded-2xl border-2 border-blue-600 bg-white p-6 shadow">
           <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Rad Mentor Full Access</div>
-          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 49,999</div>
-          <p className="mt-2 text-gray-700">One-time access to the complete DNB prep ecosystem — plan, learn, and test with AI support.</p>
+          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 49,999 <span className="text-base font-medium text-gray-500">/ year</span></div>
+          <p className="mt-2 text-gray-700">All-in access for a full year—plan, learn, and test with every AI feature unlocked.</p>
           <div className="mt-3 text-sm text-green-700 font-semibold">Launch offer: 50% off for the first 100 users</div>
-          <div className="text-sm text-gray-500">Pay Rs 24,999 if you are among the first 100 to upgrade.</div>
+          <div className="text-sm text-gray-500">Upgrade early and pay Rs 24,999 for your first year.</div>
           <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
             <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Lifetime planner + AI tutor access</li>
             <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Unlimited question banks with model answers</li>
             <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> AI feedback on every written response</li>
           </ul>
           <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Upgrade to Full Access</a>
+        </div>
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Refer & Extend</div>
+          <div className="mt-2 text-3xl font-extrabold text-gray-900">+1 Month <span className="text-base font-medium text-gray-500">per referral</span></div>
+          <p className="mt-2 text-gray-700">Invite a friend to Rad Mentor and earn an extra month of full-access time for both of you when they upgrade.</p>
+          <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Share your unique referral link</li>
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Friend activates the full-access plan</li>
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Both accounts receive one additional month</li>
+          </ul>
+          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Refer a Friend</a>
         </div>
       </div>
     </div>
