@@ -1,5 +1,5 @@
 // src/components/PlanTabV2.jsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 // Optional flags hook (kept because it exists in your project)
@@ -109,6 +109,7 @@ export default function PlanTabV2() {
 
   const [showWizard, setShowWizard] = useState(false);
   const [refreshSignal, setRefreshSignal] = useState(0); // bump to refetch children
+  const metaLoadedRef = useRef(false);
   const [queueSummaryRows, setQueueSummaryRows] = useState([]);
   const [queueSummaryLoading, setQueueSummaryLoading] = useState(false);
   const [masterTotals, setMasterTotals] = useState(null);
@@ -186,25 +187,29 @@ export default function PlanTabV2() {
 
   // load meta
   useEffect(() => {
+    if (!uid) return;
+    if (!metaLoadedRef.current) {
+      setMetaLoading(true);
+    }
     let active = true;
     (async () => {
-      if (!uid) return;
-      if (!meta) {
-        setMetaLoading(true);
-      }
       try {
         const m = await loadPlanMeta(uid);
         if (!active) return;
         setMeta(m || {});
+        metaLoadedRef.current = true;
         setShowWizard((prev) => prev || !m?.hasCompletedSetup);
       } finally {
-        active && setMetaLoading(false);
+        if (active) {
+          setMetaLoading(false);
+        }
       }
     })();
     return () => {
       active = false;
     };
-  }, [uid, refreshSignal, meta]);
+  }, [uid, refreshSignal]);
+  
 
   useEffect(() => {
     let active = true;
@@ -368,6 +373,7 @@ export default function PlanTabV2() {
           await resetPlanData(uid);
           setQueueSummaryRows([]);
           setMeta(null);
+          metaLoadedRef.current = false;
           setWeekDoc(null);
           setWeekKey("");
           setShowWizard(true);
@@ -444,6 +450,7 @@ export default function PlanTabV2() {
             updatedAt: new Date().toISOString(),
           });
 
+          metaLoadedRef.current = true;
           setMeta((prev) => ({
             ...(prev || {}),
             startDate: startDateKey,
