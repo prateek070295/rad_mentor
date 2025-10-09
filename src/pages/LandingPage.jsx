@@ -187,27 +187,28 @@ const Pricing = () => (
       <h3 className="mt-6 text-2xl md:text-3xl font-extrabold text-gray-900 text-center">A Plan for Every DNB Aspirant.</h3>
       <div className="mt-8 grid md:grid-cols-2 gap-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Rad Mentor (Free Planner)</div>
-          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 0 <span className="text-base font-medium text-gray-500">/ forever</span></div>
-          <p className="mt-2 text-gray-700">The ultimate planning tool for your DNB exam, completely free.</p>
+          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Free Demo (7-Day Access)</div>
+          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 0 <span className="text-base font-medium text-gray-500">/ 7 days</span></div>
+          <p className="mt-2 text-gray-700">Full access to the planner and AI tutor for an entire week. Build your schedule, test the tutor, and see the workflow end to end.</p>
           <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
-            <li>Personalized plan setup wizard</li>
-            <li>Weekly planner board & day caps</li>
-            <li>Master queue & timeline</li>
+            <li>Plan setup wizard, weekly board, and master queue</li>
+            <li>Unlimited AI Socratic tutor sessions</li>
+            <li>Question banks and solved papers with instant feedback</li>
           </ul>
-          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Build Your DNB Plan Free</a>
+          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your Free Demo</a>
         </div>
         <div className="rounded-2xl border-2 border-blue-600 bg-white p-6 shadow">
-          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Rad Mentor Premium (Planner + AI Tutor)</div>
-          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 299<span className="text-base font-medium text-gray-500">/month</span> <span className="text-sm text-gray-400">or Rs 2,999/year</span></div>
-          <p className="mt-2 text-gray-700">The complete toolkit to ace your DNB theory exam.</p>
-          <div className="mt-3 text-sm text-gray-700">Everything in the Free Plan, PLUS:</div>
-          <ul className="mt-2 space-y-2 text-sm text-gray-700 list-disc list-inside">
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Unlimited access to the AI Socratic Tutor</li>
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Plan for multiple goals</li>
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Advanced DNB-focused analytics</li>
+          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Rad Mentor Full Access</div>
+          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 49,999</div>
+          <p className="mt-2 text-gray-700">One-time access to the complete DNB prep ecosystem — plan, learn, and test with AI support.</p>
+          <div className="mt-3 text-sm text-green-700 font-semibold">Launch offer: 50% off for the first 100 users</div>
+          <div className="text-sm text-gray-500">Pay Rs 24,999 if you are among the first 100 to upgrade.</div>
+          <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Lifetime planner + AI tutor access</li>
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Unlimited question banks with model answers</li>
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> AI feedback on every written response</li>
           </ul>
-          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your 7-Day Free Trial</a>
+          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Upgrade to Full Access</a>
         </div>
       </div>
     </div>
