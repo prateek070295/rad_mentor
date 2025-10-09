@@ -1210,68 +1210,202 @@ export async function autoFillWeekFromMaster(uid, weekKey) {
   if (!uid || !weekKey) throw new Error("autoFillWeekFromMaster: bad args");
 
   const wkRef = doc(db, "plans", uid, "weeks", weekKey);
-  const wkSnap = await getDoc(wkRef);
-  if (!wkSnap.exists()) throw new Error("Week not found");
-  const weekDoc = wkSnap.data() || {};
-
-  const assignedCache = { ...(weekDoc.assigned || {}) };
-  const dayCaps = weekDoc.dayCaps || {};
-  const offDays = weekDoc.offDays || {};
-
   const dates = weekDatesFromKey(weekKey);
   const todayISO = toDateKey(new Date());
+  const futureDates = dates.filter((iso) => iso >= todayISO);
 
-  const queued = await getQueueOrdered(uid, "queued");
-  const inProg = await getQueueOrdered(uid, "inProgress");
-  const topics = [...inProg, ...queued];
+  const inProgressRows = await getQueueOrdered(uid, "inProgress");
+  const queuedRows = await getQueueOrdered(uid, "queued");
+  const orderedSeqs = [...inProgressRows, ...queuedRows]
+    .map((row) => row?.seq)
+    .filter((seq) => seq != null)
+    .map((seq) => String(seq));
 
-  for (const t of topics) {
-    const subs = Array.isArray(t.subtopics) ? t.subtopics : [];
-    const already = new Set(
-      Object.values(t.scheduledDates || {})
-        .flat()
-        .map((n) => Number(n)),
-    );
-
-    const remaining = () =>
-      subs
-        .map((_, i) => i)
-        .filter((i) => !already.has(i) && NUM(subs[i]?.minutes, 0) > 0);
-
-    for (const iso of dates.filter((d) => d >= todayISO)) {
-      const remainIdx = remaining();
-      if (!remainIdx.length) break;
-      if (offDays?.[iso]) continue;
-
-      const dayArr = Array.isArray(assignedCache[iso])
-        ? assignedCache[iso]
-        : [];
-      let cap = Number(dayCaps?.[iso] || 0) - minutesUsed(dayArr);
-      if (cap <= 0) continue;
-
-      const toPlace = [];
-      for (const subIdx of remainIdx) {
-        const mins = NUM(subs[subIdx]?.minutes, 0);
-        if (mins <= 0) continue;
-        if (cap - mins < 0) break;
-        cap -= mins;
-        toPlace.push(subIdx);
-      }
-      if (!toPlace.length) continue;
-
-      const res = await scheduleTopicSubIdxesBulk(uid, iso, t.seq, toPlace);
-      const slices = Array.isArray(res?.slices) ? res.slices : [];
-      if (!slices.length) continue;
-
-      assignedCache[iso] = [...dayArr, ...slices];
-      slices.forEach((slice) => {
-        already.add(Number(slice.subIdx));
-      });
-    }
+  if (!orderedSeqs.length || !futureDates.length) {
+    const snap = await getDoc(wkRef);
+    return snap.exists() ? snap.data() || null : null;
   }
 
-  const snap = await getDoc(wkRef);
-  return snap.exists() ? snap.data() || null : null;
+  let updatedWeek = null;
+
+  await runTransaction(db, async (tx) => {
+    const wkSnap = await tx.get(wkRef);
+    if (!wkSnap.exists()) throw new Error("Week not found");
+    const weekDoc = wkSnap.data() || {};
+
+    const assigned = {};
+    const originalAssigned = weekDoc.assigned || {};
+    dates.forEach((iso) => {
+      const source = Array.isArray(originalAssigned[iso])
+        ? originalAssigned[iso]
+        : [];
+      assigned[iso] = source.map((item) => ({ ...item }));
+    });
+
+    const dayUsage = new Map();
+    dates.forEach((iso) => {
+      const arr = assigned[iso] || [];
+      dayUsage.set(iso, minutesUsed(arr));
+    });
+
+    const dayCaps = weekDoc.dayCaps || {};
+    const offDays = weekDoc.offDays || {};
+
+    const changes = [];
+    let weekChanged = false;
+
+    const computeScheduledMinutes = (subs, schedule) => {
+      let total = 0;
+      Object.values(schedule || {}).forEach((list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((idx) => {
+          const mins = NUM(subs[idx]?.minutes, 0);
+          if (mins > 0) total += mins;
+        });
+      });
+      return total;
+    };
+
+    let totalRemainingCapacity = futureDates.reduce((sum, iso) => {
+      const capTotal = NUM(dayCaps?.[iso], 0);
+      const used = dayUsage.get(iso) || 0;
+      const available = Math.max(0, capTotal - used);
+      return sum + available;
+    }, 0);
+
+    if (totalRemainingCapacity <= 0) {
+      updatedWeek = weekDoc;
+      return;
+    }
+
+    for (const seq of orderedSeqs) {
+      if (totalRemainingCapacity <= 0) break;
+      const topicRef = doc(db, "plans", uid, "masterQueue", String(seq));
+      const topicSnap = await tx.get(topicRef);
+      if (!topicSnap.exists()) continue;
+
+      const topic = topicSnap.data() || {};
+      const subs = Array.isArray(topic.subtopics) ? topic.subtopics : [];
+      if (!subs.length) continue;
+
+      const scheduledDates = {};
+      Object.entries(topic.scheduledDates || {}).forEach(([iso, list]) => {
+        const normalized = Array.isArray(list)
+          ? list
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value))
+          : [];
+        const uniq = Array.from(new Set(normalized)).sort((a, b) => a - b);
+        if (uniq.length) {
+          scheduledDates[iso] = uniq;
+        }
+      });
+
+      const completed =
+        Array.isArray(topic.completedSubIdx) && topic.completedSubIdx.length
+          ? topic.completedSubIdx.map((value) => Number(value)).filter((value) =>
+              Number.isFinite(value),
+            )
+          : [];
+
+      const remainingIndices = () => {
+        const base = {
+          scheduledDates,
+          completedSubIdx: completed,
+        };
+        const already = buildAlreadySet(base);
+        return subs
+          .map((_, index) => index)
+          .filter(
+            (index) =>
+              !already.has(index) && NUM(subs[index]?.minutes, 0) > 0,
+          );
+      };
+
+      let topicChanged = false;
+
+      for (const iso of futureDates) {
+        if (totalRemainingCapacity <= 0) break;
+        const remainIdx = remainingIndices();
+        if (!remainIdx.length) break;
+        if (offDays?.[iso]) continue;
+
+        const capTotal = NUM(dayCaps?.[iso], 0);
+        let available = Math.max(0, capTotal - (dayUsage.get(iso) || 0));
+        if (available <= 0) continue;
+
+        const picked = [];
+        for (const subIdx of remainIdx) {
+          const mins = NUM(subs[subIdx]?.minutes, 0);
+          if (mins <= 0) continue;
+          if (mins > available) break;
+          picked.push(subIdx);
+          available -= mins;
+        }
+        if (!picked.length) continue;
+
+        const slices = slicesForSubIdxes(topic, picked);
+        if (!assigned[iso]) assigned[iso] = [];
+        assigned[iso] = [...assigned[iso], ...slices];
+        const addedMinutes = slices.reduce(
+          (sum, slice) => sum + NUM(slice.minutes, 0),
+          0,
+        );
+        dayUsage.set(iso, (dayUsage.get(iso) || 0) + addedMinutes);
+        totalRemainingCapacity = Math.max(
+          0,
+          totalRemainingCapacity - addedMinutes,
+        );
+
+        const existing = Array.isArray(scheduledDates[iso])
+          ? scheduledDates[iso]
+          : [];
+        const merged = Array.from(
+          new Set([
+            ...existing,
+            ...picked.map((value) => Number(value)).filter((value) =>
+              Number.isFinite(value),
+            ),
+          ]),
+        ).sort((a, b) => a - b);
+        scheduledDates[iso] = merged;
+
+        topicChanged = true;
+        weekChanged = true;
+      }
+
+      if (topicChanged) {
+        const scheduledMinutes = computeScheduledMinutes(subs, scheduledDates);
+        changes.push({
+          ref: topicRef,
+          data: {
+            scheduledDates,
+            scheduledMinutes,
+            queueState: "inProgress",
+          },
+        });
+      }
+    }
+
+    if (weekChanged) {
+      const compactAssigned = {};
+      Object.entries(assigned).forEach(([iso, arr]) => {
+        if (Array.isArray(arr) && arr.length) {
+          compactAssigned[iso] = arr;
+        }
+      });
+      tx.update(wkRef, { assigned: compactAssigned });
+      updatedWeek = { ...weekDoc, assigned: compactAssigned };
+    } else {
+      updatedWeek = weekDoc;
+    }
+
+    changes.forEach((change) => {
+      tx.update(change.ref, change.data);
+    });
+  });
+
+  return updatedWeek;
 }
 
 /* ---------------------------- DAY DONE / ADVANCE --------------------------- */

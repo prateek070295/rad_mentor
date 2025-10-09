@@ -1,11 +1,5 @@
 // src/components/planv2/WeeklyBoard.jsx
-import React, {
-  useMemo,
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-} from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   scheduleTopicToDay,
   scheduleTopicPackFromDay,
@@ -67,6 +61,7 @@ export default function WeeklyBoard({
   onMarkDayDone,
   onAddFromMaster,
   onAutoFillWeek,
+  isAutoFilling = false,
   onRefresh,
   weekLabel,
   totalPlannedThisWeek,
@@ -80,8 +75,6 @@ export default function WeeklyBoard({
   const [mode, setMode] = useState("week");
   const [hidePastDays, setHidePastDays] = useState(true);
   const [uiMsg, setUiMsg] = useState("");
-  const [autoFillBusy, setAutoFillBusy] = useState(false);
-  const autoFillTimerRef = useRef(null);
 
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,19 +84,23 @@ export default function WeeklyBoard({
 
   const [dragOverISO, setDragOverISO] = useState(null);
 
-  useEffect(() => {
-    return () => {
-      if (autoFillTimerRef.current) {
-        clearTimeout(autoFillTimerRef.current);
-        autoFillTimerRef.current = null;
-      }
-    };
-  }, []);
-
   const weekIsoList = useMemo(
     () => weekDates.map((d) => toISO(d)),
     [weekDates],
   );
+
+  useEffect(() => {
+    if (!weekIsoList.length) return;
+    const currentIsValid =
+      expandedISO && weekIsoList.includes(expandedISO);
+    const preferred =
+      currentDayISO && weekIsoList.includes(currentDayISO)
+        ? currentDayISO
+        : weekIsoList[0];
+    if (!currentIsValid && preferred !== expandedISO) {
+      setExpandedISO(preferred);
+    }
+  }, [weekIsoList, currentDayISO, expandedISO]);
 
   const expandedIsDone = useMemo(
     () => (expandedISO ? !!doneDays?.[expandedISO] : false),
@@ -345,28 +342,6 @@ export default function WeeklyBoard({
     [uid, expandedISO, doneDays, onRefresh],
   );
 
-  const handleAutoFillLocal = useCallback(async () => {
-    if (!onAutoFillWeek || autoFillBusy) return;
-    try {
-      setAutoFillBusy(true);
-      setUiMsg("Auto-filling...");
-      await onAutoFillWeek();
-      setUiMsg("Auto-fill complete");
-    } catch (err) {
-      console.error(err);
-      setUiMsg(err?.message || "Auto-fill failed");
-    } finally {
-      if (autoFillTimerRef.current) {
-        clearTimeout(autoFillTimerRef.current);
-      }
-      autoFillTimerRef.current = setTimeout(() => {
-        setUiMsg("");
-        setAutoFillBusy(false);
-        autoFillTimerRef.current = null;
-      }, 1500);
-    }
-  }, [onAutoFillWeek, autoFillBusy]);
-
   const expandedDate = useMemo(() => {
     if (!expandedISO) return null;
     return weekDates.find((date) => toISO(date) === expandedISO) || null;
@@ -548,8 +523,22 @@ export default function WeeklyBoard({
     : 0;
 
   return (
-    <div className="w-full">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="relative w-full">
+      {isAutoFilling && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/80 text-sm text-gray-700 backdrop-blur">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+          <span className="mt-3 font-medium">Auto-filling your week&hellip;</span>
+          <span className="text-xs text-gray-500">
+            Hang tight&mdash;updates land once every day is packed.
+          </span>
+        </div>
+      )}
+      <div
+        className={`transition-opacity duration-150 ${
+          isAutoFilling ? "pointer-events-none select-none opacity-0" : "opacity-100"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-lg font-semibold">
             {weekLabel || "This Week"}
@@ -584,16 +573,25 @@ export default function WeeklyBoard({
           </label>
           {onAutoFillWeek && (
             <button
-              className={`px-3 py-1 text-sm border rounded hover:bg-gray-50 flex items-center gap-2 ${
-                autoFillBusy ? "opacity-60 cursor-not-allowed" : ""
-              }`}
-              onClick={handleAutoFillLocal}
-              disabled={autoFillBusy}
+              className={`relative px-3 py-1 text-sm border rounded hover:bg-gray-50 flex items-center justify-center ${
+                isAutoFilling ? "opacity-60 cursor-not-allowed" : ""
+              } min-w-[150px]`}
+              onClick={onAutoFillWeek}
+              disabled={isAutoFilling}
             >
-              {autoFillBusy && (
+              <span
+                className={`transition-opacity ${isAutoFilling ? "opacity-0" : "opacity-100"}`}
+              >
+                Auto-fill week
+              </span>
+              <span
+                className={`absolute inset-0 flex items-center justify-center gap-2 transition-opacity ${
+                  isAutoFilling ? "opacity-100" : "opacity-0 pointer-events-none"
+                }`}
+              >
                 <span className="inline-flex h-3 w-3 animate-spin rounded-full border border-blue-500 border-t-transparent" />
-              )}
-              {autoFillBusy ? "Auto-filling..." : "Auto-fill week"}
+                Auto-filling...
+              </span>
             </button>
           )}
           <button
@@ -641,7 +639,7 @@ export default function WeeklyBoard({
               return (
                 <div
                   key={iso}
-                  className={`rounded border bg-white p-4 shadow-sm transition focus-within:ring ${borderClasses} ${
+                  className={`min-h-[340px] rounded border bg-white p-4 shadow-sm transition focus-within:ring ${borderClasses} ${
                     isOff ? "opacity-70" : ""
                   } ${isDone ? "opacity-75" : ""}`}
                   onDragOver={(event) => handleDayDragOver(event, iso)}
@@ -1081,5 +1079,6 @@ export default function WeeklyBoard({
         </div>
       )}
     </div>
-  );
+  </div>
+);
 }

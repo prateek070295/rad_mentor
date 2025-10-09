@@ -1,4 +1,4 @@
-﻿// src/components/PlanTabV2.jsx
+// src/components/PlanTabV2.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 
@@ -113,6 +113,7 @@ export default function PlanTabV2() {
   const [queueSummaryRows, setQueueSummaryRows] = useState([]);
   const [queueSummaryLoading, setQueueSummaryLoading] = useState(false);
   const [masterTotals, setMasterTotals] = useState(null);
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -335,7 +336,7 @@ export default function PlanTabV2() {
     return () => {
       mounted = false;
     };
-  }, [uid, weekKey, metaLoading, refreshSignal, defaultDailyMinutes]);
+  }, [uid, weekKey, metaLoading, defaultDailyMinutes]);
 
   const weekDates = useMemo(() => {
     return weekDatesFromKeyLocal(weekKey);
@@ -358,18 +359,32 @@ export default function PlanTabV2() {
   }, []);
 
   const handleAutoFillWeek = useCallback(async () => {
-    if (!uid || !weekKey) return;
-    await runWithPending(async () => {
-      const updatedWeek = await autoFillWeekFromMaster(uid, weekKey);
-      if (updatedWeek) {
-        setWeekDoc(updatedWeek);
-      } else {
-        const fallback = await loadOrInitWeek(uid, weekKey, defaultDailyMinutes);
-        setWeekDoc(fallback || {});
-      }
-      refreshAll();
-    });
-  }, [uid, weekKey, defaultDailyMinutes, runWithPending, refreshAll]);
+    if (!uid || !weekKey || isAutoFilling) return;
+    setIsAutoFilling(true);
+    try {
+      await runWithPending(async () => {
+        const updatedWeek = await autoFillWeekFromMaster(uid, weekKey);
+        const updatedQueueSummary = await listMasterQueueLinear(uid, {});
+        let nextWeek = updatedWeek;
+        if (!nextWeek) {
+          const fallback = await loadOrInitWeek(
+            uid,
+            weekKey,
+            defaultDailyMinutes,
+          );
+          nextWeek = fallback || {};
+        }
+        setWeekDoc(nextWeek);
+        setQueueSummaryRows(
+          Array.isArray(updatedQueueSummary) ? updatedQueueSummary : [],
+        );
+      });
+    } catch (error) {
+      console.error("Auto-fill failed:", error);
+    } finally {
+      setIsAutoFilling(false);
+    }
+  }, [uid, weekKey, defaultDailyMinutes, runWithPending, isAutoFilling]);
 
   const handleResetPlan = useCallback(async () => {
     if (!uid) return;
@@ -895,6 +910,7 @@ export default function PlanTabV2() {
               onNextWeek={undefined}
               onThisWeek={undefined}
               onAutoFillWeek={handleAutoFillWeek}
+              isAutoFilling={isAutoFilling}
               weekLabel={weekLabel}
               totalPlannedThisWeek={totalPlannedThisWeek}
             />
