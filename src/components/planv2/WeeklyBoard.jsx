@@ -865,7 +865,7 @@ export default function WeeklyBoard({
                       onClick={() => onAddFromMaster(expandedISO)}
                       disabled={expandedIsDone}
                     >
-                      Add from master
+                      Autofill day
                     </button>
                   )}
                 </div>
