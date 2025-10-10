@@ -20,6 +20,19 @@ import ProfileMenu from './components/ProfileMenu';
 import LandingPage from './pages/LandingPage';
 import AccountSettings from './pages/AccountSettings';
 import { UnsavedChangesProvider, useUnsavedChanges } from './context/UnsavedChangesContext';
+import {
+  loadOrInitWeek,
+  listMasterQueueLinear,
+} from "./services/planV2Api";
+import {
+  calculatePlanOverviewStats,
+  calculateWeeklyAssignmentTotals,
+  buildQueueSnapshot,
+  buildWeeklyStreak,
+  buildAchievementsSummary,
+  buildRevisionReminders,
+  defaultPlanOverviewStats,
+} from "./utils/planStats";
 
 
 
@@ -59,16 +72,26 @@ const buildDefaultFocus = () => ({
     focusDetails: [],
 });
 
+const EMPTY_WEEKLY_CAPACITY = { planned: 0, capacity: 0 };
+
 const initialDashboardState = {
   userName: "User",
   todayFocus: "No topic scheduled for today.",
   todayFocusDetails: [],
   syllabusCompletion: 0,
-  testScores: [80, 75, 85, 90, 82, 88],
+  testScores: [],
   topTopics: ["Breast", "MSK", "GIT"],
   bottomTopics: ["Neuroradiology", "Physics", "Cardiac"],
   daysUntilExam: 'N/A',
   daysUntilWeeklyTest: 5,
+  planOverview: defaultPlanOverviewStats,
+  planOverviewLoading: false,
+  weeklyCapacity: EMPTY_WEEKLY_CAPACITY,
+  queueSnapshot: [],
+  studyStreak: [],
+  streakCount: 0,
+  achievements: [],
+  revisionReminders: [],
 };
 
 const buildPlanV2Focus = async (uid, todayIso) => {
@@ -179,7 +202,6 @@ const buildPlanV2Focus = async (uid, todayIso) => {
         return buildDefaultFocus();
     }
 };
-
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -318,22 +340,98 @@ function AppShell() {
                 totalTopics > 0
                   ? Math.round((completedTopics / totalTopics) * 100)
                   : 0;
+
+              if (!isMounted) return;
+              setDashboardData((prev) => ({
+                ...prev,
+                ...update,
+                planOverview: defaultPlanOverviewStats,
+                planOverviewLoading: false,
+                weeklyCapacity: EMPTY_WEEKLY_CAPACITY,
+                queueSnapshot: [],
+                studyStreak: [],
+                streakCount: 0,
+                achievements: [],
+                revisionReminders: [],
+              }));
             } else {
               const focus = await buildPlanV2Focus(user.uid, today);
               update.todayFocus = focus.focusText;
               update.todayFocusDetails = focus.focusDetails;
+              const weekKey = getWeekStartKey(today);
               setPlanV2Context({
                 uid: user.uid,
-                weekKey: getWeekStartKey(today),
+                weekKey,
                 todayIso: today,
               });
-            }
 
-            if (!isMounted) return;
-            setDashboardData((prev) => ({
-              ...prev,
-              ...update,
-            }));
+              if (!isMounted) return;
+              setDashboardData((prev) => ({
+                ...prev,
+                ...update,
+                planOverviewLoading: true,
+              }));
+
+              try {
+                const [weekDoc, queueRows] = await Promise.all([
+                  loadOrInitWeek(
+                    user.uid,
+                    weekKey,
+                    Number(planData.dailyMinutes || 90),
+                  ),
+                  listMasterQueueLinear(user.uid, {}),
+                ]);
+
+                if (!isMounted) return;
+                const overview = calculatePlanOverviewStats(
+                  queueRows,
+                  weekDoc,
+                  planData,
+                );
+                const weeklyTotals =
+                  calculateWeeklyAssignmentTotals(weekDoc);
+                const snapshot = buildQueueSnapshot(queueRows);
+                const streakData = buildWeeklyStreak(weekDoc, weekKey, today);
+                const revisionReminders = buildRevisionReminders(
+                  queueRows,
+                  today,
+                );
+                const achievements = buildAchievementsSummary({
+                  planStats: overview,
+                  streakCount: streakData.streakCount,
+                  weeklyTotals,
+                  revisionCount: revisionReminders.filter(
+                    (item) => item.status !== "Upcoming",
+                  ).length,
+                });
+
+                setDashboardData((prev) => ({
+                  ...prev,
+                  planOverview: overview,
+                  weeklyCapacity: weeklyTotals,
+                  queueSnapshot: snapshot,
+                  planOverviewLoading: false,
+                  studyStreak: streakData.days,
+                  streakCount: streakData.streakCount,
+                  achievements,
+                  revisionReminders,
+                }));
+              } catch (err) {
+                console.error("Failed to compute dashboard overview", err);
+                if (!isMounted) return;
+                setDashboardData((prev) => ({
+                  ...prev,
+                  planOverview: defaultPlanOverviewStats,
+                  weeklyCapacity: EMPTY_WEEKLY_CAPACITY,
+                  queueSnapshot: [],
+                  planOverviewLoading: false,
+                  studyStreak: [],
+                  streakCount: 0,
+                  achievements: [],
+                  revisionReminders: [],
+                }));
+              }
+            }
           } else {
             setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
             if (!isMounted) return;
@@ -344,6 +442,14 @@ function AppShell() {
               todayFocusDetails: [],
               daysUntilExam: "N/A",
               syllabusCompletion: 0,
+              planOverview: defaultPlanOverviewStats,
+              planOverviewLoading: false,
+              weeklyCapacity: EMPTY_WEEKLY_CAPACITY,
+              queueSnapshot: [],
+              studyStreak: [],
+              streakCount: 0,
+              achievements: [],
+              revisionReminders: [],
             }));
           }
         });
@@ -483,6 +589,26 @@ function AppShell() {
     persistTabSelection("account");
   }, [persistTabSelection]);
 
+  const handleReviewTopic = useCallback(
+    (topic, action) => {
+      console.info("Requested review action:", action, "for topic:", topic);
+      persistTabSelection("learn");
+    },
+    [persistTabSelection],
+  );
+
+  const handleStartLearning = useCallback(() => {
+    persistTabSelection("learn");
+  }, [persistTabSelection]);
+
+  const handleGoToPlan = useCallback(() => {
+    persistTabSelection("plan");
+  }, [persistTabSelection]);
+
+  const handleGoToTest = useCallback(() => {
+    persistTabSelection("test");
+  }, [persistTabSelection]);
+
   if (!authReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -540,7 +666,15 @@ function AppShell() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard {...dashboardData} />;
+        return (
+          <Dashboard
+            {...dashboardData}
+            onStartLearning={handleStartLearning}
+            onReviewTopic={handleReviewTopic}
+            onOpenPlan={handleGoToPlan}
+            onOpenTest={handleGoToTest}
+          />
+        );
       case 'plan':
         return <PlanTabV2 />;
       case 'learn':
