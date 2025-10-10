@@ -24,16 +24,13 @@ export const getWeekDates = (anchor) => {
 };
 
 const THEME_PALETTES = [
-  { base: "#1d4ed8", scheduled: "#3b82f6", completed: "#1e40af", border: "#1e3a8a", text: "#ffffff" },
-  { base: "#0f766e", scheduled: "#14b8a6", completed: "#0d9488", border: "#0f766e", text: "#ffffff" },
-  { base: "#7c3aed", scheduled: "#a855f7", completed: "#6d28d9", border: "#5b21b6", text: "#ffffff" },
-  { base: "#dc2626", scheduled: "#f97316", completed: "#b91c1c", border: "#7f1d1d", text: "#ffffff" },
-  { base: "#0ea5e9", scheduled: "#38bdf8", completed: "#0284c7", border: "#0369a1", text: "#0f172a" },
-  { base: "#facc15", scheduled: "#fde047", completed: "#f59e0b", border: "#d97706", text: "#1f2937" },
-  { base: "#6366f1", scheduled: "#a5b4fc", completed: "#4f46e5", border: "#4338ca", text: "#ffffff" },
-  { base: "#22d3ee", scheduled: "#67e8f9", completed: "#06b6d4", border: "#0e7490", text: "#0f172a" },
-  { base: "#fb7185", scheduled: "#fda4af", completed: "#f43f5e", border: "#be123c", text: "#7f1d1d" },
-  { base: "#84cc16", scheduled: "#bef264", completed: "#65a30d", border: "#3f6212", text: "#1f2937" },
+  { base: "#3B82F6", border: "#1D4ED8", text: "#FFFFFF" },
+  { base: "#10B981", border: "#047857", text: "#FFFFFF" },
+  { base: "#F97316", border: "#C2410C", text: "#FFFFFF" },
+  { base: "#8B5CF6", border: "#6D28D9", text: "#FFFFFF" },
+  { base: "#EF4444", border: "#B91C1C", text: "#FFFFFF" },
+  { base: "#FBBF24", border: "#D97706", text: "#1F2937" },
+  { base: "#14B8A6", border: "#0F766E", text: "#FFFFFF" },
 ];
 
 export function sectionPalette(name) {

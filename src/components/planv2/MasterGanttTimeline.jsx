@@ -269,6 +269,18 @@ export default function MasterGanttTimeline({
       if (band.chapters && band.chapters.length) {
         tooltipParts.push(`Chapters: ${band.chapters.join(", ")}`);
       }
+      const labelLength = label.replace(/\s+/g, "").length;
+      let labelClassName = "text-base";
+      if (labelLength <= 8) {
+        labelClassName = "text-lg";
+      } else if (labelLength > 18) {
+        labelClassName = "text-xs";
+      } else if (labelLength > 12) {
+        labelClassName = "text-sm";
+      }
+      const textColor = (palette.text || "#FFFFFF").toLowerCase();
+      const textShadow =
+        textColor === "#ffffff" ? "0 1px 2px rgba(15,23,42,0.4)" : "none";
       return {
         key: `${band.section || "section"}-${idx}`,
         label,
@@ -277,6 +289,9 @@ export default function MasterGanttTimeline({
         widthPx: band.widthPx,
         completionRatio,
         scheduledRatio,
+        labelClassName,
+        textColor: palette.text || "#FFFFFF",
+        textShadow,
         tooltip: tooltipParts.join("\n"),
       };
     });
@@ -336,31 +351,38 @@ export default function MasterGanttTimeline({
 
   if (loading) {
     return (
-      <div className="w-full bg-white px-6 py-4">
-        <div className="text-sm text-gray-500">Loading timeline...</div>
+      <div className="flex w-full flex-col gap-4 rounded-3xl border border-indigo-100 bg-white/80 px-6 py-8 text-sm text-slate-500 shadow-xl shadow-indigo-200/40 backdrop-blur">
+        <div className="h-6 w-40 rounded-full bg-white/40" />
+        <div className="h-8 w-full rounded-3xl bg-white/50" />
+        <div className="h-24 w-full rounded-3xl bg-white/50" />
       </div>
     );
   }
 
   return (
-    <div className="w-full bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-        <div className="text-sm text-gray-700">
-          <span className="font-semibold">Master plan timeline</span>{" "}
-          <span className="text-gray-500">starting {startLabel}</span>
+    <div className="relative w-full overflow-hidden rounded-3xl border border-indigo-100 bg-white/80 shadow-2xl shadow-indigo-200/40 backdrop-blur">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-indigo-50/30 via-white/40 to-transparent" />
+      <div className="relative flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-700">
+            Master plan timeline
+          </p>
+          <p className="text-base font-semibold text-slate-800 sm:text-lg">
+            From {startLabel}
+          </p>
+          <p className="text-xs text-slate-500">
+            Visualising queued sections against daily capacity model.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Chip
-            label="Remaining minutes"
-            value={Math.round(totalMinutesRemaining)}
-          />
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          <Chip label="Remaining minutes" value={Math.round(totalMinutesRemaining)} />
           <Chip label="Blocks" value={contiguousBlocks.length} />
           <Chip label="Modeled days" value={schedule.totalDays} />
         </div>
       </div>
 
       {hasData ? (
-        <div className="overflow-x-auto overflow-y-hidden">
+        <div className="relative overflow-x-auto overflow-y-hidden timeline-scrollbar">
           <div
             className="space-y-5 px-6 pb-6"
             style={{ width: `${trackWidthPx}px`, minWidth: "100%" }}
@@ -370,7 +392,7 @@ export default function MasterGanttTimeline({
                 {axis.weeks.map((tick) => (
                   <div
                     key={`week-${tick.iso}`}
-                    className="absolute top-0 bottom-0 border-l border-gray-200"
+                    className="absolute top-0 bottom-0 border-l border-gray-200/70"
                     style={{ left: `${tick.leftPx}px` }}
                   />
                 ))}
@@ -380,13 +402,14 @@ export default function MasterGanttTimeline({
                 {timelineBlocks.map((block) => (
                   <div
                     key={block.key}
-                    className="absolute inset-y-1 rounded-md shadow-sm"
+                    className="absolute inset-y-1 overflow-hidden rounded-md border shadow-sm transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md"
                     style={{
                       left: `${block.leftPx}px`,
                       width: `${block.widthPx}px`,
-                      minWidth: "12px",
+                      minWidth: "16px",
                       backgroundColor: block.palette.base,
-                      border: `1px solid ${block.palette.border}`,
+                      borderColor: block.palette.border || "rgba(255,255,255,0.6)",
+                      boxShadow: "0 10px 18px rgba(15, 23, 42, 0.12)",
                     }}
                     title={block.tooltip}
                   >
@@ -394,29 +417,27 @@ export default function MasterGanttTimeline({
                       className="absolute inset-y-0 left-0"
                       style={{
                         width: `${block.scheduledRatio * 100}%`,
-                        backgroundColor: block.palette.scheduled,
-                        borderTopLeftRadius: "inherit",
-                        borderBottomLeftRadius: "inherit",
+                        backgroundColor: "rgba(255, 255, 255, 0.16)",
                       }}
                     />
                     <div
                       className="absolute inset-y-0 left-0"
                       style={{
                         width: `${block.completionRatio * 100}%`,
-                        backgroundColor: block.palette.completed,
-                        borderTopLeftRadius: "inherit",
-                        borderBottomLeftRadius: "inherit",
+                        backgroundColor: "rgba(255, 255, 255, 0.32)",
                       }}
                     />
                     <span
-                      className="relative z-10 flex h-full items-center justify-center px-3 text-xs font-semibold tracking-wide truncate"
-                      style={{ color: block.palette.text }}
+                      className={`relative z-10 flex h-full items-center justify-center px-4 text-center font-semibold tracking-tight ${block.labelClassName}`}
+                      style={{
+                        color: block.textColor,
+                        textShadow: block.textShadow,
+                      }}
                     >
                       {block.label}
                     </span>
                   </div>
                 ))}
-                \r\n{" "}
               </div>
 
               {todayOffsetPx !== null && (
@@ -427,41 +448,38 @@ export default function MasterGanttTimeline({
                   <div className="flex h-full flex-col items-center">
                     <div
                       className="h-full w-[2px]"
-                      style={{ backgroundColor: TODAY_COLOR }}
+                      style={{ backgroundColor: TODAY_COLOR, boxShadow: "0 0 12px rgba(14,165,233,0.35)" }}
                     />
                     <div
-                      className="h-2 w-2 -mb-1 rounded-full"
-                      style={{ backgroundColor: TODAY_COLOR }}
+                      className="h-2 w-2 -mb-1 rounded-full border border-white"
+                      style={{ backgroundColor: TODAY_COLOR, boxShadow: "0 0 10px rgba(14,165,233,0.45)" }}
                     />
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="relative h-10">
+            <div className="relative h-12">
               <div className="absolute inset-x-0 top-0 h-px bg-gray-200" />
               {axis.weeks.map((tick) => (
                 <div
                   key={`axis-week-${tick.iso}`}
-                  className="absolute top-0 h-2 w-px bg-gray-300"
+                  className="absolute top-0 h-5 border-l border-gray-200/80"
                   style={{ left: `${tick.leftPx}px` }}
                 />
               ))}
               {axis.months.map((tick) => (
                 <div
                   key={`axis-month-${tick.label}-${tick.leftPx}`}
-                  className="absolute top-0 h-3 w-[2px] bg-gray-500"
+                  className="absolute top-0 h-6 border-l border-gray-300"
                   style={{ left: `${tick.leftPx}px` }}
                 />
               ))}
               {axis.months.map((tick) => (
                 <div
                   key={`label-month-${tick.label}-${tick.leftPx}`}
-                  className="absolute top-3 text-[11px] font-medium text-gray-600"
-                  style={{
-                    left: `${tick.leftPx}px`,
-                    transform: "translateX(-50%)",
-                  }}
+                  className="absolute top-6 -translate-x-1/2 text-sm font-medium text-gray-500"
+                  style={{ left: `${tick.leftPx}px` }}
                 >
                   {tick.label}
                 </div>
@@ -470,8 +488,8 @@ export default function MasterGanttTimeline({
           </div>
         </div>
       ) : (
-        <div className="border-t border-gray-200 bg-white/70 px-6 py-8 text-sm text-gray-500">
-          Master queue is empty.
+        <div className="border-t border-indigo-100 bg-white/60 px-6 py-8 text-sm text-slate-500">
+          Master queue is empty. Add topics to see the timeline projection.
         </div>
       )}
     </div>
@@ -480,11 +498,9 @@ export default function MasterGanttTimeline({
 
 function Chip({ label, value }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
-      <div className="text-[11px] uppercase tracking-wide opacity-70">
-        {label}
-      </div>
-      <div className="font-semibold truncate">{value}</div>
+    <div className="flex min-w-[140px] flex-col rounded-lg border border-gray-200 bg-transparent px-4 py-3 shadow-sm">
+      <span className="text-xs font-medium text-gray-500">{label}</span>
+      <span className="text-2xl font-bold text-gray-800">{value}</span>
     </div>
   );
 }
