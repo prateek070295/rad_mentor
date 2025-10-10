@@ -44,69 +44,54 @@ const formatDayLabel = (value) => {
 };
 
 const statusStyles = {
-  "Due now": "bg-rose-100 text-rose-700 border border-rose-200",
-  Overdue: "bg-orange-100 text-orange-700 border border-orange-200",
-  "Due tomorrow": "bg-amber-100 text-amber-700 border border-amber-200",
-  Upcoming: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  "Due now": "border border-rose-300 bg-gradient-to-r from-rose-500/15 to-rose-400/20 text-rose-700 shadow shadow-rose-200/50",
+  Overdue: "border border-amber-300 bg-gradient-to-r from-amber-500/15 to-amber-400/20 text-amber-700 shadow shadow-amber-200/50",
+  "Due tomorrow": "border border-sky-300 bg-gradient-to-r from-sky-500/15 to-sky-400/20 text-sky-700 shadow shadow-sky-200/50",
+  Upcoming: "border border-emerald-300 bg-gradient-to-r from-emerald-500/15 to-emerald-400/20 text-emerald-700 shadow shadow-emerald-200/50",
 };
-
-const chipColors = [
-  "bg-sky-100 text-sky-700",
-  "bg-indigo-100 text-indigo-700",
-  "bg-teal-100 text-teal-700",
-  "bg-purple-100 text-purple-700",
-  "bg-blue-100 text-blue-700",
-];
 
 const SectionCard = ({
   title,
   description,
   actionArea,
   children,
+  tone = "bg-slate-50",
+  accentShadow = "shadow-xl shadow-slate-900/5",
   className = "",
 }) => (
   <section
-    className={`rounded-2xl border border-slate-200 bg-white p-6 shadow-sm ${className}`.trim()}
+    className={`rounded-3xl border border-slate-100 ${tone} p-6 sm:p-8 transition-colors ${accentShadow} ${className}`.trim()}
   >
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+          {title}
+        </h2>
         {description ? (
-          <p className="text-sm text-slate-500">{description}</p>
+          <p className="mt-1 text-sm text-slate-500 sm:text-base">{description}</p>
         ) : null}
       </div>
       {actionArea ?? null}
     </header>
-    <div className="mt-4">{children}</div>
+    <div className="mt-5">{children}</div>
   </section>
 );
 
 const StatTile = ({ label, value, helper, accent, children }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur">
-    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+  <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-900/10">
+    <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
       {label}
     </p>
-    <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-    {helper ? <p className="mt-1 text-sm text-slate-500">{helper}</p> : null}
+    <p className="mt-3 text-3xl font-semibold text-slate-900">{value}</p>
+    {helper ? <p className="mt-2 text-sm text-slate-500">{helper}</p> : null}
     {typeof accent === "string" ? (
       <p className="mt-2 text-xs font-medium text-indigo-600">{accent}</p>
     ) : (
       accent ?? null
     )}
-    {children ? <div className="mt-3">{children}</div> : null}
+    {children ? <div className="mt-4">{children}</div> : null}
   </div>
 );
-
-const Pill = ({ children, toneIndex = 0 }) => {
-  const tone = chipColors[toneIndex % chipColors.length];
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${tone}`}
-    >
-      {children}
-    </span>
-  );
-};
 
 function Dashboard({
   userName = "there",
@@ -114,10 +99,9 @@ function Dashboard({
   todayFocusDetails = [],
   syllabusCompletion = 0,
   testScores = [],
-  topTopics = [],
-  bottomTopics = [],
   daysUntilExam = "N/A",
-  queueSnapshot = [],
+  planOverview = {},
+  planOverviewLoading = false,
   studyStreak = [],
   streakCount = 0,
   achievements = [],
@@ -130,7 +114,6 @@ function Dashboard({
   const safeFocusDetails = Array.isArray(todayFocusDetails)
     ? todayFocusDetails
     : [];
-  const queueItems = Array.isArray(queueSnapshot) ? queueSnapshot : [];
   const streakDays = Array.isArray(studyStreak) ? studyStreak : [];
   const achievementItems = Array.isArray(achievements) ? achievements : [];
   const reminderItems = Array.isArray(revisionReminders)
@@ -144,8 +127,7 @@ function Dashboard({
         })
         .filter((value) => value !== null)
     : [];
-  const topTopicList = Array.isArray(topTopics) ? topTopics : [];
-  const bottomTopicList = Array.isArray(bottomTopics) ? bottomTopics : [];
+  // topTopics and bottomTopics retained for future use but currently unused after card removal
 
   const hasFocusDetails = safeFocusDetails.length > 0;
   const primaryFocus = hasFocusDetails ? safeFocusDetails[0] : null;
@@ -158,6 +140,23 @@ function Dashboard({
   const focusTopics = Array.isArray(primaryFocus?.topics)
     ? primaryFocus.topics.filter(Boolean)
     : [];
+  const planStats = planOverview || {};
+  const planProgressPercent =
+    typeof planStats?.overallProgress === "number"
+      ? clampPercent(planStats.overallProgress * 100)
+      : null;
+  const minutesStudied = Number(planStats?.minutesStudied || 0);
+  const minutesTotal = Number(planStats?.minutesTotal || 0);
+  const topicsCompleted = Number(planStats?.topicsCompleted || 0);
+  const topicsTotal = Number(planStats?.topicsTotal || 0);
+  const projectedEnd = formatProjectedDate(planStats?.projectedEndDate);
+  const hasPlanData =
+    (planProgressPercent !== null && planProgressPercent > 0) ||
+    minutesTotal > 0 ||
+    topicsTotal > 0;
+  const sparklinePoints = Array.isArray(streakDays)
+    ? streakDays.map((day) => (day.done ? 100 : 30))
+    : [];
   const syllabusPercent = clampPercent(syllabusCompletion);
 
   const maxScore = scoreList.reduce(
@@ -165,6 +164,41 @@ function Dashboard({
     0,
   );
   const scoreDenominator = maxScore > 0 ? maxScore : 100;
+  const scoreAverage =
+    scoreList.length > 0
+      ? Math.round(
+          scoreList.reduce((sum, value) => sum + value, 0) / scoreList.length,
+        )
+      : null;
+  const latestDelta =
+    scoreList.length > 1
+      ? scoreList[scoreList.length - 1] - scoreList[scoreList.length - 2]
+      : null;
+  const reminderOrder = ["Due now", "Overdue", "Due tomorrow", "Upcoming"];
+  const reminderGroups = reminderItems.reduce((acc, reminder) => {
+    const key = reminder.status || "Upcoming";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(reminder);
+    return acc;
+  }, {});
+  const reminderDecor = {
+    "Due now": {
+      header: "from-rose-500/20 to-rose-400/10",
+      border: "border-rose-200",
+    },
+    Overdue: {
+      header: "from-amber-500/20 to-amber-400/10",
+      border: "border-amber-200",
+    },
+    "Due tomorrow": {
+      header: "from-sky-500/20 to-sky-400/10",
+      border: "border-sky-200",
+    },
+    Upcoming: {
+      header: "from-emerald-500/20 to-emerald-400/10",
+      border: "border-emerald-200",
+    },
+  };
 
   const streakSummary =
     streakCount > 0 ? `${streakCount} day streak` : "No streak yet";
@@ -198,40 +232,42 @@ function Dashboard({
 
   return (
     <div className="grid gap-6 xl:grid-cols-3">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 via-indigo-500 to-blue-500 p-8 text-white shadow-xl sm:p-10 lg:p-12 xl:col-span-2">
-        <div className="absolute inset-y-0 right-[-20%] h-full w-2/3 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute bottom-[-40%] left-[-10%] h-2/3 w-1/2 rounded-full bg-blue-400/20 blur-3xl" />
-        <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-blue-500 p-6 text-white shadow-2xl shadow-indigo-600/30 sm:p-8 lg:p-10 xl:col-span-2 xl:h-full">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-indigo-400/20 mix-blend-screen" />
+        <div className="pointer-events-none absolute -right-20 top-0 h-72 w-72 rounded-full bg-gradient-to-br from-cyan-400/40 to-indigo-500/40 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-10 h-80 w-80 rounded-full bg-gradient-to-tr from-violet-500/35 to-pink-400/35 blur-3xl" />
+        <div className="pointer-events-none absolute right-10 top-10 h-32 w-32 rounded-full border border-white/20 bg-white/10 blur-md" />
+        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="max-w-2xl space-y-6">
-            <div className="inline-flex items-center rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-white/80">
+            <div className="inline-flex items-center rounded-full bg-white/20 px-5 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/85">
               Good morning
             </div>
             <div>
-              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
+              <h1 className="text-[34px] font-semibold leading-tight tracking-tight sm:text-[40px] lg:text-[44px]">
                 {userName ? `${userName}, a fresh start for the day.` : "A fresh start for the day."}
               </h1>
-              <p className="mt-3 text-base text-white/80">
+              <p className="mt-3 text-base text-white/85 sm:text-lg">
                 Here's what's lined up for you today.
               </p>
             </div>
 
-            <div className="rounded-[32px] border border-white/20 bg-white/10 p-6 shadow-inner backdrop-blur-sm sm:p-8">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+            <div className="rounded-[32px] border border-white/20 bg-white/12 p-6 shadow-xl shadow-indigo-900/25 backdrop-blur-lg sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
                 Today's focus
               </p>
               {primaryFocus || todayFocus ? (
-                <div className="mt-4 space-y-4 text-white">
+                <div className="mt-5 space-y-5 text-white">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-white/60">
                       Section
                     </p>
-                    <p className="mt-1 text-lg font-semibold">{focusSection}</p>
+                    <p className="mt-1 text-xl font-semibold leading-tight">{focusSection}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-white/60">
                       Chapter
                     </p>
-                    <p className="mt-1 text-lg font-semibold leading-snug">
+                    <p className="mt-1 text-xl font-semibold leading-snug text-white">
                       {focusChapter}
                     </p>
                   </div>
@@ -240,16 +276,16 @@ function Dashboard({
                       Topics
                     </p>
                     {focusTopics.length > 0 ? (
-                      <ul className="mt-2 space-y-1 text-sm">
+                      <ul className="mt-3 space-y-2 text-sm">
                         {focusTopics.map((topic, index) => (
-                          <li key={`${topic}-${index}`} className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-white/70" />
-                            <span className="font-medium">{topic}</span>
+                          <li key={`${topic}-${index}`} className="flex items-center gap-3 rounded-full bg-white/10 px-3 py-1 text-sm font-medium uppercase tracking-wide text-white/85">
+                            <span className="h-2 w-2 rounded-full bg-white/80" />
+                            {topic}
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="mt-2 text-sm text-white/80">
+                      <p className="mt-3 text-sm text-white/80">
                         {todayFocus || "Add topics to your plan to populate this section."}
                       </p>
                     )}
@@ -264,13 +300,13 @@ function Dashboard({
           </div>
 
           <div className="flex flex-col items-end gap-4">
-            <div className="rounded-full border border-white/30 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-white/80">
+            <div className="rounded-full border border-white/40 bg-white/10 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-white/80 shadow-inner shadow-white/20 backdrop-blur">
               {streakSummary}
             </div>
             <button
               type="button"
               onClick={handleStartLearning}
-              className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-indigo-600 shadow-lg shadow-black/10 transition hover:translate-y-[1px] hover:bg-slate-50"
+              className="inline-flex items-center justify-center rounded-full bg-white/95 px-7 py-3 text-sm font-semibold text-indigo-600 shadow-lg shadow-indigo-900/20 transition hover:-translate-y-0.5 hover:bg-white"
             >
               Start learning session
             </button>
@@ -278,9 +314,10 @@ function Dashboard({
         </div>
       </section>
       <SectionCard
-        className="xl:col-span-1"
+        tone="bg-white/75"
+        className="xl:col-span-1 flex h-full flex-col justify-between"
         title="At a glance"
-        description="A quick snapshot of where things stand."
+        description="Your key vitals for today."
       >
         <div className="space-y-3">
           <StatTile
@@ -299,7 +336,7 @@ function Dashboard({
               <button
                 type="button"
                 onClick={handleOpenPlan}
-                className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50"
+                className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
               >
                 Set exam date
               </button>
@@ -313,13 +350,123 @@ function Dashboard({
         </div>
       </SectionCard>
       <SectionCard
+        tone="bg-gradient-to-br from-indigo-50 via-white to-sky-50"
+        accentShadow="shadow-2xl shadow-indigo-200/60"
+        className="xl:col-span-3"
+        title="Plan pulse"
+        description="An intelligent snapshot of your trajectory and daily cadence."
+        actionArea={
+          <div className="flex items-center gap-2">
+            {planOverviewLoading ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                <span className="h-2 w-2 animate-ping rounded-full bg-indigo-500/80" />
+                Refreshing...
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleOpenPlan}
+              className="inline-flex items-center rounded-full border border-indigo-300 bg-white/70 px-4 py-2 text-xs font-semibold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-400 hover:bg-white"
+            >
+              Refine plan
+            </button>
+          </div>
+        }
+      >
+        {planOverviewLoading ? (
+          <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div className="space-y-4">
+              <div className="h-8 rounded-xl bg-white/60" />
+              <div className="h-3 rounded-full bg-white/50" />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="h-20 rounded-2xl bg-white/60" />
+                <div className="h-20 rounded-2xl bg-white/60" />
+                <div className="h-20 rounded-2xl bg-white/60" />
+              </div>
+            </div>
+            <div className="h-32 rounded-2xl bg-white/60" />
+          </div>
+        ) : hasPlanData ? (
+          <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between text-sm font-medium text-slate-600">
+                  <span>Overall progress</span>
+                  <span>{planProgressPercent === null ? "--" : `${planProgressPercent}%`}</span>
+                </div>
+                <div className="relative mt-4 h-3 overflow-hidden rounded-full bg-white/60">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-cyan-400 shadow-inner shadow-indigo-500/30"
+                    style={{ width: `${planProgressPercent ?? 0}%` }}
+                  />
+                  <div className="absolute inset-0 rounded-full border border-white/20" />
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-md shadow-indigo-200/40 backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Minutes</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {minutesStudied} <span className="text-base font-medium text-slate-500">/ {minutesTotal}</span>
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">Logged vs scheduled</p>
+                </div>
+                <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-md shadow-indigo-200/40 backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Topics</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {topicsCompleted} <span className="text-base font-medium text-slate-500">/ {topicsTotal}</span>
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">Completed so far</p>
+                </div>
+                <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-md shadow-indigo-200/40 backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Projected finish</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {projectedEnd}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">Based on current cadence</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex h-full flex-col justify-between rounded-2xl border border-white/60 bg-white/70 p-4 shadow-md shadow-indigo-200/40 backdrop-blur-sm">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Consistency</p>
+                <p className="mt-2 text-sm text-slate-600">Past seven days</p>
+              </div>
+              <div className="mt-4 flex h-24 items-end gap-1">
+                {sparklinePoints.map((value, index) => (
+                  <div
+                    key={`spark-${index}`}
+                    className="flex-1 rounded-t-full bg-gradient-to-t from-indigo-200 to-indigo-500 transition hover:from-indigo-300 hover:to-indigo-600"
+                    style={{ height: `${Math.max(20, value)}%` }}
+                  />
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                {streakCount > 0
+                  ? `You're on a ${streakCount}-day streak. Keep that momentum going!`
+                  : "Complete a session today to start your streak."}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-indigo-200 bg-white/70 p-6 text-sm text-slate-600 shadow-inner shadow-indigo-100/60 backdrop-blur">
+            You haven't created a detailed plan yet. Once you do, we'll give you a personal progress pulse here.
+          </div>
+        )}
+      </SectionCard>
+      <SectionCard
+        tone="bg-indigo-50"
         className="xl:col-span-1"
         title="Performance trend"
         description="Keep tabs on your assessment progress."
       >
         {scoreList.length > 0 ? (
           <div className="space-y-4">
-            <div className="flex h-32 items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            {latestDelta !== null ? (
+              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${latestDelta >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                {latestDelta >= 0 ? "+ " : "- "}{Math.abs(latestDelta)} vs last test
+              </div>
+            ) : null}
+            <div className="relative flex h-32 items-end gap-2 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-inner shadow-indigo-200/40">
               {scoreList.map((score, index) => {
                 const height = Math.max(
                   8,
@@ -328,7 +475,7 @@ function Dashboard({
                 return (
                   <div
                     key={`${score}-${index}`}
-                    className="group flex-1 rounded-t bg-gradient-to-t from-indigo-200 to-indigo-500 transition hover:from-indigo-300 hover:to-indigo-600"
+                    className="group flex-1 rounded-t-md bg-gradient-to-t from-indigo-400 to-indigo-600 transition hover:from-indigo-500 hover:to-indigo-700"
                     style={{ height: `${height}%` }}
                     title={`Attempt ${index + 1}: ${score}`}
                   >
@@ -338,6 +485,20 @@ function Dashboard({
                   </div>
                 );
               })}
+              {scoreAverage !== null ? (
+                <div
+                  className="pointer-events-none absolute inset-x-3"
+                  style={{ bottom: `${Math.min(100, Math.max(0, (scoreAverage / scoreDenominator) * 100))}%` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-gradient-to-r from-transparent via-indigo-400 to-transparent" />
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 shadow-sm">
+                      Avg {scoreAverage}
+                    </span>
+                    <div className="h-px flex-1 bg-gradient-to-r from-transparent via-indigo-400 to-transparent" />
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>Latest</span>
@@ -345,7 +506,7 @@ function Dashboard({
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-white/70 p-6 text-center text-sm text-slate-500">
             <p>No tests taken yet.</p>
             <button
               type="button"
@@ -358,143 +519,81 @@ function Dashboard({
         )}
       </SectionCard>
       <SectionCard
+        tone="bg-indigo-50"
         className="xl:col-span-1"
         title="Revision reminders"
         description="Stay sharp by spacing out review sessions."
       >
         {reminderItems.length > 0 ? (
-          <ul className="space-y-3">
-            {reminderItems.map((reminder, index) => {
-              const badgeStyle =
-                statusStyles[reminder.status] ||
-                "bg-slate-100 text-slate-600 border border-slate-200";
-              return (
-                <li
-                  key={reminder.id || `${reminder.title}-${index}`}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {reminder.title}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Last studied: {formatProjectedDate(reminder.lastStudied)} - {reminder.daysSince || 0} days ago
-                    </p>
-                    {reminder.section ? (
-                      <p className="mt-1 text-xs text-slate-400">
-                        {reminder.section}
-                      </p>
-                    ) : null}
+          <div className="space-y-4">
+            {reminderOrder
+              .filter((status) => reminderGroups[status])
+              .map((status) => {
+                const entries = reminderGroups[status];
+                const decor = reminderDecor[status] || reminderDecor.Upcoming;
+                const badgeStyle =
+                  statusStyles[status] ||
+                  "bg-slate-100 text-slate-600 border border-slate-200 shadow-sm";
+                return (
+                  <div
+                    key={status}
+                    className={`rounded-2xl border ${decor.border} bg-gradient-to-r ${decor.header} p-4`}
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-700">{status}</p>
+                      <span className="text-xs text-slate-500">
+                        {entries.length} reminder{entries.length > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <ul className="space-y-3">
+                      {entries.map((reminder, index) => (
+                        <li
+                          key={reminder.id || `${reminder.title}-${index}`}
+                          className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/60 bg-white/80 px-4 py-3 shadow-sm shadow-slate-200/40 backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-200/60"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">
+                              {reminder.title}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Last studied: {formatProjectedDate(reminder.lastStudied)} - {reminder.daysSince || 0} days ago
+                            </p>
+                            {reminder.section ? (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {reminder.section}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeStyle}`}
+                            >
+                              {reminder.status}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleReview(reminder, "revision-reminder")}
+                              className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50"
+                            >
+                              Review
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeStyle}`}
-                    >
-                      {reminder.status}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleReview(reminder, "revision-reminder")}
-                      className="inline-flex items-center rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-                    >
-                      Review
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                );
+              })}
+          </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-indigo-200 bg-white/70 p-6 text-center text-sm text-slate-500">
             No revision items are pending. Completed topics will prompt reminders once they reach their spaced revision window.
           </div>
         )}
       </SectionCard>
       <SectionCard
-        className="xl:col-span-1"
-        title="Queue snapshot"
-        description="The next few topics waiting in your master queue."
-      >
-        {queueItems.length > 0 ? (
-          <ul className="space-y-3">
-            {queueItems.map((item, index) => (
-              <li
-                key={item.id || `${item.title}-${index}`}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {item.title || "Queued topic"}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {item.section || "Plan queue"} - {Math.round(Number(item.minutes || 0))} minutes
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleReview(item, "queue-item")}
-                  className="inline-flex items-center rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  Review
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-            Your queue is empty. Add more topics from the planner to keep momentum going.
-          </div>
-        )}
-      </SectionCard>
-      <SectionCard
-        className="xl:col-span-1"
-        title="Strongest topics"
-        description="Keep reinforcing what is already working."
-      >
-        {topTopicList.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {topTopicList.map((topic, index) => (
-              <Pill key={`${topic}-${index}`} toneIndex={index}>
-                {topic}
-              </Pill>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">
-            We will highlight your best-performing areas once you log some assessments.
-          </p>
-        )}
-      </SectionCard>
-      <SectionCard
-        className="xl:col-span-1"
-        title="Needs attention"
-        description="Plan extra review sessions for these areas."
-      >
-        {bottomTopicList.length > 0 ? (
-          <ul className="space-y-2 text-sm text-slate-600">
-            {bottomTopicList.map((topic, index) => (
-              <li
-                key={`${topic}-${index}`}
-                className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700"
-              >
-                <span>{topic}</span>
-                <button
-                  type="button"
-                  onClick={() => handleReview({ topic }, "needs-attention")}
-                  className="text-xs font-semibold text-rose-600 underline-offset-2 hover:underline"
-                >
-                  Add review
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-500">
-            Once you have enough results, we will surface topics that need more work.
-          </p>
-        )}
-      </SectionCard>
-      <SectionCard
+        tone="bg-emerald-50"
+        accentShadow="shadow-xl shadow-emerald-200/40"
         className="xl:col-span-1"
         title="Achievements"
         description="Milestones unlocked from recent progress."
@@ -520,12 +619,13 @@ function Dashboard({
         )}
       </SectionCard>
       <SectionCard
-        className="xl:col-span-2"
+        tone="bg-white/80"
+        className="xl:col-span-3"
         title="Weekly streak"
         description="Mark at least one session per day to grow your streak."
       >
         {streakDays.length > 0 ? (
-          <div className="flex flex-wrap gap-3">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-7">
             {streakDays.map((day) => {
               const date = formatProjectedDate(day.iso);
               const isDone = Boolean(day.done);
@@ -533,11 +633,11 @@ function Dashboard({
               return (
                 <div
                   key={day.iso}
-                  className={`flex min-w-[90px] flex-col items-center rounded-xl border px-3 py-2 text-xs font-medium ${
+                  className={`flex h-full flex-col items-center justify-center rounded-xl border px-3 py-3 text-xs font-medium transition ${
                     isDone
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : "border-slate-200 bg-slate-50 text-slate-500"
-                  } ${isToday ? "ring-2 ring-indigo-300" : ""}`}
+                  } ${isToday ? "ring-2 ring-indigo-300" : ""} hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/70`}
                 >
                   <span>{date}</span>
                   <span className="mt-1 text-[11px] uppercase tracking-wide">
@@ -548,7 +648,7 @@ function Dashboard({
             })}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-center text-sm text-slate-500">
             Complete a study session to start building your streak.
           </div>
         )}

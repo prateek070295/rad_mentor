@@ -709,43 +709,63 @@ function AppShell() {
   };
 
   return (
-    <div className="h-screen w-screen bg-gray-100 font-inter flex flex-col">
+    <div className="flex h-screen w-screen flex-col bg-gradient-to-br from-slate-100 via-slate-50 to-white font-inter text-[16.5px] leading-relaxed">
       {/* Conditionally render the header based on focus mode */}
       {!isFocusMode && (
-        <header className="flex-shrink-0 bg-white shadow-md p-4 flex items-center justify-between z-20">
-          <div className="flex items-center space-x-2">
-            <img src={appLogo} alt="Rad Mentor App Logo" className="w-8 h-8" />
-            <span className="text-xl font-bold text-gray-800">Rad Mentor</span>
+        <header className="sticky top-0 z-30 flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-md transition-colors">
+          <div className="flex items-center space-x-3">
+            <img src={appLogo} alt="Rad Mentor App Logo" className="h-10 w-10 drop-shadow" />
+            <span className="text-2xl font-semibold text-slate-900">Rad Mentor</span>
           </div>
           <div className="flex items-center space-x-4">
-            <nav className="hidden md:flex space-x-4">
+            <nav className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white/70 p-1 shadow-inner shadow-slate-200/60 backdrop-blur md:flex">
               <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === 'dashboard'
+                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-300/40'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
                 onClick={() => persistTabSelection('dashboard')}
               >
                 Dashboard
               </button>
               <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'plan' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === 'plan'
+                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-300/40'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
                 onClick={() => persistTabSelection('plan')}
               >
                 Plan
               </button>
               <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'learn' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === 'learn'
+                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-300/40'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
                 onClick={() => persistTabSelection('learn')}
               >
                 Learn
               </button>
               <button
-                className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'test' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === 'test'
+                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-300/40'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
                 onClick={() => persistTabSelection('test')}
               >
                 Test
               </button>
               {isAdmin && (
                 <button
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                    activeTab === 'admin'
+                      ? 'bg-indigo-500 text-white shadow-md shadow-indigo-300/40'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
                   onClick={() => persistTabSelection('admin')}
                 >
                   Admin
@@ -754,8 +774,8 @@ function AppShell() {
             </nav>
             <div className="flex items-center space-x-3">
               <div className="hidden text-right text-sm sm:block">
-                <p className="font-semibold text-gray-700">{userDisplayName}</p>
-                <p className="text-xs text-gray-400">{userEmail || 'Signed in'}</p>
+                <p className="font-semibold text-slate-800">{userDisplayName}</p>
+                <p className="text-xs text-slate-500">{userEmail || 'Signed in'}</p>
               </div>
               <ProfileMenu
                 displayName={userDisplayName}
@@ -773,7 +793,7 @@ function AppShell() {
 
       {/* Main content area now grows and handles its own scrolling */}
       <main className="flex-grow overflow-y-auto">
-        <div className={isFocusMode || activeTab === 'learn' ? "" : "container mx-auto p-4 sm:p-6 lg:p-8"}>
+        <div className={isFocusMode || activeTab === 'learn' ? "" : "mx-auto w-full max-w-[1440px] px-4 pb-10 pt-6 sm:px-8 lg:px-12"}>
             {renderContent()}
         </div>
       </main>
