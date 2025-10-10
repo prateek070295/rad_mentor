@@ -538,69 +538,82 @@ export default function WeeklyBoard({
           isAutoFilling ? "pointer-events-none select-none opacity-0" : "opacity-100"
         }`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-lg font-semibold">
-            {weekLabel || "This Week"}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-indigo-100 bg-white/70 px-4 py-4 shadow-inner shadow-indigo-100/60">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
+              Weekly compass
+            </p>
+            <p className="text-2xl font-semibold text-slate-800">
+              {weekLabel || "This Week"}
+            </p>
+            <p className="text-sm text-slate-500">
+              {Number(totalPlannedThisWeek || 0)} minutes planned across the week
+            </p>
           </div>
-          <div className="text-sm text-gray-500">
-            Planned: {Number(totalPlannedThisWeek || 0)} min
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex border rounded overflow-hidden">
-            <button
-              className={`px-3 py-1 text-sm ${mode === "week" ? "bg-gray-200" : "bg-white"}`}
-              onClick={() => setMode("week")}
-            >
-              Week
-            </button>
-            <button
-              className={`px-3 py-1 text-sm ${mode === "day" ? "bg-gray-200" : "bg-white"}`}
-              onClick={() => setMode("day")}
-              disabled={!expandedISO}
-            >
-              Day
-            </button>
-          </div>
-          <label className="text-xs text-gray-600 flex items-center gap-1">
-            <input
-              type="checkbox"
-              checked={hidePastDays}
-              onChange={() => setHidePastDays((prev) => !prev)}
-            />
-            Hide past days
-          </label>
-          {onAutoFillWeek && (
-            <button
-              className={`relative px-3 py-1 text-sm border rounded hover:bg-gray-50 flex items-center justify-center ${
-                isAutoFilling ? "opacity-60 cursor-not-allowed" : ""
-              } min-w-[150px]`}
-              onClick={onAutoFillWeek}
-              disabled={isAutoFilling}
-            >
-              <span
-                className={`transition-opacity ${isAutoFilling ? "opacity-0" : "opacity-100"}`}
-              >
-                Auto-fill week
-              </span>
-              <span
-                className={`absolute inset-0 flex items-center justify-center gap-2 transition-opacity ${
-                  isAutoFilling ? "opacity-100" : "opacity-0 pointer-events-none"
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-white px-1 py-1 shadow-sm shadow-indigo-100/60">
+              <button
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  mode === "week"
+                    ? "bg-indigo-500 text-white shadow-md shadow-indigo-300/60"
+                    : "text-indigo-600 hover:bg-indigo-50"
                 }`}
+                onClick={() => setMode("week")}
               >
-                <span className="inline-flex h-3 w-3 animate-spin rounded-full border border-blue-500 border-t-transparent" />
-                Auto-filling...
-              </span>
+                Week
+              </button>
+              <button
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  mode === "day"
+                    ? "bg-indigo-500 text-white shadow-md shadow-indigo-300/60"
+                    : "text-indigo-600 hover:bg-indigo-50"
+                } ${!expandedISO ? "cursor-not-allowed opacity-40" : ""}`}
+                onClick={() => setMode("day")}
+                disabled={!expandedISO}
+              >
+                Day
+              </button>
+            </div>
+            <label className="flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-600 shadow-sm shadow-indigo-100/60 transition hover:bg-indigo-50">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded border-indigo-200 text-indigo-600 focus:ring-indigo-400"
+                checked={hidePastDays}
+                onChange={() => setHidePastDays((prev) => !prev)}
+              />
+              Hide past days
+            </label>
+            {onAutoFillWeek && (
+              <button
+                className={`relative inline-flex min-w-[150px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-1.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/40 transition ${
+                  isAutoFilling ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5"
+                }`}
+                onClick={onAutoFillWeek}
+                disabled={isAutoFilling}
+              >
+                <span
+                  className={`transition-opacity ${isAutoFilling ? "opacity-0" : "opacity-100"}`}
+                >
+                  Auto-fill week
+                </span>
+                <span
+                  className={`absolute inset-0 flex items-center justify-center gap-2 transition-opacity ${
+                    isAutoFilling ? "opacity-100" : "opacity-0 pointer-events-none"
+                  }`}
+                >
+                  <span className="inline-flex h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                  Auto-filling...
+                </span>
+              </button>
+            )}
+            <button
+              className="inline-flex items-center rounded-full border border-indigo-200 bg-white px-4 py-1.5 text-xs font-semibold text-indigo-600 shadow-sm shadow-indigo-100/60 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={openSearchModal}
+              disabled={expandedIsDone}
+            >
+              Search queue
             </button>
-          )}
-          <button
-            className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
-            onClick={openSearchModal}
-            disabled={expandedIsDone}
-          >
-            Search queue
-          </button>
+          </div>
         </div>
       </div>
 
@@ -612,7 +625,7 @@ export default function WeeklyBoard({
 
       <div className="mt-4">
         {mode === "week" ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(dayList.length ? dayList : weekDates).map((date) => {
               const iso = toISO(date);
               const isExpanded = expandedISO === iso;
@@ -628,20 +641,20 @@ export default function WeeklyBoard({
                 remainingByDay?.[iso] ?? Math.max(0, cap - used),
               );
               const dropActive = dragOverISO === iso;
-              const borderClasses = isDone
-                ? "border-green-300 ring-1 ring-green-200"
-                : dropActive
-                  ? "border-green-400 ring-2 ring-green-200"
+              const cardClasses = dropActive
+                ? "border-indigo-300 shadow-xl shadow-indigo-200/60 ring-2 ring-indigo-200"
+                : isDone
+                  ? "border-emerald-300 shadow-xl shadow-emerald-200/60"
                   : isExpanded
-                    ? "border-blue-400 ring-1 ring-blue-200"
-                    : "border-gray-200";
+                    ? "border-indigo-300 shadow-lg shadow-indigo-200/60"
+                    : "border-slate-200 shadow-md shadow-slate-200/50";
 
               return (
                 <div
                   key={iso}
-                  className={`min-h-[340px] rounded border bg-white p-4 shadow-sm transition focus-within:ring ${borderClasses} ${
-                    isOff ? "opacity-70" : ""
-                  } ${isDone ? "opacity-75" : ""}`}
+                  className={`group min-h-[340px] rounded-3xl border bg-white/90 p-5 transition-all duration-200 focus-within:ring ${cardClasses} ${
+                    isOff ? "opacity-65" : ""
+                  } ${isDone ? "opacity-80" : ""}`}
                   onDragOver={(event) => handleDayDragOver(event, iso)}
                   onDragEnter={(event) => handleDayDragEnter(event, iso)}
                   onDragLeave={(event) => handleDayDragLeave(event, iso)}
@@ -649,31 +662,31 @@ export default function WeeklyBoard({
                     handleQueueDrop(event, iso, remaining, cap)
                   }
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs uppercase tracking-wide text-gray-400">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400">
                         {formatDateDisplay(date, daySummaryFormat)}
                       </div>
-                      <div className="text-lg font-semibold text-gray-900">
-                        {used} / {cap} min
+                      <div className="mt-1 text-2xl font-semibold text-slate-800">
+                        {used} / {cap || 0} min
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-slate-500">
                         {remaining} min remaining{isToday ? " - Today" : ""}
                       </div>
                       {isOff && (
-                        <div className="mt-1 text-xs font-medium text-amber-600">
+                        <div className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                           Marked off day
                         </div>
                       )}
                       {isDone && (
-                        <div className="mt-1 text-xs font-medium text-green-600">
+                        <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                           Marked complete
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col items-end gap-2">
                       <button
-                        className="rounded border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50"
+                        className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                         onClick={() => {
                           setExpandedISO(iso);
                           setMode("day");
@@ -684,65 +697,67 @@ export default function WeeklyBoard({
                     </div>
                   </div>
 
-                  <ul className="mt-3 space-y-1 text-xs text-gray-600">
+                  <ul className="mt-4 space-y-2 text-xs text-slate-500">
                     {summaryItems.slice(0, 4).map((item) => (
                       <li
                         key={`${iso}-${item.key}`}
-                        className="flex justify-between gap-2"
+                        className="flex justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-slate-600 shadow-sm"
                       >
                         <span className="truncate">{item.label}</span>
                         <span>{Number(item.minutes || 0)}m</span>
                       </li>
                     ))}
                     {summaryItems.length === 0 && (
-                      <li className="text-gray-400">No topics scheduled.</li>
+                      <li className="rounded-xl bg-white/70 px-3 py-2 text-center text-slate-400 shadow-inner">
+                        No topics scheduled.
+                      </li>
                     )}
                     {summaryItems.length > 4 && (
-                      <li className="text-gray-400">
-                        +{summaryItems.length - 4} more...
+                      <li className="text-center text-slate-400">
+                        +{summaryItems.length - 4} more…
                       </li>
                     )}
                   </ul>
 
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
                     <button
-                      className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => onToggleOffDay?.(iso, !isOff)}
                       disabled={isDone}
                     >
                       {isOff ? "Mark study day" : "Mark off day"}
                     </button>
                     <button
-                      className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => onAdjustDayCap?.(iso, -10)}
                       disabled={isDone}
                     >
                       -10 min
                     </button>
                     <button
-                      className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => onAdjustDayCap?.(iso, 10)}
                       disabled={isDone}
                     >
                       +10 min
                     </button>
                     <button
-                      className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
-                      onClick={() => handleMarkDoneClick(iso)}
-                      disabled={isDone}
-                    >
-                      {isDone ? "Done" : "Mark done"}
-                    </button>
-                    <button
-                      className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => promptForCap(iso, cap)}
                       disabled={isDone}
                     >
                       Set capacity
                     </button>
+                    <button
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100 disabled:opacity-60"
+                      onClick={() => handleMarkDoneClick(iso)}
+                      disabled={isDone}
+                    >
+                      {isDone ? "Done" : "Mark done"}
+                    </button>
                     {onAddFromMaster && (
                       <button
-                        className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50"
+                        className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                         onClick={() => onAddFromMaster(iso)}
                         disabled={isDone}
                       >
@@ -754,47 +769,47 @@ export default function WeeklyBoard({
               );
             })}
             {!dayList.length && !weekDates.length && (
-              <div className="rounded border border-gray-200 bg-white p-4 text-sm text-gray-500">
+              <div className="rounded-3xl border border-indigo-100 bg-white/75 p-4 text-center text-sm text-slate-500 shadow-inner shadow-indigo-100/60">
                 No days available for this week.
               </div>
             )}
           </div>
         ) : (
-          <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="rounded-3xl border border-indigo-100 bg-white/80 p-5 shadow-lg shadow-indigo-200/50">
             {expandedISO ? (
               <>
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-indigo-100 bg-white/70 px-4 py-4 shadow-inner shadow-indigo-100/50">
                   <div>
-                    <div className="text-lg font-semibold">
+                    <div className="text-2xl font-semibold text-slate-800">
                       {formatDateDisplay(
                         expandedDate || expandedISO,
                         dayTitleFormat,
                       ) || expandedISO}
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-slate-500">
                       {currentUsed} / {currentCap} min planned -{" "}
                       {currentRemaining} min remaining
                     </div>
                     {offDays?.[expandedISO] && (
-                      <div className="text-xs font-medium text-amber-600">
+                      <div className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                         Marked as off day
                       </div>
                     )}
                     {expandedIsDone && (
-                      <div className="text-xs font-medium text-green-600">
+                      <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                         Marked complete
                       </div>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded border border-gray-200 px-3 py-1 text-xs hover:bg-gray-50"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => setMode("week")}
                     >
                       Back to week
                     </button>
                     <button
-                      className="rounded border border-gray-200 px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-40"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
                       onClick={() => {
                         const idx = weekIsoList.indexOf(expandedISO);
                         if (idx > 0) setExpandedISO(weekIsoList[idx - 1]);
@@ -804,7 +819,7 @@ export default function WeeklyBoard({
                       Prev day
                     </button>
                     <button
-                      className="rounded border border-gray-200 px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-40"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
                       onClick={() => {
                         const idx = weekIsoList.indexOf(expandedISO);
                         if (idx > -1 && idx < weekIsoList.length - 1) {
@@ -821,9 +836,9 @@ export default function WeeklyBoard({
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <div className="mt-4 flex flex-wrap gap-2 text-xs">
                   <button
-                    className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                     onClick={() =>
                       onToggleOffDay?.(expandedISO, !offDays?.[expandedISO])
                     }
@@ -832,28 +847,28 @@ export default function WeeklyBoard({
                     {offDays?.[expandedISO] ? "Mark study day" : "Mark off day"}
                   </button>
                   <button
-                    className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                     onClick={() => onAdjustDayCap?.(expandedISO, -10)}
                     disabled={expandedIsDone}
                   >
                     -10 min
                   </button>
                   <button
-                    className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                     onClick={() => onAdjustDayCap?.(expandedISO, 10)}
                     disabled={expandedIsDone}
                   >
                     +10 min
                   </button>
                   <button
-                    className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                    className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100 disabled:opacity-60"
                     onClick={() => handleMarkDoneClick(expandedISO)}
                     disabled={expandedIsDone}
                   >
                     {expandedIsDone ? "Done" : "Mark done"}
                   </button>
                   <button
-                    className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                     onClick={() => promptForCap(expandedISO, currentCap)}
                     disabled={expandedIsDone}
                   >
@@ -861,7 +876,7 @@ export default function WeeklyBoard({
                   </button>
                   {onAddFromMaster && (
                     <button
-                      className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => onAddFromMaster(expandedISO)}
                       disabled={expandedIsDone}
                     >
@@ -871,11 +886,11 @@ export default function WeeklyBoard({
                 </div>
 
                 <div
-                  className={`mt-4 space-y-4 min-h-[4rem] ${
+                  className={`mt-4 min-h-[4rem] space-y-4 rounded-2xl border border-dashed border-indigo-100 bg-white/70 p-3 transition ${
                     dragOverISO === expandedISO
-                      ? "rounded border border-green-300 ring-2 ring-green-200"
+                      ? "border-indigo-300 bg-sky-50 ring-2 ring-indigo-200"
                       : ""
-                  } ${expandedIsDone ? "opacity-75" : ""}`}
+                  } ${expandedIsDone ? "opacity-80" : ""}`}
                   onDragOver={(event) => handleDayDragOver(event, expandedISO)}
                   onDragEnter={(event) =>
                     handleDayDragEnter(event, expandedISO)
@@ -896,20 +911,20 @@ export default function WeeklyBoard({
                     groupedItems.map((chapter) => (
                       <div
                         key={chapter.key}
-                        className="rounded border border-gray-100 bg-gray-50 p-3"
+                        className="rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm shadow-indigo-100/50"
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <div className="font-semibold text-gray-800">
+                            <div className="font-semibold text-slate-800">
                               {chapter.name}
                             </div>
                             {chapter.section && (
-                              <div className="text-xs uppercase tracking-wide text-gray-500">
+                              <div className="text-xs uppercase tracking-wide text-slate-500">
                                 {chapter.section}
                               </div>
                             )}
                           </div>
-                          <div className="text-sm font-medium text-gray-600">
+                          <div className="text-sm font-semibold text-slate-600">
                             {Number(chapter.totalMinutes || 0)} min
                           </div>
                         </div>
@@ -918,27 +933,27 @@ export default function WeeklyBoard({
                           {chapter.topics.map((topic) => (
                             <div
                               key={topic.key}
-                              className="rounded border border-white bg-white p-3 shadow-sm"
+                              className="rounded-2xl border border-indigo-100 bg-white px-4 py-3 shadow-sm shadow-indigo-100/40"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <div className="font-medium text-gray-800">
+                                  <div className="font-semibold text-slate-800">
                                     {topic.name}
                                   </div>
                                   {topic.section && (
-                                    <div className="text-xs uppercase tracking-wide text-gray-500">
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">
                                       {topic.section}
                                     </div>
                                   )}
                                 </div>
-                                <div className="text-sm font-medium text-gray-600">
+                                <div className="text-sm font-semibold text-slate-600">
                                   {Number(topic.totalMinutes || 0)} min
                                 </div>
                               </div>
 
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              <div className="mt-3 flex flex-wrap gap-2 text-xs">
                                 <button
-                                  className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
                                   onClick={() =>
                                     removeFromDay(expandedISO, topic.seq)
                                   }
@@ -947,7 +962,7 @@ export default function WeeklyBoard({
                                   Move to next day
                                 </button>
                                 <button
-                                  className="rounded border border-gray-200 px-3 py-1 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
                                   onClick={() => unscheduleToQueue(topic.seq)}
                                   disabled={!topic.seq || expandedIsDone}
                                 >
@@ -956,11 +971,11 @@ export default function WeeklyBoard({
                               </div>
 
                               {topic.subtopics.length > 0 && (
-                                <ul className="mt-3 space-y-1 text-xs text-gray-600">
+                                <ul className="mt-3 space-y-1 text-xs text-slate-500">
                                   {topic.subtopics.map((sub) => (
                                     <li
                                       key={sub.key}
-                                      className="flex justify-between gap-2"
+                                      className="flex justify-between gap-2 rounded-xl bg-slate-50 px-3 py-1.5 text-slate-600"
                                     >
                                       <span className="truncate">
                                         {sub.name}
@@ -978,14 +993,14 @@ export default function WeeklyBoard({
                       </div>
                     ))
                   ) : (
-                    <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                    <div className="rounded-2xl border border-dashed border-indigo-200 bg-white/70 p-6 text-center text-sm text-slate-500 shadow-inner shadow-indigo-100/50">
                       No topics scheduled for this day.
                     </div>
                   )}
                 </div>
               </>
             ) : (
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-slate-500">
                 Select a day to inspect.
               </div>
             )}
@@ -995,11 +1010,11 @@ export default function WeeklyBoard({
 
       {showSearchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-          <div className="flex w-full max-w-2xl max-h-[80vh] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <h3 className="text-base font-semibold">Search Master Queue</h3>
+          <div className="flex w-full max-w-2xl max-h-[80vh] flex-col overflow-hidden rounded-3xl border border-indigo-100 bg-white shadow-2xl shadow-indigo-400/30">
+            <div className="flex items-center justify-between border-b border-indigo-100 bg-gradient-to-r from-indigo-500/10 to-sky-400/10 px-4 py-3">
+              <h3 className="text-base font-semibold text-slate-800">Search Master Queue</h3>
               <button
-                className="rounded border border-transparent p-1 text-sm hover:bg-gray-100"
+                className="rounded-full border border-transparent p-1 text-sm text-slate-500 transition hover:bg-indigo-50"
                 onClick={closeSearchModal}
               >
                 ×
@@ -1011,16 +1026,16 @@ export default function WeeklyBoard({
                 placeholder="Search by section, topic, or subtopic"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                className="w-full rounded-full border border-indigo-200 bg-white px-4 py-2.5 text-sm text-slate-700 shadow-inner shadow-indigo-100/50 focus:border-indigo-400 focus:outline-none"
               />
               {searchError && (
-                <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
                   {searchError}
                 </div>
               )}
               <div className="flex-1 overflow-y-auto pr-1">
                 {searchLoading ? (
-                  <div className="py-6 text-center text-sm text-gray-500">
+                  <div className="py-6 text-center text-sm text-slate-500">
                     Loading...
                   </div>
                 ) : filteredSearchResults.length ? (
@@ -1034,27 +1049,27 @@ export default function WeeklyBoard({
                       return (
                         <li
                           key={key}
-                          className="rounded border border-gray-200 bg-white p-3 hover:border-blue-300"
+                          className="rounded-2xl border border-indigo-100 bg-white px-4 py-3 shadow-sm shadow-indigo-100/50 transition hover:border-indigo-300 hover:shadow-md"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <div className="font-medium text-gray-800">
+                              <div className="font-semibold text-slate-800">
                                 {row.topicName ||
                                   row.chapterName ||
                                   row.section ||
                                   "Topic"}
                               </div>
-                              <div className="text-xs text-gray-500">
+                              <div className="text-xs text-slate-500">
                                 {row.section ? `${row.section} - ` : ""}
                                 Seq: {row.seq || "n/a"}
                               </div>
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-slate-500">
                               {minutes} min
                             </div>
                           </div>
                           <button
-                            className="mt-2 w-full rounded border border-gray-200 px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-40"
+                            className="mt-3 w-full rounded-full border border-indigo-200 bg-white px-4 py-1.5 text-xs font-semibold text-indigo-600 shadow-sm shadow-indigo-100/60 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
                             onClick={() => handleSelectSearchResult(row)}
                             disabled={!expandedISO || expandedIsDone}
                           >
@@ -1069,7 +1084,7 @@ export default function WeeklyBoard({
                     })}
                   </ul>
                 ) : (
-                  <div className="py-6 text-center text-sm text-gray-500">
+                  <div className="py-6 text-center text-sm text-slate-500">
                     No results.
                   </div>
                 )}
@@ -1079,6 +1094,5 @@ export default function WeeklyBoard({
         </div>
       )}
     </div>
-  </div>
 );
 }

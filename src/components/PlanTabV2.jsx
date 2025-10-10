@@ -749,11 +749,11 @@ export default function PlanTabV2() {
 
   const SkeletonLayout = () => (
     <>
-      <div className="h-36 rounded-xl bg-gray-100 animate-pulse" />
-      <div className="h-72 rounded-xl bg-gray-100 animate-pulse" />
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:gap-6">
-        <div className="h-[520px] rounded-xl bg-gray-100 animate-pulse" />
-        <div className="h-[520px] rounded-xl bg-gray-100 animate-pulse" />
+      <div className="h-48 rounded-3xl border border-indigo-100 bg-white/70 shadow-2xl shadow-indigo-200/40 backdrop-blur animate-pulse" />
+      <div className="h-80 rounded-3xl border border-indigo-100 bg-white/60 shadow-xl shadow-indigo-200/30 backdrop-blur animate-pulse" />
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(300px,340px)_1fr] lg:gap-6">
+        <div className="h-[540px] rounded-3xl border border-indigo-100 bg-white/60 shadow-xl shadow-indigo-200/30 backdrop-blur animate-pulse" />
+        <div className="h-[540px] rounded-3xl border border-indigo-100 bg-white/60 shadow-xl shadow-indigo-200/30 backdrop-blur animate-pulse" />
       </div>
     </>
   );
@@ -766,7 +766,7 @@ export default function PlanTabV2() {
         isLoading={queueSummaryLoading}
       />
 
-      <div className="w-full">
+      <div className="w-full rounded-3xl border border-indigo-100 bg-white/70 p-4 shadow-xl shadow-indigo-200/50 backdrop-blur">
         <MasterGanttTimeline
           uid={uid}
           meta={meta}
@@ -775,17 +775,17 @@ export default function PlanTabV2() {
         />
       </div>
 
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:gap-6">
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(300px,340px)_1fr] lg:gap-8">
         {/* Sidebar */}
-        <aside className="lg:sticky lg:top-6 lg:self-start">
-          <div className="max-h-[calc(100vh-3rem)] overflow-y-auto rounded-lg border bg-white shadow-sm">
+        <aside className="lg:sticky lg:top-8 lg:self-start">
+          <div className="max-h-[calc(100vh-6rem)] overflow-y-auto rounded-3xl border border-indigo-100 bg-white/70 shadow-xl shadow-indigo-200/40 backdrop-blur">
             <MasterQueueSidebar uid={uid} refreshSignal={refreshSignal} />
           </div>
         </aside>
 
         {/* Main column */}
-        <main className="flex flex-col gap-4 min-w-0">
-          <div className="mt-2">
+        <main className="flex min-w-0 flex-col gap-6">
+          <div className="rounded-3xl border border-indigo-100 bg-white/80 p-4 shadow-xl shadow-indigo-200/50 backdrop-blur">
             <WeeklyBoard
               uid={uid}
               weekKey={weekKey}
@@ -816,7 +816,7 @@ export default function PlanTabV2() {
   );
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-10">
       {shouldShowSkeleton ? <SkeletonLayout /> : <PlannerContent />}
 
       {showWizard && (
