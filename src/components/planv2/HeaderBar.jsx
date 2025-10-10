@@ -22,7 +22,13 @@ const formatDate = (value) => {
   });
 };
 
-export default function PlanSummaryCard({ stats = {}, onReset, isLoading = false }) {
+export default function PlanSummaryCard({
+  stats = {},
+  onReset,
+  isLoading = false,
+  showResetButton = true,
+  containerClassName = "",
+}) {
   if (isLoading) {
     return (
       <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -67,7 +73,9 @@ export default function PlanSummaryCard({ stats = {}, onReset, isLoading = false
   };
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+    <div
+      className={`rounded-xl border border-gray-100 bg-white p-5 shadow-sm ${containerClassName}`}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">
@@ -77,14 +85,16 @@ export default function PlanSummaryCard({ stats = {}, onReset, isLoading = false
             Quick snapshot of your master plan progress
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleResetClick}
-          className="inline-flex items-center justify-center rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={typeof onReset !== "function"}
-        >
-          Reset Plan
-        </button>
+        {showResetButton && (
+          <button
+            type="button"
+            onClick={handleResetClick}
+            className="inline-flex items-center justify-center rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={typeof onReset !== "function"}
+          >
+            Reset Plan
+          </button>
+        )}
       </div>
 
       <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -22,6 +22,9 @@ import {
 } from "../services/planV2Api";
 
 import { buildAndSaveMasterPlan } from "../services/masterPlanBuilder";
+import {
+  calculatePlanOverviewStats,
+} from "../utils/planStats";
 
 // Components
 import PlanSummaryCard from "./planv2/HeaderBar";
@@ -722,123 +725,15 @@ export default function PlanTabV2() {
     return sum;
   }, [weekDates, assigned]);
 
-  const planOverviewStats = useMemo(() => {
-    const rows = Array.isArray(queueSummaryRows) ? queueSummaryRows : [];
-    const fallbackProjected = meta?.projectedEndDate
-      ? new Date(meta.projectedEndDate)
-      : null;
-
-    if (!rows.length) {
-      return {
-        overallProgress: null,
-        minutesStudied: 0,
-        minutesTotal: 0,
-        topicsCompleted: 0,
-        topicsTotal: 0,
-        projectedEndDate:
-          fallbackProjected && !Number.isNaN(fallbackProjected.getTime())
-            ? fallbackProjected
-            : null,
-      };
-    }
-
-    const activeRows = rows.filter((row) => {
-      const state = String(row?.queueState || "").toLowerCase();
-      return state !== "removed";
-    });
-
-    if (!activeRows.length) {
-      return {
-        overallProgress: null,
-        minutesStudied: 0,
-        minutesTotal: 0,
-        topicsCompleted: 0,
-        topicsTotal: 0,
-        projectedEndDate:
-          fallbackProjected && !Number.isNaN(fallbackProjected.getTime())
-            ? fallbackProjected
-            : null,
-      };
-    }
-
-    const totals = activeRows.reduce(
-      (acc, row) => {
-        const minutes = Math.max(0, Number(row?.minutes || 0));
-        const state = String(row?.queueState || "").toLowerCase();
-
-        if (minutes > 0) {
-          acc["minutesTotal"] += minutes;
-          if (state === "done") {
-            acc["minutesStudied"] += minutes;
-          }
-        }
-
-        if (state === "done") {
-          acc["topicsCompleted"] += 1;
-        }
-
-        acc["topicsTotal"] += 1;
-        return acc;
-      },
-      {
-        minutesTotal: 0,
-        minutesStudied: 0,
-        topicsCompleted: 0,
-        topicsTotal: 0,
-      },
-    );
-
-    const progress =
-      totals["minutesTotal"] > 0
-        ? totals["minutesStudied"] / totals["minutesTotal"]
-        : null;
-    const remainingMinutes = Math.max(
-      0,
-      totals["minutesTotal"] - totals["minutesStudied"],
-    );
-
-    const capValues = Object.values(weekDoc?.dayCaps || {})
-      .map((value) => Number(value || 0))
-      .filter((value) => value > 0);
-    let averageDailyCap = capValues.length
-      ? capValues.reduce((sum, value) => sum + value, 0) / capValues.length
-      : Number(meta?.dailyMinutes || 0);
-    if (
-      !averageDailyCap ||
-      Number.isNaN(averageDailyCap) ||
-      averageDailyCap <= 0
-    ) {
-      averageDailyCap = 90;
-    }
-
-    const baseIso = meta?.currentDayISO || meta?.startDate || toISO(new Date());
-    const baseDate = new Date(`${baseIso}T00:00:00`);
-    const isBaseValid = !Number.isNaN(baseDate.getTime());
-    const daysNeeded =
-      averageDailyCap > 0
-        ? Math.ceil(remainingMinutes / averageDailyCap)
-        : null;
-    let projected = null;
-    if (isBaseValid && Number.isFinite(daysNeeded)) {
-      projected = new Date(
-        baseDate.getTime() + Math.max(0, daysNeeded) * 86400000,
-      );
-    } else if (
-      fallbackProjected &&
-      !Number.isNaN(fallbackProjected.getTime())
-    ) {
-      projected = fallbackProjected;
-    }
-
-    return {
-      overallProgress: progress,
-      minutesStudied: totals["minutesStudied"],
-      minutesTotal: totals["minutesTotal"],
-      topicsCompleted: totals["topicsCompleted"],
-      topicsTotal: totals["topicsTotal"],
-      projectedEndDate: projected,
-    };
-  }, [queueSummaryRows, weekDoc, meta]);
+  const planOverviewStats = useMemo(
+    () =>
+      calculatePlanOverviewStats(
+        queueSummaryRows,
+        weekDoc,
+        meta,
+      ),
+    [queueSummaryRows, weekDoc, meta],
+  );
 
   const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
 
