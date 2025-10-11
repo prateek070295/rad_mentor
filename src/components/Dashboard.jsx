@@ -93,6 +93,162 @@ const StatTile = ({ label, value, helper, accent, children }) => (
   </div>
 );
 
+const AchievementHighlightCard = ({ highlight, onOpenAchievements }) => {
+  const data = highlight || {};
+  const currentStreak = Number(data.currentStreak ?? 0);
+  const cumulativeMinutes = Number(data.cumulativeMinutes ?? 0);
+  const cumulativeHours = Math.max(
+    0,
+    Math.round((cumulativeMinutes / 60) * 10) / 10,
+  );
+  const hoursDisplay =
+    cumulativeHours % 1 === 0
+      ? String(Math.trunc(cumulativeHours))
+      : cumulativeHours.toFixed(1);
+  const nextAchievement = data.nextAchievement ?? null;
+  const recentlyUnlocked = Array.isArray(data.recentlyUnlocked)
+    ? data.recentlyUnlocked
+    : [];
+
+  const nextPercent =
+    nextAchievement && Number(nextAchievement.targetValue) > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (Number(nextAchievement.progress || 0) /
+              Number(nextAchievement.targetValue || 1)) *
+              100,
+          ),
+        )
+      : 0;
+
+  const formatDisplay = (display) => {
+    if (!display) return null;
+    const numeric = Number(display.value ?? 0);
+    const rounded = Math.round(numeric * 10) / 10;
+    if (display.unit === "hours") {
+      return `${rounded}${rounded === 1 ? " hr" : " hrs"}`;
+    }
+    if (!display.unit || display.unit === "count") {
+      return `${Math.round(numeric)}`;
+    }
+    return `${rounded} ${display.unit}`;
+  };
+
+  const progressLabel = nextAchievement
+    ? formatDisplay(nextAchievement.progressDisplay) ??
+      `${Math.round(Number(nextAchievement.progress || 0))}`
+    : null;
+  const targetLabel = nextAchievement
+    ? formatDisplay(nextAchievement.targetDisplay) ??
+      `${Math.round(Number(nextAchievement.targetValue || 0))}`
+    : null;
+
+  const handleOpen = () => {
+    if (typeof onOpenAchievements === "function") {
+      onOpenAchievements();
+    }
+  };
+
+  return (
+    <section className="rounded-3xl border border-indigo-100 bg-white/85 p-6 shadow-xl shadow-indigo-200/60 backdrop-blur">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">
+            Achievement highlight
+          </p>
+          <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+            {currentStreak > 0
+              ? `${currentStreak}-day streak`
+              : "Start your streak"}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            {nextAchievement
+              ? `Keep going to unlock "${nextAchievement.name}".`
+              : "All core milestones unlocked. New challenges coming soon."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleOpen}
+          disabled={typeof onOpenAchievements !== "function"}
+          className="inline-flex items-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:translate-y-0"
+        >
+          View achievements
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-5 text-sm text-slate-600">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-indigo-700">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em]">
+              Current streak
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {currentStreak > 0 ? `${currentStreak} days` : "0 days"}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-slate-700">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em]">
+              Hours logged
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {cumulativeHours > 0 ? `${hoursDisplay}h` : "0h"}
+            </p>
+          </div>
+        </div>
+
+        {nextAchievement ? (
+          <div>
+            <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+              <span>Next unlock: {nextAchievement.name}</span>
+              <span>{nextPercent}%</span>
+            </div>
+            <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 transition-all"
+                style={{ width: `${nextPercent}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {progressLabel ?? Math.round(Number(nextAchievement.progress || 0))} /{" "}
+              {targetLabel ?? Math.round(Number(nextAchievement.targetValue || 0))}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            No upcoming milestone ó stay tuned for fresh challenges.
+          </div>
+        )}
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+            Recently unlocked
+          </p>
+          {recentlyUnlocked.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {recentlyUnlocked.map((item) => (
+                <span
+                  key={item.id}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                >
+                  <span role="img" aria-hidden="true">
+                    üèÜ
+                  </span>
+                  {item.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">
+              Unlock achievements by logging consistent study sessions.
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
 function Dashboard({
   userName = "there",
   todayFocus = "",
@@ -106,10 +262,12 @@ function Dashboard({
   streakCount = 0,
   achievements = [],
   revisionReminders = [],
+  achievementHighlight = null,
   onStartLearning,
   onReviewTopic,
   onOpenPlan,
   onOpenTest,
+  onOpenAchievements,
 }) {
   const safeFocusDetails = Array.isArray(todayFocusDetails)
     ? todayFocusDetails
@@ -141,6 +299,18 @@ function Dashboard({
     ? primaryFocus.topics.filter(Boolean)
     : [];
   const planStats = planOverview || {};
+  const hasHighlight =
+    achievementHighlight &&
+    typeof achievementHighlight === "object" &&
+    Object.keys(achievementHighlight).length > 0;
+  const highlightData = hasHighlight
+    ? achievementHighlight
+    : {
+        currentStreak: streakCount,
+        cumulativeMinutes: planStats.minutesStudied || 0,
+        nextAchievement: null,
+        recentlyUnlocked: [],
+      };
   const planProgressPercent =
     typeof planStats?.overallProgress === "number"
       ? clampPercent(planStats.overallProgress * 100)
@@ -313,42 +483,50 @@ function Dashboard({
           </div>
         </div>
       </section>
-      <SectionCard
-        tone="bg-white/75"
-        className="xl:col-span-1 flex h-full flex-col justify-between"
-        title="At a glance"
-        description="Your key vitals for today."
-      >
-        <div className="space-y-3">
-          <StatTile
-            label="Syllabus completion"
-            value={
-              syllabusPercent === null ? "--" : `${Math.round(syllabusPercent)}%`
-            }
-            helper="Tracked topics completed."
-          />
-          <StatTile
-            label="Next exam"
-            value={examIsUnset ? "--" : formatDayLabel(daysUntilExam)}
-            helper={examIsUnset ? "No exam date set yet." : "Time left until exam day."}
-          >
-            {examIsUnset ? (
-              <button
-                type="button"
-                onClick={handleOpenPlan}
-                className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
-              >
-                Set exam date
-              </button>
-            ) : null}
-          </StatTile>
-          <StatTile
-            label="Current streak"
-            value={streakCount > 0 ? `${streakCount} days` : "0 days"}
-            helper="Complete at least one study session per day."
-          />
-        </div>
-      </SectionCard>
+      <div className="flex flex-col gap-6 xl:col-span-1">
+        <AchievementHighlightCard
+          highlight={highlightData}
+          onOpenAchievements={onOpenAchievements}
+        />
+        <SectionCard
+          tone="bg-white/75"
+          className="flex h-full flex-col justify-between"
+          title="At a glance"
+          description="Your key vitals for today."
+        >
+          <div className="space-y-3">
+            <StatTile
+              label="Syllabus completion"
+              value={
+                syllabusPercent === null ? "--" : `${Math.round(syllabusPercent)}%`
+              }
+              helper="Tracked topics completed."
+            />
+            <StatTile
+              label="Next exam"
+              value={examIsUnset ? "--" : formatDayLabel(daysUntilExam)}
+              helper={
+                examIsUnset ? "No exam date set yet." : "Time left until exam day."
+              }
+            >
+              {examIsUnset ? (
+                <button
+                  type="button"
+                  onClick={handleOpenPlan}
+                  className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
+                >
+                  Set exam date
+                </button>
+              ) : null}
+            </StatTile>
+            <StatTile
+              label="Current streak"
+              value={streakCount > 0 ? `${streakCount} days` : "0 days"}
+              helper="Complete at least one study session per day."
+            />
+          </div>
+        </SectionCard>
+      </div>
       <SectionCard
         tone="bg-gradient-to-br from-indigo-50 via-white to-sky-50"
         accentShadow="shadow-2xl shadow-indigo-200/60"
@@ -658,3 +836,11 @@ function Dashboard({
 }
 
 export default Dashboard;
+
+
+
+
+
+
+
+

@@ -83,5 +83,7 @@ app.use((err, req, res, _next) => {
 
 export const api = onRequest({ secrets: ["GEMINI_API_KEY"] }, app);
 export { mirrorStudyItem } from "./triggers/mirrorStudyItem.js";
+export { onStudySessionWrite } from "./triggers/achievementsStudySession.js";
 export { backfillStudyItems } from "./scripts/backfillStudyItems.js";
 export { recomputeStudyMinutes };
+export { seedAchievements } from "./scripts/seedAchievements.js";

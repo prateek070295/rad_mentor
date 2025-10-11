@@ -19,6 +19,7 @@ import Login from './components/auth/Login';
 import ProfileMenu from './components/ProfileMenu';
 import LandingPage from './pages/LandingPage';
 import AccountSettings from './pages/AccountSettings';
+import AchievementsHub from "./components/AchievementsHub";
 import { UnsavedChangesProvider, useUnsavedChanges } from './context/UnsavedChangesContext';
 import {
   loadOrInitWeek,
@@ -29,10 +30,15 @@ import {
   calculateWeeklyAssignmentTotals,
   buildQueueSnapshot,
   buildWeeklyStreak,
-  buildAchievementsSummary,
   buildRevisionReminders,
   defaultPlanOverviewStats,
 } from "./utils/planStats";
+import {
+  fetchAchievementDefinitions,
+  listenToAchievementMeta,
+  listenToUserAchievements,
+} from "./services/achievementsClient";
+import { deriveAchievementHighlight } from "./utils/achievements";
 
 
 
@@ -56,6 +62,22 @@ const daysBetween = (start, end) => {
     if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return 'N/A';
     const diffTime = Math.abs(endDate - startDate);
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+const timestampToMillis = (value) => {
+    if (!value) return 0;
+    if (typeof value.toMillis === "function") {
+        return value.toMillis();
+    }
+    if (typeof value.toDate === "function") {
+        const date = value.toDate();
+        return date instanceof Date ? date.getTime() : 0;
+    }
+    if (value instanceof Date) {
+        return value.getTime();
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
 };
 
 const getWeekStartKey = (isoDate) => {
@@ -92,6 +114,7 @@ const initialDashboardState = {
   streakCount: 0,
   achievements: [],
   revisionReminders: [],
+  achievementHighlight: null,
 };
 
 const buildPlanV2Focus = async (uid, todayIso) => {
@@ -234,23 +257,68 @@ function AppShell() {
 
   // --- State for all dashboard-related data ---
   const [dashboardData, setDashboardData] = useState(initialDashboardState);
+  const [achievementDefinitions, setAchievementDefinitions] = useState([]);
+  const [achievementMeta, setAchievementMeta] = useState(null);
+  const [userAchievements, setUserAchievements] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const defs = await fetchAchievementDefinitions();
+        if (!mounted) return;
+        const ordered = Array.isArray(defs)
+          ? [...defs].sort(
+              (a, b) =>
+                (a.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+                (b.sortOrder ?? Number.MAX_SAFE_INTEGER),
+            )
+          : [];
+        setAchievementDefinitions(ordered);
+      } catch (error) {
+        console.error("Failed to load achievement definitions:", error);
+        if (mounted) {
+          setAchievementDefinitions([]);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   // --- Main Data Fetching Effect ---
 
   useEffect(() => {
     let planUnsubscribe = null;
+    let achievementMetaUnsubscribe = null;
+    let userAchievementsUnsubscribe = null;
     let isMounted = true;
+
+    const clearAchievementListeners = () => {
+      if (achievementMetaUnsubscribe) {
+        achievementMetaUnsubscribe();
+        achievementMetaUnsubscribe = null;
+      }
+      if (userAchievementsUnsubscribe) {
+        userAchievementsUnsubscribe();
+        userAchievementsUnsubscribe = null;
+      }
+    };
 
     const authUnsubscribe = onAuthStateChanged(auth, async (user) => {
       if (planUnsubscribe) {
         planUnsubscribe();
         planUnsubscribe = null;
       }
+      clearAchievementListeners();
 
       setCurrentUser(user);
       setAuthReady(true);
 
       if (!user) {
         if (isMounted) {
+          setAchievementMeta(null);
+          setUserAchievements([]);
           setIsAdmin(false);
           setOrganSystems([]);
           setPlanV2Context({ uid: null, weekKey: null, todayIso: null });
@@ -264,7 +332,22 @@ function AppShell() {
 
       if (isMounted) {
         setIsLoading(true);
+        setAchievementMeta(null);
+        setUserAchievements([]);
       }
+
+      achievementMetaUnsubscribe = listenToAchievementMeta(
+        user.uid,
+        (metaDoc) => {
+          setAchievementMeta(metaDoc);
+        },
+      );
+      userAchievementsUnsubscribe = listenToUserAchievements(
+        user.uid,
+        (rows) => {
+          setUserAchievements(rows);
+        },
+      );
 
       let adminStatus = false;
       try {
@@ -351,7 +434,6 @@ function AppShell() {
                 queueSnapshot: [],
                 studyStreak: [],
                 streakCount: 0,
-                achievements: [],
                 revisionReminders: [],
               }));
             } else {
@@ -396,15 +478,6 @@ function AppShell() {
                   queueRows,
                   today,
                 );
-                const achievements = buildAchievementsSummary({
-                  planStats: overview,
-                  streakCount: streakData.streakCount,
-                  weeklyTotals,
-                  revisionCount: revisionReminders.filter(
-                    (item) => item.status !== "Upcoming",
-                  ).length,
-                });
-
                 setDashboardData((prev) => ({
                   ...prev,
                   planOverview: overview,
@@ -413,7 +486,6 @@ function AppShell() {
                   planOverviewLoading: false,
                   studyStreak: streakData.days,
                   streakCount: streakData.streakCount,
-                  achievements,
                   revisionReminders,
                 }));
               } catch (err) {
@@ -427,7 +499,6 @@ function AppShell() {
                   planOverviewLoading: false,
                   studyStreak: [],
                   streakCount: 0,
-                  achievements: [],
                   revisionReminders: [],
                 }));
               }
@@ -448,7 +519,6 @@ function AppShell() {
               queueSnapshot: [],
               studyStreak: [],
               streakCount: 0,
-              achievements: [],
               revisionReminders: [],
             }));
           }
@@ -468,8 +538,53 @@ function AppShell() {
       if (planUnsubscribe) {
         planUnsubscribe();
       }
+      clearAchievementListeners();
     };
   }, [markClean]);
+
+  const achievementHighlightState = useMemo(
+    () =>
+      deriveAchievementHighlight({
+        meta: achievementMeta,
+        definitions: achievementDefinitions,
+        achievements: userAchievements,
+      }),
+    [achievementMeta, achievementDefinitions, userAchievements],
+  );
+
+  const achievementFeed = useMemo(() => {
+    if (!achievementDefinitions.length) return [];
+    const definitionMap = achievementDefinitions.reduce((acc, def) => {
+      acc[def.id] = def;
+      return acc;
+    }, {});
+    const unlocked = Array.isArray(userAchievements)
+      ? userAchievements.filter((row) => row?.unlocked)
+      : [];
+    const sorted = [...unlocked].sort(
+      (a, b) =>
+        timestampToMillis(b?.unlockedAt) - timestampToMillis(a?.unlockedAt),
+    );
+    return sorted.slice(0, 4).map((entry) => {
+      const definition = definitionMap[entry.id] || {};
+      const unlockedMillis = timestampToMillis(entry.unlockedAt);
+      return {
+        key: entry.id,
+        title: definition.name || entry.id,
+        description: definition.description || "",
+        unlockedAt:
+          unlockedMillis > 0 ? new Date(unlockedMillis).toISOString() : null,
+      };
+    });
+  }, [userAchievements, achievementDefinitions]);
+
+  useEffect(() => {
+    setDashboardData((prev) => ({
+      ...prev,
+      achievements: achievementFeed,
+      achievementHighlight: achievementHighlightState,
+    }));
+  }, [achievementFeed, achievementHighlightState]);
 
   useEffect(() => {
     if (!authReady) {
@@ -609,6 +724,10 @@ function AppShell() {
     persistTabSelection("test");
   }, [persistTabSelection]);
 
+  const handleOpenAchievements = useCallback(() => {
+    persistTabSelection("achievements");
+  }, [persistTabSelection]);
+
   if (!authReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -673,6 +792,17 @@ function AppShell() {
             onReviewTopic={handleReviewTopic}
             onOpenPlan={handleGoToPlan}
             onOpenTest={handleGoToTest}
+            onOpenAchievements={handleOpenAchievements}
+          />
+        );
+      case 'achievements':
+        return (
+          <AchievementsHub
+            definitions={achievementDefinitions}
+            achievements={userAchievements}
+            meta={achievementMeta}
+            highlight={achievementHighlightState}
+            onBack={() => persistTabSelection('dashboard')}
           />
         );
       case 'plan':
@@ -758,6 +888,16 @@ function AppShell() {
                 onClick={() => persistTabSelection('test')}
               >
                 Test
+              </button>
+              <button
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === 'achievements'
+                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-300/40'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                onClick={() => persistTabSelection('achievements')}
+              >
+                Achievements
               </button>
               {isAdmin && (
                 <button

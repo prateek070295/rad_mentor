@@ -1,0 +1,24 @@
+Here’s the backlog we’ll need to tackle when we return to Phase 3:
+
+Spaced Revision telemetry
+
+Add a logSrsReview(uid, topicId, stage) path (client or Cloud Function) that writes each spaced-recall completion.
+Extend users/{uid} meta with counters: srsReviewsToday, srsReviewsLifetime, per-topic interval counts (e.g., meta.srsIntervalCounts.{topicId}).
+Update the achievements evaluator (new criteria types like srs_reviews, srs_intervals) and add matching definitions in functions/achievements/definitions.js.
+Flashcard / quiz tracking
+
+Persist quiz attempts under users/{uid}/quizAttempts/{attemptId} with score, question count, completion time.
+Log flashcard sessions (card count, accuracy) under users/{uid}/flashcardSessions/{sessionId}.
+Increment meta totals (quizAttemptCount, perfectQuizCount, flashcardsReviewedCount) and evaluate new achievement definitions (quiz_attempts, flashcards_reviewed, etc.).
+Session dynamics metrics
+
+Ensure study session documents include mode (focus, revision, quiz, etc.) and any pause/break info.
+In the onStudySessionWrite trigger, compute daily aggregates (longSessionsToday, shortSessionsToday, modesUsedToday) and reset when the day changes.
+Add definitions for achievements such as “Deep focus” (long session), “Brain Sprinter” (multiple short sessions), “Multimode Maven” (three modes in a day).
+Shared infrastructure updates
+
+Expand achievements/evaluator.js with dedicated evaluators for SRS, quiz/flashcard, and session metrics.
+Seed the new definition rows via seedAchievements (Phase 3 batch).
+Update client fetching (achievementsClient) so the hub displays progress for the new categories—adjust the category list and legend in AchievementsHub.
+Keep notification logic intact so newly unlocked advanced achievements still trigger pop-ups.
+We can pick these off category by category once you’re ready to implement Phase 3 proper.
