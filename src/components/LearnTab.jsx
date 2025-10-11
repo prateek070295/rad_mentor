@@ -497,115 +497,394 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
   const renderTutorCard = (card, index) => {
     if (!card) return null;
     const isLastCard = index === tutorHistory.length - 1;
+    const baseCardClass =
+      "rounded-3xl border border-slate-100 bg-white/90 shadow-xl shadow-slate-900/5 overflow-hidden backdrop-blur";
+    const primaryButtonClass =
+      "inline-flex items-center justify-center rounded-full border border-indigo-200 bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg disabled:translate-y-0 disabled:bg-indigo-300";
+    const neutralButtonClass =
+      "inline-flex items-center justify-center rounded-full border border-slate-300 bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-lg disabled:translate-y-0 disabled:bg-slate-500";
+    const successButtonClass =
+      "inline-flex items-center justify-center rounded-full border border-emerald-200 bg-emerald-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-500 hover:shadow-lg disabled:translate-y-0 disabled:bg-emerald-300";
+    const renderHeader = (title, tone) => (
+      <div className={`px-6 py-5 sm:px-8 sm:py-6 ${tone}`}>
+        <h3 className="text-2xl font-semibold text-white sm:text-3xl">{title}</h3>
+      </div>
+    );
     const renderChatInput = () => (
-      <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <div className="mt-6 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm shadow-indigo-200/60">
         <form onSubmit={handleChatInputSubmit}>
-            <fieldset disabled={isMentorTyping}>
-                <label className="font-semibold text-gray-700 block mb-2">Your Answer</label>
-                <div className="flex space-x-2">
-                    <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type your answer..." className="flex-grow rounded-lg px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400">Send</button>
-                </div>
-            </fieldset>
+          <fieldset disabled={isMentorTyping} className="space-y-3">
+            <label className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Your Response
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type your answer..."
+                className="flex-1 rounded-xl border border-indigo-100 bg-white/90 px-4 py-2 text-sm text-slate-800 shadow-inner focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+              <button type="submit" className={primaryButtonClass}>
+                Send
+              </button>
+            </div>
+          </fieldset>
         </form>
       </div>
     );
-    const shouldShowInput = isLastCard && ['TEACH_CARD', 'SHORT_CHECKPOINT'].includes(card.type);
-    switch(card.type) {
-        case 'OBJECTIVES_CARD': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-indigo-600 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div> {isLastCard && ( <div className="mt-6 flex justify-end"> <button onClick={handleContinue} disabled={isMentorTyping} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-blue-400" > Ready </button> </div> )} </div> </div> );
-        case 'TEACH_CARD': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none"><ReactMarkdown>{card.message}</ReactMarkdown></div> {(card.assets?.images?.length > 0 || card.assets?.cases?.length > 0) && ( <div className="mt-6 pt-4 border-t border-gray-300"> <h4 className="font-semibold text-base text-gray-600 mb-2">Reference Material:</h4> {(card.assets.images || []).map(img => <a key={img.alt} href={img.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline block text-base">{img.alt}</a>)} {(card.assets.cases || []).map(c => <a key={c.label} href={c.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline block text-base">{c.label}</a>)} </div> )} {shouldShowInput && renderChatInput()} </div> </div> );
-        case 'TRANSITION_CARD': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-blue-600 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div> <div className="mt-6 flex justify-end"> <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-blue-400">Continue to Checkpoint →</button> </div> </div> </div> );
-        case 'MCQ_CHECKPOINT': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <MCQForm question={card.message} options={card.options} onSubmit={handleCheckpointSubmit} isMentorTyping={isMentorTyping}/> </div> </div> );
-        case 'SHORT_CHECKPOINT': return ( <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden"> <div className="bg-gray-800 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none"><ReactMarkdown>{card.message}</ReactMarkdown></div> {shouldShowInput && renderChatInput()} </div> </div> );
-        case 'FEEDBACK_CARD': const isCorrect = card.isCorrect; return ( <div key={index} className={`rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden`}> <div className={`${isCorrect ? 'bg-green-600' : 'bg-red-600'} p-4`}><h3 className="font-bold text-3xl text-white">{card.title}</h3></div> <div className="p-6"> <div className="prose prose-lg max-w-none text-gray-800"><ReactMarkdown>{card.message}</ReactMarkdown></div> <div className="mt-6 flex justify-end"> <button onClick={handleContinue} disabled={isMentorTyping} className="px-4 py-2 bg-gray-700 text-white font-semibold rounded-md hover:bg-gray-800 disabled:bg-gray-400">Continue →</button> </div> </div> </div> );
-                case 'SUMMARY_CARD':
-        case 'TOPIC_COMPLETE':
-            return (
-                <div key={index} className="rounded-lg shadow-md bg-white border border-gray-200 overflow-hidden">
-                    <div className="bg-yellow-500 p-4"><h3 className="font-bold text-3xl text-white">{card.title}</h3></div>
-                    <div className="p-6">
-                        <div className="prose prose-lg max-w-none text-gray-800 mt-4"><ReactMarkdown>{card.message}</ReactMarkdown></div>
-                        {/* NEW: Conditionally render the continue button */}
-                        {card.isTopicComplete && isLastCard && (
-                            <div className="mt-6 flex justify-end">
-                                <button
-                                  onClick={handleContinueToNextTopic}
-                                  disabled={isMentorTyping}
-                                  className="px-6 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 disabled:bg-green-400"
-                                >
-                                  Continue to Next Topic →
-                                </button>
-                            </div>
-                        )}
-                    </div>
+    const shouldShowInput =
+      isLastCard && ["TEACH_CARD", "SHORT_CHECKPOINT"].includes(card.type);
+
+    switch (card.type) {
+      case "OBJECTIVES_CARD":
+        return (
+          <div
+            key={index}
+            className={`${baseCardClass} border-indigo-100 shadow-indigo-200/50`}
+          >
+            {renderHeader(
+              card.title,
+              "bg-gradient-to-r from-indigo-500 via-sky-500 to-blue-500"
+            )}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <div className="prose prose-lg max-w-none text-slate-800">
+                <ReactMarkdown>{card.message}</ReactMarkdown>
+              </div>
+              {isLastCard ? (
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={handleContinue}
+                    disabled={isMentorTyping}
+                    className={primaryButtonClass}
+                  >
+                    Ready
+                  </button>
                 </div>
-            );
-        case 'USER_MESSAGE': return ( <div key={index} className="flex justify-end"> <div className="inline-block max-w-2xl p-4 rounded-lg bg-gray-100 border border-gray-200 text-gray-800">{card.message}</div> </div> );
-        case 'ERROR': return ( <div key={index} className="flex justify-start"><div className="p-4 rounded-xl bg-red-100 text-red-700 font-medium">{card.message}</div></div> );
-        default: return <div key={index} className="text-sm text-gray-400">Received an unknown card type: {card.type}</div>;
+              ) : null}
+            </div>
+          </div>
+        );
+      case "TEACH_CARD":
+        return (
+          <div key={index} className={baseCardClass}>
+            {renderHeader(
+              card.title,
+              "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900"
+            )}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <div className="prose prose-lg max-w-none text-slate-800">
+                <ReactMarkdown>{card.message}</ReactMarkdown>
+              </div>
+              {(card.assets?.images?.length > 0 ||
+                card.assets?.cases?.length > 0) && (
+                <div className="mt-6 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                  <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Reference material
+                  </h4>
+                  <div className="mt-3 space-y-2 text-sm font-semibold text-indigo-600">
+                    {(card.assets.images || []).map((img) => (
+                      <a
+                        key={img.alt}
+                        href={img.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block transition hover:text-indigo-500"
+                      >
+                        {img.alt}
+                      </a>
+                    ))}
+                    {(card.assets.cases || []).map((c) => (
+                      <a
+                        key={c.label}
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block transition hover:text-indigo-500"
+                      >
+                        {c.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {shouldShowInput ? renderChatInput() : null}
+            </div>
+          </div>
+        );
+      case "TRANSITION_CARD":
+        return (
+          <div
+            key={index}
+            className={`${baseCardClass} border-sky-100 shadow-sky-200/50`}
+          >
+            {renderHeader(
+              card.title,
+              "bg-gradient-to-r from-sky-500 via-indigo-500 to-blue-600"
+            )}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <div className="prose prose-lg max-w-none text-slate-800">
+                <ReactMarkdown>{card.message}</ReactMarkdown>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={handleContinue}
+                  disabled={isMentorTyping}
+                  className={primaryButtonClass}
+                >
+                  Continue to Checkpoint →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      case "MCQ_CHECKPOINT":
+        return (
+          <div
+            key={index}
+            className={`${baseCardClass} border-slate-200 shadow-slate-900/10`}
+          >
+            {renderHeader(
+              card.title,
+              "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700"
+            )}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <MCQForm
+                question={card.message}
+                options={card.options}
+                onSubmit={handleCheckpointSubmit}
+                isMentorTyping={isMentorTyping}
+              />
+            </div>
+          </div>
+        );
+      case "SHORT_CHECKPOINT":
+        return (
+          <div
+            key={index}
+            className={`${baseCardClass} border-slate-200 shadow-slate-900/10`}
+          >
+            {renderHeader(
+              card.title,
+              "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700"
+            )}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <div className="prose prose-lg max-w-none text-slate-800">
+                <ReactMarkdown>{card.message}</ReactMarkdown>
+              </div>
+              {shouldShowInput ? renderChatInput() : null}
+            </div>
+          </div>
+        );
+      case "FEEDBACK_CARD": {
+        const isCorrect = card.isCorrect;
+        const tone = isCorrect
+          ? "bg-gradient-to-r from-emerald-500 via-emerald-500 to-emerald-600"
+          : "bg-gradient-to-r from-rose-500 via-amber-500 to-orange-500";
+        const borderTone = isCorrect ? "border-emerald-100" : "border-rose-100";
+        return (
+          <div
+            key={index}
+            className={`${baseCardClass} ${borderTone} shadow-emerald-200/50`}
+          >
+            {renderHeader(card.title, tone)}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <div className="prose prose-lg max-w-none text-slate-800">
+                <ReactMarkdown>{card.message}</ReactMarkdown>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={handleContinue}
+                  disabled={isMentorTyping}
+                  className={neutralButtonClass}
+                >
+                  Continue →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      case "SUMMARY_CARD":
+      case "TOPIC_COMPLETE":
+        return (
+          <div
+            key={index}
+            className={`${baseCardClass} border-amber-100 shadow-amber-200/60`}
+          >
+            {renderHeader(
+              card.title,
+              "bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500"
+            )}
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
+              <div className="prose prose-lg max-w-none text-slate-800">
+                <ReactMarkdown>{card.message}</ReactMarkdown>
+              </div>
+              {card.isTopicComplete && isLastCard ? (
+                <div className="mt-6 flex justify-end">
+                <button
+                  onClick={handleContinueToNextTopic}
+                  disabled={isMentorTyping}
+                  className={successButtonClass}
+                >
+                  Continue to Next Topic →
+                </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      case "USER_MESSAGE":
+        return (
+          <div key={index} className="flex justify-end">
+            <div className="max-w-2xl rounded-2xl border border-indigo-200 bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow shadow-indigo-200/60">
+              {card.message}
+            </div>
+          </div>
+        );
+      case "ERROR":
+        return (
+          <div key={index} className="flex justify-start">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-sm shadow-rose-200/60">
+              {card.message}
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div key={index} className="text-sm text-slate-400">
+            Received an unknown card type: {card.type}
+          </div>
+        );
     }
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-50">
-      {/* Sidebar (Correct) */}
-      <aside className={`bg-white shadow-xl flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'}`}>
-        <div className={`p-6 font-bold text-2xl text-gray-800 flex-shrink-0 border-b ${!isSidebarOpen && 'hidden'}`}>
-          {currentChapter ? currentChapter.name : 'Chapter'}
-        </div>
-        <nav className={`flex-grow overflow-y-auto p-6 ${!isSidebarOpen && 'hidden'}`}>
-          {isSidebarLoading ? <p>Loading topics...</p> : <ul>{chapterTopics.map(topic => <TopicNode key={topic.id} topic={topic} onTopicSelect={handleTopicClick} currentTopicId={activeTopic ? activeTopic.id : null}/>)}</ul>}
-        </nav>
-      </aside>
-
-      {/* Main content area */}
-      <main className="flex-grow flex flex-col overflow-hidden"> {/* CHANGED: Main area no longer scrolls */}
-        {isSidebarOpen ? (
-          // Header is now a static block, not sticky
-          <div className="p-6 border-b border-gray-200 flex-shrink-0">
-            <div><h1 className="text-3xl font-bold text-gray-800">{activeTopic ? activeTopic.name : "Select a topic"}</h1></div>
-            <div className="flex space-x-2 flex-shrink-0 mt-4">
-              <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-300">Focus Mode</button>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-emerald-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 lg:flex-row">
+        <aside
+          className={`relative flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-full max-w-sm lg:max-w-xs xl:max-w-sm" : "w-0"}`}
+        >
+          <div
+            className={`flex h-full min-h-[640px] flex-col rounded-3xl border border-indigo-100 bg-white/95 shadow-2xl shadow-indigo-200/50 backdrop-blur transition-all duration-300 ${isSidebarOpen ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-6 opacity-0"}`}
+          >
+            <div className="border-b border-indigo-100 px-6 py-6 sm:px-7">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
+                {currentChapter?.sectionName || "Syllabus"}
+              </p>
+              <h2 className="mt-2 text-lg font-semibold text-slate-900">
+                {currentChapter?.name || "Chapter"}
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Navigate topics and subtopics for this lesson.
+              </p>
+            </div>
+            <nav className="flex-1 overflow-y-auto px-6 py-5 timeline-scrollbar">
+              {isSidebarLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="h-12 animate-pulse rounded-2xl border border-indigo-50 bg-indigo-50/60 shadow-inner shadow-indigo-100/40"
+                    />
+                  ))}
+                </div>
+              ) : chapterTopics.length > 0 ? (
+                <ul className="space-y-2">
+                  {chapterTopics.map((topic) => (
+                    <TopicNode
+                      key={topic.id}
+                      topic={topic}
+                      onTopicSelect={handleTopicClick}
+                      currentTopicId={activeTopic ? activeTopic.id : null}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-indigo-200 bg-white/70 px-4 py-6 text-center text-sm text-slate-500 shadow-inner shadow-indigo-100/40">
+                  No topics available for this chapter yet.
+                </div>
+              )}
+            </nav>
+          </div>
+        </aside>
+        <main className="flex-1">
+          <div className="relative flex h-full min-h-[640px] flex-col overflow-hidden rounded-3xl border border-indigo-100 bg-white/90 shadow-2xl shadow-indigo-200/40 backdrop-blur">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50/55 via-white/70 to-transparent" />
+            <div className="relative flex h-full flex-col">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-indigo-100 px-6 py-6 sm:px-8 sm:py-7">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
+                    Learning workspace
+                  </p>
+                  <h1 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-3xl">
+                    {activeTopic ? activeTopic.name : "Select a topic to begin"}
+                  </h1>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {activeTopic
+                      ? "Follow the guided flow, answer checkpoints, or ask the mentor for clarification."
+                      : "Choose a topic from the syllabus to launch an interactive lesson with the mentor."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {currentChapter?.name ? (
+                    <span className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
+                      {currentChapter.name}
+                    </span>
+                  ) : null}
+                  {isSidebarOpen ? (
+                    <button
+                      onClick={toggleSidebar}
+                      className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:shadow-lg"
+                    >
+                      Focus Mode
+                    </button>
+                  ) : (
+                    <button
+                      onClick={toggleSidebar}
+                      className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg"
+                    >
+                      Show Menu
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 space-y-6 overflow-y-auto px-6 pb-8 pt-6 timeline-scrollbar sm:px-8 sm:pb-10 sm:pt-8">
+                {tutorHistory.length > 0 ? (
+                  tutorHistory.map((card, index) => (
+                    <div
+                      key={index}
+                      ref={index === tutorHistory.length - 1 ? lastCardRef : null}
+                    >
+                      {renderTutorCard(card, index)}
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-3xl border border-dashed border-indigo-200 bg-white/70 px-6 py-12 text-center shadow-inner shadow-indigo-100/40">
+                    <h2 className="text-2xl font-semibold text-slate-800">
+                      Welcome to the Learn Workspace
+                    </h2>
+                    <p className="mt-3 text-sm text-slate-500">
+                      Select a topic from the syllabus to unlock tailored mentor
+                      guidance, checkpoints, and study assets.
+                    </p>
+                  </div>
+                )}
+                {isMentorTyping && (
+                  <div className="flex justify-start">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/90 px-4 py-2 text-xs font-medium text-slate-600 shadow-sm shadow-indigo-100/50">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-400 [animation-delay:-0.4s]" />
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-400 [animation-delay:-0.2s]" />
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-400" />
+                      <span>Mentor is typing</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        ) : (
-          <div className="flex items-center justify-between p-6 flex-shrink-0 border-b border-gray-200 bg-gray-50">
-            <button onClick={toggleSidebar} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-semibold hover:bg-gray-900 shadow-lg">
-              Show Menu
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800 truncate pl-4">
-              {activeTopic ? activeTopic.name : ""}
-            </h1>
-          </div>
-        )}
-
-        {/* This inner div is now the only scrolling part */}
-        <div className="flex-grow overflow-y-auto p-6 space-y-6">
-            {tutorHistory.length > 0 ? (
-              tutorHistory.map((card, index) => (
-                <div key={index} ref={index === tutorHistory.length - 1 ? lastCardRef : null}>
-                  {renderTutorCard(card, index)}
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-500 pt-10">
-                <h2 className="text-2xl font-semibold mb-2">Welcome to the Learn Tab!</h2>
-                <p>Select a topic from the menu on the left to begin your interactive lesson.</p>
-              </div>
-            )}
-            {isMentorTyping && (
-              <div className="flex justify-start">
-                <div className="p-4 rounded-xl bg-white border border-gray-200 text-gray-800 shadow-md">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-            )}
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 };
