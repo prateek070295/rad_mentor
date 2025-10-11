@@ -17,6 +17,7 @@ import {
   completeDayAndAdvance,
   weekKeyFromDate,
   autoFillWeekFromMaster,
+  scheduleTopicToDay,
   listMasterQueueLinear,
   resetPlanData,
 } from "../services/planV2Api";
@@ -74,32 +75,6 @@ const weekDatesFromKeyLocal = (weekKey) => {
     { length: 7 },
     (_, i) => new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() + i),
   );
-};
-
-const buildAlreadySet = (topicDoc = {}) => {
-  const scheduled = Object.values(topicDoc?.scheduledDates || {});
-  const out = new Set();
-  scheduled.forEach((list) => {
-    if (!Array.isArray(list)) return;
-    list.forEach((value) => {
-      const num = Number(value);
-      if (Number.isFinite(num)) {
-        out.add(num);
-      }
-    });
-  });
-
-  const completed = Array.isArray(topicDoc?.completedSubIdx)
-    ? topicDoc.completedSubIdx
-    : [];
-  completed.forEach((value) => {
-    const num = Number(value);
-    if (Number.isFinite(num)) {
-      out.add(num);
-    }
-  });
-
-  return out;
 };
 
 export default function PlanTabV2() {
@@ -339,7 +314,7 @@ export default function PlanTabV2() {
     return () => {
       mounted = false;
     };
-  }, [uid, weekKey, metaLoading, defaultDailyMinutes]);
+  }, [uid, weekKey, metaLoading, defaultDailyMinutes, refreshSignal]);
 
   const weekDates = useMemo(() => {
     return weekDatesFromKeyLocal(weekKey);
@@ -633,66 +608,46 @@ export default function PlanTabV2() {
           return;
         }
 
-        const dayAssignments = Array.isArray(assigned?.[iso]) ? assigned[iso] : [];
-        const existingSeqs = new Set(dayAssignments.map((a) => String(a.seq || "")));
-
-        const newAssignments = [];
         let fillCount = 0;
 
         for (const topic of runs) {
           if (remaining <= 0) break;
-          const subs = Array.isArray(topic.subtopics) ? topic.subtopics : [];
-          const already = buildAlreadySet(topic);
+          const seq = topic?.seq;
+          if (seq == null) continue;
 
-          for (let idx = 0; idx < subs.length && remaining > 0; idx += 1) {
-            if (already.has(idx)) continue;
-            const sub = subs[idx];
-            const mins = Number(sub?.minutes || 0);
-            if (!Number.isFinite(mins) || mins <= 0) continue;
-            if (mins > remaining) continue;
-
-            const assignment = {
-              seq: topic.seq || "",
-              section: topic.section || "",
-              chapterId: topic.chapterId || "",
-              chapterName: topic.chapterName || "",
-              topicId: topic.topicId || "",
-              title: topic.topicName || "",
-              subIdx: idx,
-              subId: sub?.itemId || "",
-              subName: sub?.name || "",
-              minutes: mins,
-            };
-
-            newAssignments.push(assignment);
-            remaining -= mins;
-            fillCount += 1;
-
-            if (!existingSeqs.has(String(topic.seq || ""))) {
-              existingSeqs.add(String(topic.seq || ""));
+          const res = await scheduleTopicToDay(uid, iso, seq);
+          const slices = Array.isArray(res?.slices) ? res.slices : [];
+          if (!slices.length) {
+            if (res?.message === "No remaining capacity") {
+              remaining = 0;
+              break;
             }
+            continue;
           }
+
+          const addedMinutes = slices.reduce(
+            (sum, slice) => sum + Number(slice?.minutes || 0),
+            0,
+          );
+          remaining = Math.max(0, remaining - addedMinutes);
+          fillCount += slices.length;
         }
 
-        if (!newAssignments.length) {
+        if (!fillCount) {
           if (typeof window !== "undefined") {
             window.alert("Unable to add more items within today's capacity.");
           }
           return;
         }
 
-        const batchUpdate = {};
-        batchUpdate[`assigned.${iso}`] = [
-          ...dayAssignments,
-          ...newAssignments.map((item, idx) => ({
-            ...item,
-            minutes: Number(item.minutes || 0),
-            addedAt: Date.now(),
-            seq: item.seq || `tmp-${Date.now()}-${idx}`,
-          })),
-        ];
-
-        await patchWeek(uid, weekKey, batchUpdate);
+        const nextWeekDoc = await loadOrInitWeek(
+          uid,
+          weekKey,
+          defaultDailyMinutes,
+        );
+        if (nextWeekDoc) {
+          setWeekDoc(nextWeekDoc);
+        }
         refreshAll();
 
         if (typeof window !== "undefined") {
