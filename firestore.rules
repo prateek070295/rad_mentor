@@ -24,6 +24,10 @@ service cloud.firestore {
       match /masterQueue/{queueId} {
         allow read, write: if isRequestUser(userId);
       }
+
+      match /master/{docId} {
+        allow read, write: if isRequestUser(userId);
+      }
     }
 
     match /admins/{adminId} {
@@ -62,7 +66,8 @@ service cloud.firestore {
     }
 
     match /study_items/{itemId} {
-      allow read, update: if isAdmin();
+      allow read: if isSignedIn();
+      allow update: if isAdmin();
       allow create, delete: if false;
     }
 
