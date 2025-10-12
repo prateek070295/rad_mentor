@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { auth } from '../firebase';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
 
 const TopicTestViewer = ({ topic }) => {
   const [questions, setQuestions] = useState([]);
@@ -13,29 +14,64 @@ const TopicTestViewer = ({ topic }) => {
   useEffect(() => {
     if (!topic?.id) return;
 
+    let isMounted = true;
+    const controller = new AbortController();
+
     const fetchQuestions = async () => {
       setIsLoading(true);
       setError('');
       setQuestions([]);
+      setRevealed(new Set());
       try {
-        const q = query(collection(db, "questions"), where("topic", "==", topic.id));
-        const querySnapshot = await getDocs(q);
+        if (!API_BASE) {
+          throw new Error("Test API base URL is not configured.");
+        }
+        const user = auth.currentUser;
+        if (!user) {
+          throw new Error("You must be signed in to view topic questions.");
+        }
+        const token = await user.getIdToken();
+        const params = new URLSearchParams({ topicId: topic.id });
+        const response = await fetch(`${API_BASE}/tests/topic-questions?${params.toString()}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const message = payload?.error || "Failed to fetch topic questions.";
+          throw new Error(message);
+        }
 
-        if (querySnapshot.empty) {
+        if (!isMounted) return;
+
+        const fetchedQuestions = Array.isArray(payload?.questions) ? payload.questions : [];
+        if (fetchedQuestions.length === 0) {
           setError("No questions found for this topic.");
+          setQuestions([]);
         } else {
-          const fetchedQuestions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setQuestions(fetchedQuestions);
         }
       } catch (err) {
+        if (controller.signal.aborted || !isMounted) return;
         console.error("Error fetching topic questions:", err);
-        setError("An error occurred. Please check the console.");
+        const message = err?.message || "An error occurred while loading topic questions.";
+        setError(message);
+        setQuestions([]);
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchQuestions();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
   }, [topic]);
 
   // NEW: Handler to reveal a single question's answer by its ID
