@@ -997,10 +997,10 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-emerald-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 lg:flex-row">
         <aside
-          className={`relative flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-full max-w-sm lg:max-w-xs xl:max-w-sm" : "w-0"}`}
+          className={`flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-full max-w-sm lg:max-w-xs xl:max-w-sm" : "w-0"}`}
         >
           <div
-            className={`flex h-full min-h-[640px] flex-col rounded-3xl border border-indigo-100 bg-white/95 shadow-2xl shadow-indigo-200/50 backdrop-blur transition-all duration-300 ${isSidebarOpen ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-6 opacity-0"}`}
+            className={`sticky top-4 flex h-[calc(100vh-3rem)] min-h-[640px] flex-col overflow-hidden rounded-3xl border border-indigo-100 bg-white/95 shadow-2xl shadow-indigo-200/50 backdrop-blur transition-all duration-300 ${isSidebarOpen ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-6 opacity-0"}`}
           >
             <div className="border-b border-indigo-100 px-6 py-6 sm:px-7">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
@@ -1012,6 +1012,19 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
               <p className="mt-1 text-xs text-slate-500">
                 Navigate topics and subtopics for today's study plan.
               </p>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {badgeLabel ? (
+                <span className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
+                  {badgeLabel}
+                </span>
+              ) : null}
+              <button
+                onClick={toggleSidebar}
+                className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:shadow-lg"
+              >
+                {isSidebarOpen ? "Focus Mode" : "Show Menu"}
+              </button>
             </div>
             <nav className="flex-1 overflow-y-auto px-6 py-5 timeline-scrollbar">
               {isSidebarLoading ? (
@@ -1057,7 +1070,7 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
           </div>
         </aside>
         <main className="flex-1">
-          <div className="relative flex h-full min-h-[640px] flex-col overflow-hidden rounded-3xl border border-indigo-100 bg-white/90 shadow-2xl shadow-indigo-200/40 backdrop-blur">
+          <div className="relative flex h-full min-h-[640px] flex-col overflow-hidden lg:overflow-visible rounded-3xl border border-indigo-100 bg-white/90 shadow-2xl shadow-indigo-200/40 backdrop-blur">
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50/55 via-white/70 to-transparent" />
             <div className="relative flex h-full flex-col">
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-indigo-100 px-6 py-6 sm:px-8 sm:py-7">
@@ -1074,27 +1087,20 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
                       : "Choose a topic from the syllabus to launch an interactive lesson with the mentor."}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 lg:gap-4">
                   {badgeLabel ? (
                     <span className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
                       {badgeLabel}
                     </span>
                   ) : null}
-                  {isSidebarOpen ? (
-                    <button
-                      onClick={toggleSidebar}
-                      className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:shadow-lg"
-                    >
-                      Focus Mode
-                    </button>
-                  ) : (
+                  {!isSidebarOpen ? (
                     <button
                       onClick={toggleSidebar}
                       className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg"
                     >
                       Show Menu
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto px-6 pb-8 pt-6 timeline-scrollbar sm:px-8 sm:pb-10 sm:pt-8">
