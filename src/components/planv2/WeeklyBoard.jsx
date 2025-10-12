@@ -8,6 +8,7 @@ import {
   searchMasterQueueTopics,
   ensureMasterQueueBuilt,
 } from "../../services/planV2Api";
+import DayCapacityModal from "./DayCapacityModal";
 
 const toISO = (input) => {
   const date =
@@ -57,7 +58,6 @@ export default function WeeklyBoard({
   currentDayISO,
   onToggleOffDay,
   onUpdateDayCap,
-  onAdjustDayCap,
   onMarkDayDone,
   onAddFromMaster,
   onAutoFillWeek,
@@ -83,6 +83,7 @@ export default function WeeklyBoard({
   const [searchError, setSearchError] = useState("");
 
   const [dragOverISO, setDragOverISO] = useState(null);
+  const [capacityModalData, setCapacityModalData] = useState(null);
 
   const weekIsoList = useMemo(
     () => weekDates.map((d) => toISO(d)),
@@ -347,21 +348,49 @@ export default function WeeklyBoard({
     return weekDates.find((date) => toISO(date) === expandedISO) || null;
   }, [weekDates, expandedISO]);
 
-  const promptForCap = useCallback(
-    (iso, existing) => {
-      const next =
-        typeof window !== "undefined"
-          ? window.prompt(
-              "Set daily minutes",
-              existing != null ? String(existing) : "",
-            )
-          : null;
-      if (next == null) return;
-      const parsed = Number(next);
-      if (!Number.isFinite(parsed)) return;
-      onUpdateDayCap?.(iso, parsed);
+  const openCapacityModal = useCallback(
+    (iso) => {
+      if (!iso || doneDays?.[iso]) return;
+      const matchingDate =
+        weekDates.find((date) => toISO(date) === iso) || null;
+      const label = matchingDate
+        ? formatDateDisplay(matchingDate, dayTitleFormat)
+        : formatDateDisplay(iso, dayTitleFormat);
+      setCapacityModalData({
+        iso,
+        initialMinutes: Number(dayCaps?.[iso] ?? 0),
+        initialIsOff: !!offDays?.[iso],
+        usedMinutes: Number(usedByDay?.[iso] ?? 0),
+        summaryItems: summaryByDay?.[iso] ?? [],
+        dateLabel: label || iso,
+      });
     },
-    [onUpdateDayCap],
+    [weekDates, dayCaps, offDays, usedByDay, summaryByDay, doneDays],
+  );
+
+  const closeCapacityModal = useCallback(() => {
+    setCapacityModalData(null);
+  }, []);
+
+  const handleCapacityModalSave = useCallback(
+    ({ minutes, isOff }) => {
+      if (!capacityModalData?.iso) {
+        setCapacityModalData(null);
+        return;
+      }
+      const { iso, initialMinutes, initialIsOff } = capacityModalData;
+      if (initialMinutes !== minutes) {
+        onUpdateDayCap?.(iso, minutes);
+      }
+      if (
+        typeof isOff === "boolean" &&
+        isOff !== initialIsOff
+      ) {
+        onToggleOffDay?.(iso, isOff);
+      }
+      setCapacityModalData(null);
+    },
+    [capacityModalData, onToggleOffDay, onUpdateDayCap],
   );
 
   const canAcceptDragPayload = useCallback((event) => {
@@ -440,7 +469,7 @@ export default function WeeklyBoard({
             "This day is at capacity. Increase daily minutes to schedule this topic?",
           );
           if (adjust) {
-            promptForCap(iso, capMinutes);
+            openCapacityModal(iso);
           }
         }
         return;
@@ -458,7 +487,7 @@ export default function WeeklyBoard({
         setTimeout(() => setUiMsg(""), 2000);
       }
     },
-    [uid, canAcceptDragPayload, doneDays, promptForCap, onRefresh],
+    [uid, canAcceptDragPayload, doneDays, openCapacityModal, onRefresh],
   );
 
   const handleMarkDoneClick = useCallback(
@@ -729,24 +758,10 @@ export default function WeeklyBoard({
                     </button>
                     <button
                       className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
-                      onClick={() => onAdjustDayCap?.(iso, -10)}
+                      onClick={() => openCapacityModal(iso)}
                       disabled={isDone}
                     >
-                      -10 min
-                    </button>
-                    <button
-                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
-                      onClick={() => onAdjustDayCap?.(iso, 10)}
-                      disabled={isDone}
-                    >
-                      +10 min
-                    </button>
-                    <button
-                      className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
-                      onClick={() => promptForCap(iso, cap)}
-                      disabled={isDone}
-                    >
-                      Set capacity
+                      Adjust day
                     </button>
                     <button
                       className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100 disabled:opacity-60"
@@ -759,7 +774,7 @@ export default function WeeklyBoard({
                       <button
                         className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                         onClick={() => onAddFromMaster(iso)}
-                        disabled={isDone}
+                        disabled={isDone || isAutoFilling}
                       >
                         Autofill day
                       </button>
@@ -847,20 +862,6 @@ export default function WeeklyBoard({
                     {offDays?.[expandedISO] ? "Mark study day" : "Mark off day"}
                   </button>
                   <button
-                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
-                    onClick={() => onAdjustDayCap?.(expandedISO, -10)}
-                    disabled={expandedIsDone}
-                  >
-                    -10 min
-                  </button>
-                  <button
-                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
-                    onClick={() => onAdjustDayCap?.(expandedISO, 10)}
-                    disabled={expandedIsDone}
-                  >
-                    +10 min
-                  </button>
-                  <button
                     className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100 disabled:opacity-60"
                     onClick={() => handleMarkDoneClick(expandedISO)}
                     disabled={expandedIsDone}
@@ -869,16 +870,16 @@ export default function WeeklyBoard({
                   </button>
                   <button
                     className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
-                    onClick={() => promptForCap(expandedISO, currentCap)}
+                    onClick={() => openCapacityModal(expandedISO)}
                     disabled={expandedIsDone}
                   >
-                    Set capacity
+                    Adjust day
                   </button>
                   {onAddFromMaster && (
                     <button
                       className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
                       onClick={() => onAddFromMaster(expandedISO)}
-                      disabled={expandedIsDone}
+                      disabled={expandedIsDone || isAutoFilling}
                     >
                       Autofill day
                     </button>
@@ -1093,6 +1094,17 @@ export default function WeeklyBoard({
           </div>
         </div>
       )}
+      <DayCapacityModal
+        isOpen={!!capacityModalData}
+        iso={capacityModalData?.iso || ""}
+        dateLabel={capacityModalData?.dateLabel || ""}
+        initialMinutes={capacityModalData?.initialMinutes ?? 0}
+        usedMinutes={capacityModalData?.usedMinutes ?? 0}
+        summaryItems={capacityModalData?.summaryItems ?? []}
+        initialIsOff={capacityModalData?.initialIsOff ?? false}
+        onCancel={closeCapacityModal}
+        onSave={handleCapacityModalSave}
+      />
     </div>
-);
+  );
 }

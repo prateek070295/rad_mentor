@@ -1,5 +1,5 @@
 // src/components/planv2/MasterGanttTimeline.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, memo, useRef, useLayoutEffect } from "react";
 import { db } from "../../firebase";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { fmtISO, sectionPalette } from "./utils";
@@ -8,7 +8,7 @@ const DEFAULT_DAILY_CAP = 180;
 const DAY_WIDTH_PX = 28;
 const TODAY_COLOR = "#0ea5e9";
 
-export default function MasterGanttTimeline({
+function MasterGanttTimeline({
   uid,
   meta,
   week,
@@ -16,6 +16,8 @@ export default function MasterGanttTimeline({
 }) {
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(false);
+  const containerRef = useRef(null);
+  const [stabilizedHeight, setStabilizedHeight] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -349,6 +351,12 @@ export default function MasterGanttTimeline({
     meta?.currentDayISO || meta?.startDate || fmtISO(new Date());
   const hasData = timelineBlocks.length > 0;
 
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+    const nextHeight = containerRef.current.getBoundingClientRect().height;
+    setStabilizedHeight((prev) => (prev == null ? nextHeight : Math.max(prev, nextHeight)));
+  }, [hasData, queue, timelineBlocks, schedule.totalDays]);
+
   if (loading) {
     return (
       <div className="flex w-full flex-col gap-4 rounded-3xl border border-indigo-100 bg-white/80 px-6 py-8 text-sm text-slate-500 shadow-xl shadow-indigo-200/40 backdrop-blur">
@@ -360,7 +368,11 @@ export default function MasterGanttTimeline({
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-3xl border border-indigo-100 bg-white/80 shadow-2xl shadow-indigo-200/40 backdrop-blur">
+    <div
+      ref={containerRef}
+      className="relative w-full overflow-hidden rounded-3xl border border-indigo-100 bg-white/80 shadow-2xl shadow-indigo-200/40 backdrop-blur"
+      style={{ minHeight: stabilizedHeight ?? 320 }}
+    >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-indigo-50/30 via-white/40 to-transparent" />
       <div className="relative flex flex-wrap items-center justify-between gap-4 px-6 py-5">
         <div>
@@ -511,3 +523,9 @@ function formatMonthLabel(date, includeYear = false) {
   const yearSuffix = String(date.getFullYear()).slice(-2);
   return `${month} '${yearSuffix}`;
 }
+
+export default memo(MasterGanttTimeline);
+
+
+
+

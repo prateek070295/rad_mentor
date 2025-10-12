@@ -1,5 +1,5 @@
 // src/components/planv2/MasterQueueSidebar.jsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, memo } from "react";
 import { listMasterQueueLinear } from "../../services/planV2Api";
 
 /**
@@ -14,7 +14,7 @@ import { listMasterQueueLinear } from "../../services/planV2Api";
  *  - uid: string
  *  - refreshSignal?: number   // bump from parent to force refetch
  */
-export default function MasterQueueSidebar({ uid, refreshSignal = 0 }) {
+function MasterQueueSidebar({ uid, refreshSignal = 0 }) {
   const [loading, setLoading] = useState(true);
   const [queuedRuns, setQueuedRuns] = useState([]);
   const [inProgressRuns, setInProgressRuns] = useState([]);
@@ -302,3 +302,5 @@ function Group({ group, defaultOpen, onDragStart }) {
     </div>
   );
 }
+
+export default memo(MasterQueueSidebar);

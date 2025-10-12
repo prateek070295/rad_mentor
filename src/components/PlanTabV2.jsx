@@ -86,12 +86,16 @@ export default function PlanTabV2() {
   const [weekDoc, setWeekDoc] = useState(null);
 
   const [showWizard, setShowWizard] = useState(false);
-  const [refreshSignal, setRefreshSignal] = useState(0); // bump to refetch children
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0);
+  const [weekRefreshKey, setWeekRefreshKey] = useState(0);
+  const pendingDayCapValuesRef = useRef({});
+  const pendingDayCapTimersRef = useRef({});
   const metaLoadedRef = useRef(false);
   const [queueSummaryRows, setQueueSummaryRows] = useState([]);
   const [queueSummaryLoading, setQueueSummaryLoading] = useState(false);
   const [masterTotals, setMasterTotals] = useState(null);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const [isAutoFillingDay, setIsAutoFillingDay] = useState(false);
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -153,7 +157,7 @@ export default function PlanTabV2() {
       clearTimeout(timeoutId);
       setQueueSummaryLoading(false);
     };
-  }, [uid, metaLoading, showWizard, refreshSignal]);
+  }, [uid, metaLoading, showWizard, queueRefreshKey]);
 
   // auth -> uid
   useEffect(() => {
@@ -241,7 +245,7 @@ export default function PlanTabV2() {
     return () => {
       active = false;
     };
-  }, [uid, meta?.updatedAt, refreshSignal]);
+  }, [uid, meta?.updatedAt, queueRefreshKey]);
 
   // choose "This Week" key from today
   useEffect(() => {
@@ -314,7 +318,7 @@ export default function PlanTabV2() {
     return () => {
       mounted = false;
     };
-  }, [uid, weekKey, metaLoading, defaultDailyMinutes, refreshSignal]);
+  }, [uid, weekKey, metaLoading, defaultDailyMinutes, weekRefreshKey]);
 
   const weekDates = useMemo(() => {
     return weekDatesFromKeyLocal(weekKey);
@@ -332,9 +336,87 @@ export default function PlanTabV2() {
   }, [meta]);
 
   // --------- handlers ----------
-  const refreshAll = useCallback(() => {
-    setRefreshSignal((x) => x + 1);
+  const refreshQueue = useCallback(() => {
+    setQueueRefreshKey((value) => value + 1);
   }, []);
+
+  const refreshWeekData = useCallback(() => {
+    setWeekRefreshKey((value) => value + 1);
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    refreshQueue();
+    refreshWeekData();
+  }, [refreshQueue, refreshWeekData]);
+
+  const flushDayCapPatch = useCallback(
+    async (iso) => {
+      const timer = pendingDayCapTimersRef.current?.[iso];
+      if (timer) {
+        clearTimeout(timer);
+        delete pendingDayCapTimersRef.current[iso];
+      }
+      if (!uid || !weekKey) {
+        delete pendingDayCapValuesRef.current[iso];
+        return;
+      }
+      const value = pendingDayCapValuesRef.current?.[iso];
+      if (value == null) return;
+      delete pendingDayCapValuesRef.current[iso];
+      try {
+        await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: value });
+      } catch (error) {
+        console.error("Failed to persist day cap", error);
+        refreshWeekData();
+      }
+    },
+    [uid, weekKey, refreshWeekData],
+  );
+
+  const scheduleDayCapUpdate = useCallback(
+    (iso, minutes) => {
+      setWeekDoc((prev) => {
+        if (!prev) return prev;
+        const current = Number(prev.dayCaps?.[iso] ?? 0);
+        if (current === minutes) return prev;
+        return {
+          ...prev,
+          dayCaps: {
+            ...(prev.dayCaps || {}),
+            [iso]: minutes,
+          },
+        };
+      });
+
+      pendingDayCapValuesRef.current[iso] = minutes;
+      if (pendingDayCapTimersRef.current[iso]) {
+        clearTimeout(pendingDayCapTimersRef.current[iso]);
+      }
+      pendingDayCapTimersRef.current[iso] = setTimeout(
+        () => flushDayCapPatch(iso),
+        400,
+      );
+    },
+    [flushDayCapPatch],
+  );
+
+  useEffect(() => {
+    return () => {
+      const timers = pendingDayCapTimersRef.current || {};
+      Object.keys(timers).forEach((iso) => {
+        clearTimeout(timers[iso]);
+      });
+      const pending = { ...(pendingDayCapValuesRef.current || {}) };
+      pendingDayCapTimersRef.current = {};
+      pendingDayCapValuesRef.current = {};
+      if (!uid || !weekKey) return;
+      Object.entries(pending).forEach(([iso, value]) => {
+        patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: value }).catch((err) =>
+          console.error("Failed to persist day cap during cleanup", err),
+        );
+      });
+    };
+  }, [uid, weekKey]);
 
   const handleAutoFillWeek = useCallback(async () => {
     if (!uid || !weekKey || isAutoFilling) return;
@@ -356,13 +438,14 @@ export default function PlanTabV2() {
         setQueueSummaryRows(
           Array.isArray(updatedQueueSummary) ? updatedQueueSummary : [],
         );
+        refreshQueue();
       });
     } catch (error) {
       console.error("Auto-fill failed:", error);
     } finally {
       setIsAutoFilling(false);
     }
-  }, [uid, weekKey, defaultDailyMinutes, runWithPending, isAutoFilling]);
+  }, [uid, weekKey, defaultDailyMinutes, runWithPending, isAutoFilling, refreshQueue]);
 
   const handleResetPlan = useCallback(async () => {
     if (!uid) return;
@@ -510,33 +593,28 @@ export default function PlanTabV2() {
     );
   };
 
-  const handleToggleOffDay = async (iso) => {
+  const handleToggleOffDay = async (iso, explicitNext) => {
     if (!uid || !weekKey) return;
+    const next =
+      explicitNext != null ? !!explicitNext : !offDays[iso];
     await runWithPending(async () => {
-      const next = !offDays[iso];
       await patchWeek(uid, weekKey, { [`offDays.${iso}`]: next });
-      refreshAll();
+      setWeekDoc((prev) => {
+        if (!prev) return prev;
+        const nextOff = { ...(prev.offDays || {}) };
+        nextOff[iso] = next;
+        return { ...prev, offDays: nextOff };
+      });
     });
   };
 
-  const handleUpdateDayCap = async (iso, minutes) => {
-    if (!uid || !weekKey) return;
-    await runWithPending(async () => {
+  const handleUpdateDayCap = useCallback(
+    (iso, minutes) => {
       const m = Math.max(0, Number(minutes || 0));
-      await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: m });
-      refreshAll();
-    });
-  };
-
-  const handleAdjustDayCap = async (iso, delta) => {
-    if (!uid || !weekKey) return;
-    await runWithPending(async () => {
-      const cur = Number(dayCaps?.[iso] || 0);
-      const m = Math.max(0, cur + Number(delta || 0));
-      await patchWeek(uid, weekKey, { [`dayCaps.${iso}`]: m });
-      refreshAll();
-    });
-  };
+      scheduleDayCapUpdate(iso, m);
+    },
+    [scheduleDayCapUpdate],
+  );
 
   const handleMarkDayDone = async (iso) => {
     if (!uid || !weekKey) return null;
@@ -563,7 +641,8 @@ export default function PlanTabV2() {
           );
         }
 
-        refreshAll();
+        refreshWeekData();
+        refreshQueue();
         return result;
       } catch (err) {
         console.error(err);
@@ -590,11 +669,15 @@ export default function PlanTabV2() {
   const handleAddFromMaster = async (iso) => {
     if (!uid || !weekKey) return;
 
-    await runWithPending(async () => {
-      let remaining = calcRemaining(iso);
-      if (remaining <= 0) return;
+    setIsAutoFillingDay(true);
+    try {
+      await runWithPending(async () => {
+        // persist any pending cap changes so scheduling sees latest capacity
+        await flushDayCapPatch(iso);
 
-      try {
+        let remaining = calcRemaining(iso);
+        if (remaining <= 0) return;
+
         const [ip, qd] = await Promise.all([
           listMasterQueueLinear(uid, { filter: "inProgress" }),
           listMasterQueueLinear(uid, { filter: "queued" }),
@@ -631,6 +714,21 @@ export default function PlanTabV2() {
           );
           remaining = Math.max(0, remaining - addedMinutes);
           fillCount += slices.length;
+
+          // optimistic update so the board reflects new slices immediately
+          setWeekDoc((prev) => {
+            if (!prev) return prev;
+            const prevAssigned = Array.isArray(prev.assigned?.[iso])
+              ? prev.assigned[iso]
+              : [];
+            return {
+              ...prev,
+              assigned: {
+                ...(prev.assigned || {}),
+                [iso]: [...prevAssigned, ...slices],
+              },
+            };
+          });
         }
 
         if (!fillCount) {
@@ -648,19 +746,22 @@ export default function PlanTabV2() {
         if (nextWeekDoc) {
           setWeekDoc(nextWeekDoc);
         }
-        refreshAll();
+        refreshWeekData();
+        refreshQueue();
 
         if (typeof window !== "undefined") {
           window.alert(`Added ${fillCount} study blocks to ${iso}.`);
         }
-      } catch (err) {
-        console.error(err);
-        if (typeof window !== "undefined") {
-          window.alert(err?.message || "Failed to add from the master queue");
-        }
-        throw err;
+      });
+    } catch (err) {
+      console.error(err);
+      if (typeof window !== "undefined") {
+        window.alert(err?.message || "Failed to add from the master queue");
       }
-    });
+      throw err;
+    } finally {
+      setIsAutoFillingDay(false);
+    }
   };
 
   // labels/metrics
@@ -689,6 +790,19 @@ export default function PlanTabV2() {
       ),
     [queueSummaryRows, weekDoc, meta],
   );
+
+  const handleBoardRefresh = useCallback(() => {
+    refreshWeekData();
+    refreshQueue();
+  }, [refreshWeekData, refreshQueue]);
+
+  const isAutoFillBusy = isAutoFilling || isAutoFillingDay;
+  const autoFillHeadline = isAutoFilling
+    ? "Auto-filling your week..."
+    : "Auto-filling your day...";
+  const autoFillSubtext = isAutoFilling
+    ? "Hang tight - we'll refresh the planner once every day is packed."
+    : "Hang tight - we'll refresh as soon as the new blocks are in place.";
 
   const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
 
@@ -726,7 +840,7 @@ export default function PlanTabV2() {
           uid={uid}
           meta={meta}
           week={weekDoc}
-          refreshSignal={refreshSignal}
+          refreshSignal={queueRefreshKey}
         />
       </div>
 
@@ -734,14 +848,14 @@ export default function PlanTabV2() {
         {/* Sidebar */}
         <aside className="lg:sticky lg:top-8 lg:self-start">
           <div className="max-h-[calc(100vh-6rem)] overflow-y-auto rounded-3xl border border-indigo-100 bg-white/70 shadow-xl shadow-indigo-200/40 backdrop-blur">
-            <MasterQueueSidebar uid={uid} refreshSignal={refreshSignal} />
+            <MasterQueueSidebar uid={uid} refreshSignal={queueRefreshKey} />
           </div>
         </aside>
 
         {/* Main column */}
         <main className="flex min-w-0 flex-col gap-6">
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-4 shadow-xl shadow-indigo-200/50 backdrop-blur">
-            <WeeklyBoard
+          <WeeklyBoard
               uid={uid}
               weekKey={weekKey}
               weekDates={weekDates}
@@ -752,15 +866,14 @@ export default function PlanTabV2() {
               currentDayISO={currentDayISO}
               onToggleOffDay={handleToggleOffDay}
               onUpdateDayCap={handleUpdateDayCap}
-              onAdjustDayCap={handleAdjustDayCap}
               onMarkDayDone={handleMarkDayDone}
               onAddFromMaster={handleAddFromMaster}
-              onRefresh={refreshAll}
+              onRefresh={handleBoardRefresh}
               onPrevWeek={undefined}
               onNextWeek={undefined}
               onThisWeek={undefined}
               onAutoFillWeek={handleAutoFillWeek}
-              isAutoFilling={isAutoFilling}
+              isAutoFilling={isAutoFillBusy}
               weekLabel={weekLabel}
               totalPlannedThisWeek={totalPlannedThisWeek}
             />
@@ -771,31 +884,55 @@ export default function PlanTabV2() {
   );
 
   return (
-    <div className="space-y-10">
-      {shouldShowSkeleton ? <SkeletonLayout /> : <PlannerContent />}
+    <div className="relative">
+      <div
+        className={`space-y-10 ${
+          isAutoFillBusy ? "pointer-events-none select-none opacity-40" : ""
+        }`}
+      >
+        {shouldShowSkeleton ? <SkeletonLayout /> : <PlannerContent />}
 
-      {showWizard && (
-        <PlanSetupWizardV2
-          planMeta={meta}
-          initial={{
-            startDate: meta?.startDate || "",
-            examDate: meta?.examDate || "",
-            dailyMinutes:
-              meta?.dailyMinutes != null
-                ? String(meta.dailyMinutes)
-                : "",
-            strategy: meta?.strategy || undefined,
-            disabledSections: meta?.disabledSections || [],
-            sectionOrder: meta?.sectionOrder || [],
-            recommendedDaily: meta?.recommendedDaily ?? undefined,
-            onlyMustChapters: !!meta?.onlyMustChapters,
-            totalMinutes: Number(masterTotals?.minutes || planOverviewStats?.minutesTotal || 0),
-          }}
-          defaultDaily={Number(flags?.dailyCapacityMinsDefault ?? 90)}
-          onCancel={() => setShowWizard(false)}
-          onSave={handleSaveWizard}
-        />
+        {showWizard && (
+          <PlanSetupWizardV2
+            planMeta={meta}
+            initial={{
+              startDate: meta?.startDate || "",
+              examDate: meta?.examDate || "",
+              dailyMinutes:
+                meta?.dailyMinutes != null
+                  ? String(meta.dailyMinutes)
+                  : "",
+              strategy: meta?.strategy || undefined,
+              disabledSections: meta?.disabledSections || [],
+              sectionOrder: meta?.sectionOrder || [],
+              recommendedDaily: meta?.recommendedDaily ?? undefined,
+              onlyMustChapters: !!meta?.onlyMustChapters,
+              totalMinutes:
+                Number(
+                  masterTotals?.minutes || planOverviewStats?.minutesTotal || 0,
+                ),
+            }}
+            defaultDaily={Number(flags?.dailyCapacityMinsDefault ?? 90)}
+            onCancel={() => setShowWizard(false)}
+            onSave={handleSaveWizard}
+          />
+        )}
+      </div>
+
+      {isAutoFillBusy && (
+        <div className="pointer-events-auto fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+          <span className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          <span className="mt-4 text-sm font-semibold text-slate-700">
+            {autoFillHeadline}
+          </span>
+          <span className="text-xs text-slate-500">{autoFillSubtext}</span>
+        </div>
       )}
     </div>
   );
 }
+
+
+
+
+
