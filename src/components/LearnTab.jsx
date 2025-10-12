@@ -121,29 +121,38 @@ const useUserProgress = (organIds) => {
         emit();
         finishLoading();
       } else {
-        const readySet = new Set();
-        const total = rawIds.length;
-        rawIds.forEach((chapterIdRaw) => {
-          const chapterId = chapterIdRaw;
-          const chapterLower = chapterId.toLowerCase();
-          const listener = onSnapshot(
-            query(progressRef, where("chapterId", "==", chapterId)),
-            (snapshot) => {
-              const activeDocIds = new Set();
+        let cancelled = false;
+        const fetchFiltered = async () => {
+          try {
+            localMap.clear();
+            const chunkSize = 10;
+            for (let i = 0; i < rawIds.length; i += chunkSize) {
+              if (cancelled) return;
+              const chunk = rawIds.slice(i, i + chunkSize);
+              const snapshot = await getDocs(query(progressRef, where("chapterId", "in", chunk)));
+              if (cancelled) return;
               snapshot.forEach((doc) => {
-                activeDocIds.add(doc.id);
                 const data = doc.data() || {};
                 localMap.set(doc.id, { id: doc.id, ...data });
               });
+            }
+            emit();
+          } catch (error) {
+            console.error("Error loading user progress:", error);
+          } finally {
+            if (!cancelled) {
+              finishLoading();
+            }
+          }
+        };
 
-              for (const [docId, value] of Array.from(localMap.entries())) {
-                const docChapterLower = String(value?.chapterId || "")
-                  .trim()
-                  .toLowerCase();
-                if (docChapterLower === chapterLower && !activeDocIds.has(docId)) {
-                  localMap.delete(docId);
-                }
-              }
+        fetchFiltered();
+
+        listeners.push(() => {
+          cancelled = true;
+        });
+      }
+    }
 
               emit();
               readySet.add(chapterId);
