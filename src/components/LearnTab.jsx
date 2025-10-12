@@ -1,11 +1,11 @@
-const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import TopicNode from './TopicNode';
 import MCQForm from './MCQForm';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
 // This hook for fetching user progress is correct and remains unchanged.
 const useUserProgress = (organIds) => {
@@ -268,7 +268,7 @@ const useUserProgress = (organIds) => {
 
     };
 
-  }, [userId, organKey]);
+  }, [userId, organKey, lowerIds, rawIds]);
 
 
 
