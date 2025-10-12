@@ -65,6 +65,26 @@ service cloud.firestore {
       }
     }
 
+    match /userProgress/{userId} {
+      allow read, write: if isRequestUser(userId);
+
+      match /topics/{topicId} {
+        allow read, write: if isRequestUser(userId);
+      }
+
+      match /sessions/{sessionId} {
+        allow read, write: if isRequestUser(userId);
+
+        match /messages/{messageId} {
+          allow read, write: if isRequestUser(userId);
+        }
+      }
+
+      match /{document=**} {
+        allow read, write: if isRequestUser(userId);
+      }
+    }
+
     match /study_items/{itemId} {
       allow read: if isSignedIn();
       allow update: if isAdmin();

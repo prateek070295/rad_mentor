@@ -5,6 +5,38 @@ const TopicNode = ({ topic, onTopicSelect, currentTopicId }) => {
 
   const hasChildren = topic.children && topic.children.length > 0;
 
+  const normalizedStatus =
+    typeof topic.status === "string" ? topic.status.trim().toLowerCase() : "";
+  let computedStatus = normalizedStatus;
+
+  if (!computedStatus || computedStatus === "not-started") {
+    const pct =
+      typeof topic.percentComplete === "number" ? topic.percentComplete : null;
+    if (pct !== null) {
+      if (pct >= 100) {
+        computedStatus = "completed";
+      } else if (pct > 0) {
+        computedStatus = "in-progress";
+      }
+    }
+  }
+
+  if ((!computedStatus || computedStatus === "not-started") && topic.completed === true) {
+    computedStatus = "completed";
+  }
+
+  if ((!computedStatus || computedStatus === "not-started") && topic.started === true) {
+    computedStatus = computedStatus === "completed" ? computedStatus : "in-progress";
+  }
+
+  if ((!computedStatus || computedStatus === "not-started") && currentTopicId === topic.id) {
+    computedStatus = "in-progress";
+  }
+
+  if (!computedStatus) {
+    computedStatus = "not-started";
+  }
+
   // A single handler for the entire row
   const handleRowClick = () => {
     // Action 1: Select the topic to view its content
@@ -32,7 +64,15 @@ const TopicNode = ({ topic, onTopicSelect, currentTopicId }) => {
         )}
 
         {/* Status Icon */}
-        <div className={`w-3 h-3 rounded-full flex-shrink-0 ${topic.status === 'completed' ? 'bg-green-500' : topic.status === 'in-progress' ? 'bg-yellow-500' : 'bg-gray-400'}`}></div>
+        <div
+          className={`w-3 h-3 rounded-full flex-shrink-0 ${
+            computedStatus === 'completed'
+              ? 'bg-green-500'
+              : computedStatus === 'in-progress'
+              ? 'bg-yellow-500'
+              : 'bg-gray-400'
+          }`}
+        ></div>
         
         {/* Topic Name (no longer needs its own click handler) */}
         <span 

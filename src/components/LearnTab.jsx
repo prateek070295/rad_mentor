@@ -507,16 +507,70 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
       return;
     }
 
+    const deriveTopicStatus = (entry, fallbackTopic) => {
+      const normalize = (value) =>
+        typeof value === "string" ? value.trim().toLowerCase() : "";
+
+      const candidateStatuses = [
+        normalize(entry?.status),
+        normalize(entry?.state),
+        normalize(fallbackTopic?.status),
+      ].filter(Boolean);
+
+      const completedKeywords = new Set(["completed", "complete", "done", "finished", "success", "submitted"]);
+      if (candidateStatuses.some((value) => completedKeywords.has(value))) {
+        return "completed";
+      }
+
+      const progressKeywords = new Set(["in-progress", "inprogress", "progress", "active", "started", "start"]);
+      if (candidateStatuses.some((value) => progressKeywords.has(value))) {
+        return "in-progress";
+      }
+
+      const percentCandidates = [
+        typeof entry?.percentComplete === "number" ? entry.percentComplete : null,
+        typeof fallbackTopic?.percentComplete === "number" ? fallbackTopic.percentComplete : null,
+      ];
+      for (const pct of percentCandidates) {
+        if (pct === null) continue;
+        if (pct >= 100) return "completed";
+        if (pct > 0) return "in-progress";
+      }
+
+      if (entry?.completed === true || entry?.completedAt || fallbackTopic?.completed === true) {
+        return "completed";
+      }
+      if (entry?.started === true || entry?.startedAt || fallbackTopic?.started === true) {
+        return "in-progress";
+      }
+
+      return "not-started";
+    };
+
     const mergeRecursively = (topics, chapterId, chapterName) =>
       topics.map((topic) => {
         const progressEntry = userProgress.get(topic.id);
+        const status = deriveTopicStatus(progressEntry, topic);
         const merged = {
           ...topic,
-          status: progressEntry?.status || "not-started",
-          percentComplete: progressEntry?.percentComplete || 0,
+          status,
+          percentComplete:
+            typeof progressEntry?.percentComplete === "number"
+              ? progressEntry.percentComplete
+              : typeof topic.percentComplete === "number"
+              ? topic.percentComplete
+              : status === "completed"
+              ? 100
+              : 0,
           chapterId,
           chapterName,
+          completed: status === "completed",
+          started: status === "in-progress" || progressEntry?.started === true || !!progressEntry?.startedAt || topic.started === true,
         };
+        topic.status = merged.status;
+        topic.percentComplete = merged.percentComplete;
+        topic.completed = merged.completed;
+        topic.started = merged.started;
         if (Array.isArray(topic.children) && topic.children.length > 0) {
           merged.children = mergeRecursively(
             topic.children,
