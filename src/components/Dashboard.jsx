@@ -374,6 +374,7 @@ function Dashboard({
         nextAchievement: null,
         recentlyUnlocked: [],
       };
+  const showAtGlance = false;
   const planProgressPercent =
     typeof planStats?.overallProgress === "number"
       ? clampPercent(planStats.overallProgress * 100)
@@ -465,7 +466,7 @@ function Dashboard({
 
   return (
     <div className="grid gap-6 xl:grid-cols-3">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-blue-500 p-6 text-white shadow-2xl shadow-indigo-600/30 sm:p-8 lg:p-10 xl:col-span-2 xl:h-full">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-blue-500 p-6 text-white shadow-2xl shadow-indigo-600/30 sm:p-8 lg:p-10 xl:col-span-2 xl:self-start">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-indigo-400/20 mix-blend-screen" />
         <div className="pointer-events-none absolute -right-20 top-0 h-72 w-72 rounded-full bg-gradient-to-br from-cyan-400/40 to-indigo-500/40 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-10 h-80 w-80 rounded-full bg-gradient-to-tr from-violet-500/35 to-pink-400/35 blur-3xl" />
@@ -653,6 +654,7 @@ function Dashboard({
           highlight={highlightData}
           onOpenAchievements={onOpenAchievements}
         />
+        {showAtGlance && (
         <SectionCard
           tone="bg-white/75"
           className="flex h-full flex-col justify-between"
@@ -691,6 +693,7 @@ function Dashboard({
             />
           </div>
         </SectionCard>
+        )}
       </div>
       <SectionCard
         tone="bg-gradient-to-br from-indigo-50 via-white to-sky-50"
