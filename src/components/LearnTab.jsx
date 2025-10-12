@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
@@ -6,39 +6,62 @@ import TopicNode from './TopicNode';
 import MCQForm from './MCQForm';
 
 // This hook for fetching user progress is correct and remains unchanged.
-const useUserProgress = (organId) => {
+const useUserProgress = (organIds) => {
   const [progress, setProgress] = useState(new Map());
   const [isLoading, setIsLoading] = useState(true);
+  const normalizedOrganIds = useMemo(() => {
+    if (!Array.isArray(organIds)) return [];
+    return organIds
+      .map((value) =>
+        value == null ? "" : String(value).trim().toLowerCase(),
+      )
+      .filter(Boolean)
+      .sort();
+  }, [organIds]);
+  const organKey = normalizedOrganIds.join("|");
+  const userId = auth.currentUser?.uid || null;
+
   useEffect(() => {
-    if (!auth.currentUser || !organId) {
+    if (!userId) {
       setProgress(new Map());
       setIsLoading(false);
       return;
     }
-    const userId = auth.currentUser.uid;
-    const progressRef = collection(db, 'userProgress', userId, 'topics');
-    const q = query(progressRef, where("chapterId", "==", organId));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const progressMap = new Map();
-      querySnapshot.forEach(doc => {
-        progressMap.set(doc.id, { id: doc.id, ...doc.data() });
-      });
-      setProgress(progressMap);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Error fetching real-time user progress:", error);
-      setIsLoading(false);
-    });
+    setIsLoading(true);
+    const allowed = new Set(normalizedOrganIds);
+    const includeAll = allowed.size === 0;
+    const progressRef = collection(db, "userProgress", userId, "topics");
+    const unsubscribe = onSnapshot(
+      progressRef,
+      (querySnapshot) => {
+        const progressMap = new Map();
+        querySnapshot.forEach((doc) => {
+          const data = doc.data() || {};
+          const chapterId = String(data?.chapterId || "")
+            .trim()
+            .toLowerCase();
+          if (includeAll || allowed.has(chapterId)) {
+            progressMap.set(doc.id, { id: doc.id, ...data });
+          }
+        });
+        setProgress(progressMap);
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching real-time user progress:", error);
+        setIsLoading(false);
+      },
+    );
     return () => unsubscribe();
-  }, [organId]);
+  }, [userId, organKey, normalizedOrganIds]);
   return { progress, isLoading };
 };
 
 const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode }) => {
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [currentChapter, setCurrentChapter] = useState(null);
-  const [chapterTopics, setChapterTopics] = useState([]); // This will hold the final merged tree
+  const [scheduledChapters, setScheduledChapters] = useState([]);
+  const [chapterGroups, setChapterGroups] = useState([]); // grouped topics per chapter
   const [isSidebarLoading, setIsSidebarLoading] = useState(true);
   
   // NEW: State to hold the static, fetched tree structure.
@@ -51,7 +74,9 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
   const [activeTopic, setActiveTopic] = useState(null);
   const lastCardRef = useRef(null);
   
-  const { progress: userProgress, isLoading: isProgressLoading } = useUserProgress(currentChapter?.sectionName);
+  const { progress: userProgress, isLoading: isProgressLoading } = useUserProgress(
+    scheduledChapters.map((chapter) => chapter.sectionName),
+  );
 
   useEffect(() => {
     if (setIsFocusMode) {
@@ -63,277 +88,359 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
   useEffect(() => {
     const parseFocusString = (fullFocusString) => {
       if (!fullFocusString) return null;
-      const parts = fullFocusString.split(':');
+      const parts = fullFocusString.split(":");
       if (parts.length < 2) return null;
       const sectionName = parts[0].trim();
-      const topicWithDay = parts.slice(1).join(':').trim();
-      const chapterName = topicWithDay.replace(/\(Day \d+ of \d+\)/, '').trim();
+      const topicWithDay = parts.slice(1).join(":").trim();
+      const chapterName = topicWithDay.replace(/\(Day \d+ of \d+\)/, "").trim();
       return { sectionName, chapterName };
     };
 
+    const chapterKeyFor = (sectionName, chapterName) =>
+      `${sectionName || ""}:::${chapterName || ""}`;
+
+    const groupedChapters = new Map();
     if (Array.isArray(todayFocusDetails) && todayFocusDetails.length > 0) {
-      const primary = todayFocusDetails[0];
-      if (primary?.sectionName && primary?.chapterName) {
-        setCurrentChapter({
-          name: primary.chapterName,
-          sectionName: primary.sectionName,
-          topics: primary.topics || [],
-          topicIds: primary.topicIds || [],
-          subtopics: primary.subtopics || [],
-          subtopicIds: primary.subtopicIds || [],
-        });
-        return;
+      todayFocusDetails.forEach((detail) => {
+        const sectionName = detail?.sectionName?.trim();
+        const chapterName = detail?.chapterName?.trim();
+        if (!sectionName || !chapterName) return;
+        const key = chapterKeyFor(sectionName, chapterName);
+        if (!groupedChapters.has(key)) {
+          groupedChapters.set(key, {
+            key,
+            sectionName,
+            chapterName,
+            focusDetails: [],
+          });
+        }
+        groupedChapters.get(key).focusDetails.push(detail);
+      });
+    }
+
+    let chapters = Array.from(groupedChapters.values());
+
+    if (chapters.length === 0) {
+      const focusData = parseFocusString(todayFocus);
+      if (focusData?.sectionName && focusData?.chapterName) {
+        chapters = [
+          {
+            key: chapterKeyFor(focusData.sectionName, focusData.chapterName),
+            sectionName: focusData.sectionName,
+            chapterName: focusData.chapterName,
+            focusDetails: [],
+          },
+        ];
       }
     }
 
-    const focusData = parseFocusString(todayFocus);
-    if (!focusData) {
-      setCurrentChapter({ name: "No Topic Scheduled", sectionName: null });
-    } else {
-      setCurrentChapter({
-        name: focusData.chapterName,
-        sectionName: focusData.sectionName,
-        topics: [],
-        topicIds: [],
-        subtopics: [],
-        subtopicIds: [],
-      });
-    }
+    setScheduledChapters(chapters);
   }, [todayFocus, todayFocusDetails]);
 
   // EFFECT 2: Fetch the source topic structure ONCE when the chapter changes.
   useEffect(() => {
+    let isCancelled = false;
     const fetchSourceData = async () => {
-      if (!currentChapter?.sectionName || !currentChapter?.name) {
+      if (!scheduledChapters.length) {
         setSourceTopicsTree([]);
+        setIsSidebarLoading(false);
         return;
       }
 
       setIsSidebarLoading(true);
       try {
-        const sectionsRef = collection(db, 'sections');
-        const sectionQuery = query(sectionsRef, where("title", "==", currentChapter.sectionName));
-        const sectionSnapshot = await getDocs(sectionQuery);
-        if (sectionSnapshot.empty) throw new Error(`Section "${currentChapter.sectionName}" not found.`);
-        const sectionDoc = sectionSnapshot.docs[0];
+        const normalizeKey = (value) =>
+          value == null ? "" : String(value).trim().toLowerCase();
+        const results = [];
 
-        const nodesRef = collection(db, 'sections', sectionDoc.id, 'nodes');
-        const chapterQuery = query(nodesRef, where("name", "==", currentChapter.name), where("parentId", "==", null));
-        const chapterSnapshot = await getDocs(chapterQuery);
-        if (chapterSnapshot.empty) throw new Error(`Chapter "${currentChapter.name}" not found.`);
-        const chapterData = chapterSnapshot.docs[0].data();
+        for (const chapter of scheduledChapters) {
+          if (!chapter?.sectionName || !chapter?.chapterName) continue;
 
-        const allTopicsQuery = query(nodesRef, where("path", "array-contains", chapterData.name), orderBy("order"));
-        const allTopicsSnapshot = await getDocs(allTopicsQuery);
-        const descendantTopics = allTopicsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        const nodeMap = new Map();
-        descendantTopics.forEach(topic => {
-          topic.children = [];
-          nodeMap.set(topic.topicId, topic);
-        });
-
-        const rootTopics = [];
-        descendantTopics.forEach(topic => {
-          if (topic.parentId === chapterData.topicId) {
-            rootTopics.push(topic);
-          } else if (topic.parentId && nodeMap.has(topic.parentId)) {
-            const parent = nodeMap.get(topic.parentId);
-            if (parent) parent.children.push(topic);
-          }
-        });
-
-        const normalizeKey = (value) => (value == null ? '' : String(value).trim().toLowerCase());
-        const relevantDetails = Array.isArray(todayFocusDetails)
-          ? todayFocusDetails.filter(
-              (detail) =>
-                normalizeKey(detail?.sectionName) === normalizeKey(currentChapter.sectionName) &&
-                normalizeKey(detail?.chapterName) === normalizeKey(currentChapter.name),
-            )
-          : [];
-        const focusDetailsForFilter =
-          relevantDetails.length > 0 ? relevantDetails : todayFocusDetails;
-        const hasFocusedDetails =
-          Array.isArray(focusDetailsForFilter) && focusDetailsForFilter.length > 0;
-        let filteredRoots = rootTopics;
-
-        if (hasFocusedDetails) {
-          const allowedTopicIds = new Set();
-          const allowedTopicNames = new Set();
-          const allowedSubtopicIds = new Set();
-          const allowedSubtopicNames = new Set();
-
-          const addTokens = (set, value) => {
-            if (value == null) return;
-            const raw = String(value);
-            set.add(normalizeKey(raw));
-            raw.split(':').forEach((segment) =>
-              set.add(normalizeKey(segment)),
+          try {
+            const sectionsRef = collection(db, "sections");
+            const sectionQuery = query(
+              sectionsRef,
+              where("title", "==", chapter.sectionName),
             );
-          };
+            const sectionSnapshot = await getDocs(sectionQuery);
+            if (sectionSnapshot.empty)
+              throw new Error(
+                `Section "${chapter.sectionName}" not found.`,
+              );
+            const sectionDoc = sectionSnapshot.docs[0];
 
-          focusDetailsForFilter.forEach((detail) => {
-            (detail?.topicIds || []).forEach((id) =>
-              allowedTopicIds.add(normalizeKey(id)),
+            const nodesRef = collection(db, "sections", sectionDoc.id, "nodes");
+            const chapterQuery = query(
+              nodesRef,
+              where("name", "==", chapter.chapterName),
+              where("parentId", "==", null),
             );
-            (detail?.topics || []).forEach((topic) =>
-              addTokens(allowedTopicNames, topic),
+            const chapterSnapshot = await getDocs(chapterQuery);
+            if (chapterSnapshot.empty)
+              throw new Error(
+                `Chapter "${chapter.chapterName}" not found.`,
+              );
+            const chapterData = chapterSnapshot.docs[0].data();
+
+            const allTopicsQuery = query(
+              nodesRef,
+              where("path", "array-contains", chapterData.name),
+              orderBy("order"),
             );
-            (detail?.subtopicIds || []).forEach((id) =>
-              allowedSubtopicIds.add(normalizeKey(id)),
-            );
-            (detail?.subtopics || []).forEach((sub) =>
-              addTokens(allowedSubtopicNames, sub),
-            );
-          });
+            const allTopicsSnapshot = await getDocs(allTopicsQuery);
+            const descendantTopics = allTopicsSnapshot.docs.map((d) => ({
+              id: d.id,
+              ...d.data(),
+            }));
 
-          const collectIds = (node) =>
-            [
-              normalizeKey(node?.topicId),
-              normalizeKey(node?.itemId),
-              normalizeKey(node?.id),
-              normalizeKey(node?.topicID),
-              normalizeKey(node?.nodeId),
-              normalizeKey(node?.chapterId),
-              normalizeKey(node?.topicid),
-            ].filter(Boolean);
+            const nodeMap = new Map();
+            descendantTopics.forEach((topic) => {
+              topic.children = [];
+              nodeMap.set(topic.topicId, topic);
+            });
 
-          const cloneNode = (node) => ({
-            ...node,
-            children: Array.isArray(node?.children)
-              ? node.children.map(cloneNode)
-              : [],
-          });
+            const rootTopics = [];
+            descendantTopics.forEach((topic) => {
+              if (topic.parentId === chapterData.topicId) {
+                rootTopics.push(topic);
+              } else if (topic.parentId && nodeMap.has(topic.parentId)) {
+                const parent = nodeMap.get(topic.parentId);
+                if (parent) parent.children.push(topic);
+              }
+            });
 
-          const filterChildren = (children) => {
-            if (!Array.isArray(children) || children.length === 0) return [];
-            return children
-              .map((child) => {
-                const clone = cloneNode(child);
-                clone.children = filterChildren(clone.children);
-                const childIds = collectIds(child);
-                const childNameKey = normalizeKey(child?.name);
-                const matches =
-                  childIds.some((id) => allowedSubtopicIds.has(id)) ||
-                  allowedSubtopicNames.has(childNameKey);
-                if (
-                  allowedSubtopicIds.size === 0 &&
-                  allowedSubtopicNames.size === 0
-                ) {
-                  return clone.children.length > 0 || matches ? clone : clone;
-                }
-                if (matches || clone.children.length > 0) {
-                  return clone;
-                }
-                return null;
-              })
-              .filter(Boolean);
-          };
+            const cloneNode = (node) => ({
+              ...node,
+              children: Array.isArray(node?.children)
+                ? node.children.map(cloneNode)
+                : [],
+            });
 
-          const selectedRoots = [];
-          const usedKeys = new Set();
+            const focusDetailsForFilter =
+              Array.isArray(chapter.focusDetails) &&
+              chapter.focusDetails.length > 0
+                ? chapter.focusDetails
+                : todayFocusDetails;
+            const hasFocusedDetails =
+              Array.isArray(focusDetailsForFilter) &&
+              focusDetailsForFilter.length > 0;
+            let filteredRoots = rootTopics;
 
-          const canonicalKeyForRoot = (root) => {
-            if (!root) return null;
-            const firstId = collectIds(root).find((id) => !!id);
-            if (firstId) return `id:${firstId}`;
-            const nameKey = normalizeKey(root?.name);
-            return nameKey ? `name:${nameKey}` : null;
-          };
+            if (hasFocusedDetails) {
+              const allowedTopicIds = new Set();
+              const allowedTopicNames = new Set();
+              const allowedSubtopicIds = new Set();
+              const allowedSubtopicNames = new Set();
 
-          const pushRoot = (root, attemptedKey) => {
-            if (!root) return;
-            const canonicalKey = canonicalKeyForRoot(root) || attemptedKey;
-            if (!canonicalKey || usedKeys.has(canonicalKey)) return;
-            const clone = cloneNode(root);
-            clone.children = filterChildren(clone.children);
-            selectedRoots.push(clone);
-            usedKeys.add(canonicalKey);
-          };
+              const addTokens = (set, value) => {
+                if (value == null) return;
+                const raw = String(value);
+                set.add(normalizeKey(raw));
+                raw.split(":").forEach((segment) =>
+                  set.add(normalizeKey(segment)),
+                );
+              };
 
-          const findRootById = (idKey) =>
-            rootTopics.find((root) =>
-              collectIds(root).some((id) => id === idKey),
-            );
-          const findRootByName = (nameKey) =>
-            rootTopics.find(
-              (root) => normalizeKey(root?.name) === nameKey,
-            );
+              focusDetailsForFilter.forEach((detail) => {
+                (detail?.topicIds || []).forEach((id) =>
+                  allowedTopicIds.add(normalizeKey(id)),
+                );
+                (detail?.topics || []).forEach((topic) =>
+                  addTokens(allowedTopicNames, topic),
+                );
+                (detail?.subtopicIds || []).forEach((id) =>
+                  allowedSubtopicIds.add(normalizeKey(id)),
+                );
+                (detail?.subtopics || []).forEach((sub) =>
+                  addTokens(allowedSubtopicNames, sub),
+                );
+              });
 
-          allowedTopicIds.forEach((idKey) => {
-            const root = findRootById(idKey);
-            pushRoot(root, `id:${idKey}`);
-          });
+              const collectIds = (node) =>
+                [
+                  normalizeKey(node?.topicId),
+                  normalizeKey(node?.itemId),
+                  normalizeKey(node?.id),
+                  normalizeKey(node?.topicID),
+                  normalizeKey(node?.nodeId),
+                  normalizeKey(node?.chapterId),
+                  normalizeKey(node?.topicid),
+                ].filter(Boolean);
 
-          allowedTopicNames.forEach((nameKey) => {
-            const root = findRootByName(nameKey);
-            pushRoot(root, `name:${nameKey}`);
-          });
+              const filterChildren = (children) => {
+                if (!Array.isArray(children) || children.length === 0)
+                  return [];
+                return children
+                  .map((child) => {
+                    const clone = cloneNode(child);
+                    clone.children = filterChildren(clone.children);
+                    const childIds = collectIds(child);
+                    const childNameKey = normalizeKey(child?.name);
+                    const matches =
+                      childIds.some((id) => allowedSubtopicIds.has(id)) ||
+                      allowedSubtopicNames.has(childNameKey);
+                    if (
+                      allowedSubtopicIds.size === 0 &&
+                      allowedSubtopicNames.size === 0
+                    ) {
+                      return clone.children.length > 0 || matches
+                        ? clone
+                        : clone;
+                    }
+                    if (matches || clone.children.length > 0) {
+                      return clone;
+                    }
+                    return null;
+                  })
+                  .filter(Boolean);
+              };
 
-          if (selectedRoots.length > 0) {
-            filteredRoots = selectedRoots;
-          } else {
-            filteredRoots = rootTopics
-              .map((root) => {
-                const ids = collectIds(root);
+              const selectedRoots = [];
+              const usedKeys = new Set();
+
+              const canonicalKeyForRoot = (root) => {
+                if (!root) return null;
+                const firstId = collectIds(root).find((id) => !!id);
+                if (firstId) return `id:${firstId}`;
                 const nameKey = normalizeKey(root?.name);
-                if (
-                  ids.some((id) => allowedTopicIds.has(id)) ||
-                  allowedTopicNames.has(nameKey)
-                ) {
-                  const clone = cloneNode(root);
-                  clone.children = filterChildren(clone.children);
-                  return clone;
-                }
-                return null;
-              })
-              .filter(Boolean);
-          }
+                return nameKey ? `name:${nameKey}` : null;
+              };
 
-          if (filteredRoots.length === 0) {
-            filteredRoots = rootTopics.map(cloneNode);
+              const pushRoot = (root, attemptedKey) => {
+                if (!root) return;
+                const canonicalKey = canonicalKeyForRoot(root) || attemptedKey;
+                if (!canonicalKey || usedKeys.has(canonicalKey)) return;
+                const clone = cloneNode(root);
+                clone.children = filterChildren(clone.children);
+                selectedRoots.push(clone);
+                usedKeys.add(canonicalKey);
+              };
+
+              const findRootById = (idKey) =>
+                rootTopics.find((root) =>
+                  collectIds(root).some((id) => id === idKey),
+                );
+              const findRootByName = (nameKey) =>
+                rootTopics.find(
+                  (root) => normalizeKey(root?.name) === nameKey,
+                );
+
+              allowedTopicIds.forEach((idKey) => {
+                const root = findRootById(idKey);
+                pushRoot(root, `id:${idKey}`);
+              });
+
+              allowedTopicNames.forEach((nameKey) => {
+                const root = findRootByName(nameKey);
+                pushRoot(root, `name:${nameKey}`);
+              });
+
+              if (selectedRoots.length > 0) {
+                filteredRoots = selectedRoots;
+              } else {
+                filteredRoots = rootTopics
+                  .map((root) => {
+                    const ids = collectIds(root);
+                    const nameKey = normalizeKey(root?.name);
+                    if (
+                      ids.some((id) => allowedTopicIds.has(id)) ||
+                      allowedTopicNames.has(nameKey)
+                    ) {
+                      const clone = cloneNode(root);
+                      clone.children = filterChildren(clone.children);
+                      return clone;
+                    }
+                    return null;
+                  })
+                  .filter(Boolean);
+              }
+
+              if (filteredRoots.length === 0) {
+                filteredRoots = rootTopics.map(cloneNode);
+              }
+            }
+
+            results.push({
+              key: chapter.key,
+              sectionName: chapter.sectionName,
+              chapterName: chapter.chapterName,
+              topics: filteredRoots,
+            });
+          } catch (chapterErr) {
+            console.error(
+              `Failed to fetch data for ${chapter.chapterName}:`,
+              chapterErr,
+            );
           }
         }
 
-        setSourceTopicsTree(filteredRoots);
+        if (!isCancelled) {
+          setSourceTopicsTree(results);
+        }
       } catch (err) {
         console.error("Failed to fetch sidebar data:", err);
       } finally {
-        setIsSidebarLoading(false);
+        if (!isCancelled) {
+          setIsSidebarLoading(false);
+        }
       }
     };
     fetchSourceData();
-  }, [currentChapter, todayFocusDetails]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [scheduledChapters, todayFocusDetails]);
 
   // EFFECT 3: Merge the static tree with REAL-TIME progress updates.
   useEffect(() => {
-    if (isProgressLoading || sourceTopicsTree.length === 0) {
-        // If there's no source tree yet, just show the source tree
-        setChapterTopics(sourceTopicsTree);
-        return;
-    };
+    if (!Array.isArray(sourceTopicsTree) || sourceTopicsTree.length === 0) {
+      setChapterGroups([]);
+      return;
+    }
 
-    const mergeRecursively = (topics) => {
-        return topics.map(topic => {
-            const progress = userProgress.get(topic.id);
-            const newTopic = { ...topic };
-            if (progress) {
-                newTopic.status = progress.status;
-                newTopic.percentComplete = progress.percentComplete;
-            } else {
-                newTopic.status = 'not-started';
-                newTopic.percentComplete = 0;
-            }
-            newTopic.chapterId = currentChapter?.sectionName;
-            if (topic.children && topic.children.length > 0) {
-                newTopic.children = mergeRecursively(topic.children);
-            }
-            return newTopic;
-        });
-    };
-    const mergedTree = mergeRecursively(sourceTopicsTree);
-    setChapterTopics(mergedTree);
-  }, [userProgress, sourceTopicsTree, isProgressLoading, currentChapter]);
+    const mergeRecursively = (topics, chapterId, chapterName) =>
+      topics.map((topic) => {
+        const progressEntry = userProgress.get(topic.id);
+        const merged = {
+          ...topic,
+          status: progressEntry?.status || "not-started",
+          percentComplete: progressEntry?.percentComplete || 0,
+          chapterId,
+          chapterName,
+        };
+        if (Array.isArray(topic.children) && topic.children.length > 0) {
+          merged.children = mergeRecursively(
+            topic.children,
+            chapterId,
+            chapterName,
+          );
+        }
+        return merged;
+      });
+
+    if (isProgressLoading) {
+      const fallbackGroups = sourceTopicsTree.map((group) => ({
+        ...group,
+        topics: mergeRecursively(
+          group.topics || [],
+          group.sectionName,
+          group.chapterName,
+        ),
+      }));
+      setChapterGroups(fallbackGroups);
+      return;
+    }
+
+    const mergedGroups = sourceTopicsTree.map((group) => ({
+      ...group,
+      topics: mergeRecursively(
+        group.topics || [],
+        group.sectionName,
+        group.chapterName,
+      ),
+    }));
+    setChapterGroups(mergedGroups);
+  }, [userProgress, sourceTopicsTree, isProgressLoading]);
 
   useEffect(() => {
     lastCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -477,7 +584,7 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
             }
         });
     };
-    flattenRecursively(chapterTopics); // chapterTopics holds the full, merged tree
+    chapterGroups.forEach((group) => flattenRecursively(group.topics || []));
 
     // 2. Find the index of the current topic
     const currentIndex = flatTopics.findIndex(topic => topic.id === activeTopic.id);
@@ -759,6 +866,22 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
     }
   };
 
+  const primaryChapter = scheduledChapters[0] || null;
+  const hasMultipleChapters = scheduledChapters.length > 1;
+  const hasScheduledChapters = scheduledChapters.length > 0;
+  const sidebarTitle = hasMultipleChapters
+    ? "Today's Chapters"
+    : primaryChapter?.sectionName || (hasScheduledChapters ? "Syllabus" : "Planner");
+  const sidebarSubtitle = hasMultipleChapters
+    ? `${scheduledChapters.length} chapters scheduled`
+    : hasScheduledChapters
+      ? primaryChapter?.chapterName || "Chapter"
+      : "No chapters scheduled";
+  const badgeLabel =
+    activeTopic?.chapterName ||
+    primaryChapter?.chapterName ||
+    (hasMultipleChapters ? "Multiple Chapters" : null);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-emerald-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 lg:flex-row">
@@ -770,13 +893,13 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
           >
             <div className="border-b border-indigo-100 px-6 py-6 sm:px-7">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
-                {currentChapter?.sectionName || "Syllabus"}
+                {sidebarTitle}
               </p>
               <h2 className="mt-2 text-lg font-semibold text-slate-900">
-                {currentChapter?.name || "Chapter"}
+                {sidebarSubtitle}
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Navigate topics and subtopics for this lesson.
+                Navigate topics and subtopics for today's study plan.
               </p>
             </div>
             <nav className="flex-1 overflow-y-auto px-6 py-5 timeline-scrollbar">
@@ -789,20 +912,34 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
                     />
                   ))}
                 </div>
-              ) : chapterTopics.length > 0 ? (
-                <ul className="space-y-2">
-                  {chapterTopics.map((topic) => (
-                    <TopicNode
-                      key={topic.id}
-                      topic={topic}
-                      onTopicSelect={handleTopicClick}
-                      currentTopicId={activeTopic ? activeTopic.id : null}
-                    />
+              ) : chapterGroups.length > 0 ? (
+                <div className="space-y-6">
+                  {chapterGroups.map((group) => (
+                    <div key={group.key} className="space-y-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-500">
+                          {group.sectionName || "Syllabus"}
+                        </p>
+                        <h3 className="text-sm font-semibold text-slate-800">
+                          {group.chapterName || "Chapter"}
+                        </h3>
+                      </div>
+                      <ul className="space-y-2">
+                        {(group.topics || []).map((topic) => (
+                          <TopicNode
+                            key={`${group.key || "group"}-${topic.id}`}
+                            topic={topic}
+                            onTopicSelect={handleTopicClick}
+                            currentTopicId={activeTopic ? activeTopic.id : null}
+                          />
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-indigo-200 bg-white/70 px-4 py-6 text-center text-sm text-slate-500 shadow-inner shadow-indigo-100/40">
-                  No topics available for this chapter yet.
+                  No topics available for today&apos;s plan yet.
                 </div>
               )}
             </nav>
@@ -827,9 +964,9 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {currentChapter?.name ? (
+                  {badgeLabel ? (
                     <span className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
-                      {currentChapter.name}
+                      {badgeLabel}
                     </span>
                   ) : null}
                   {isSidebarOpen ? (
