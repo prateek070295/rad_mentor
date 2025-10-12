@@ -548,7 +548,14 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
         group.chapterName,
       ),
     }));
-    setChapterGroups(mergedGroups);
+    const uniqueGroups = new Map();
+    mergedGroups.forEach((group) => {
+      const key = group.key || `${group.sectionName || ''}:::${group.chapterName || ''}`;
+      if (!uniqueGroups.has(key)) {
+        uniqueGroups.set(key, group);
+      }
+    });
+    setChapterGroups(Array.from(uniqueGroups.values()));
   }, [userProgress, sourceTopicsTree, isProgressLoading]);
 
   useEffect(() => {
@@ -1002,7 +1009,15 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
           <div
             className={`sticky top-4 flex h-[calc(100vh-3rem)] min-h-[640px] flex-col overflow-hidden rounded-3xl border border-indigo-100 bg-white/95 shadow-2xl shadow-indigo-200/50 backdrop-blur transition-all duration-300 ${isSidebarOpen ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-6 opacity-0"}`}
           >
-            <div className="border-b border-indigo-100 px-6 py-6 sm:px-7">
+            <div className="flex justify-end px-6 pt-6 sm:px-7">
+              <button
+                onClick={toggleSidebar}
+                className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:shadow-lg"
+              >
+                {isSidebarOpen ? "Focus Mode" : "Show Menu"}
+              </button>
+            </div>
+            <div className="border-b border-indigo-100 px-6 pb-6 pt-4 sm:px-7">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
                 {sidebarTitle}
               </p>
@@ -1013,20 +1028,7 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
                 Navigate topics and subtopics for today's study plan.
               </p>
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3">
-              {badgeLabel ? (
-                <span className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
-                  {badgeLabel}
-                </span>
-              ) : null}
-              <button
-                onClick={toggleSidebar}
-                className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:shadow-lg"
-              >
-                {isSidebarOpen ? "Focus Mode" : "Show Menu"}
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto px-6 py-5 timeline-scrollbar">
+            <nav className="flex-1 overflow-y-auto px-6 pb-5 pt-4 timeline-scrollbar">
               {isSidebarLoading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 4 }).map((_, idx) => (
@@ -1040,14 +1042,16 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
                 <div className="space-y-6">
                   {chapterGroups.map((group) => (
                     <div key={group.key} className="space-y-3">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-500">
-                          {group.sectionName || "Syllabus"}
-                        </p>
-                        <h3 className="text-sm font-semibold text-slate-800">
-                          {group.chapterName || "Chapter"}
-                        </h3>
-                      </div>
+                      {chapterGroups.length > 1 ? (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-500">
+                            {group.sectionName || "Syllabus"}
+                          </p>
+                          <h3 className="text-sm font-semibold text-slate-800">
+                            {group.chapterName || "Chapter"}
+                          </h3>
+                        </div>
+                      ) : null}
                       <ul className="space-y-2">
                         {(group.topics || []).map((topic) => (
                           <TopicNode
