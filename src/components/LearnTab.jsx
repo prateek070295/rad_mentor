@@ -7,55 +7,274 @@ import MCQForm from './MCQForm';
 
 // This hook for fetching user progress is correct and remains unchanged.
 const useUserProgress = (organIds) => {
+
   const [progress, setProgress] = useState(new Map());
+
   const [isLoading, setIsLoading] = useState(true);
-  const normalizedOrganIds = useMemo(() => {
-    if (!Array.isArray(organIds)) return [];
-    return organIds
-      .map((value) =>
-        value == null ? "" : String(value).trim().toLowerCase(),
-      )
-      .filter(Boolean)
-      .sort();
+
+  const { rawIds, lowerIds, organKey } = useMemo(() => {
+
+    if (!Array.isArray(organIds) || organIds.length === 0) {
+
+      return { rawIds: [], lowerIds: [], organKey: "" };
+
+    }
+
+    const seenLower = new Set();
+
+    const rawList = [];
+
+    organIds.forEach((value) => {
+
+      if (value == null) return;
+
+      const trimmed = String(value).trim();
+
+      if (!trimmed) return;
+
+      const lower = trimmed.toLowerCase();
+
+      if (seenLower.has(lower)) return;
+
+      seenLower.add(lower);
+
+      rawList.push(trimmed);
+
+    });
+
+    rawList.sort((a, b) => a.localeCompare(b));
+
+    return {
+
+      rawIds: rawList,
+
+      lowerIds: rawList.map((value) => value.toLowerCase()),
+
+      organKey: rawList.join("|"),
+
+    };
+
   }, [organIds]);
-  const organKey = normalizedOrganIds.join("|");
+
   const userId = auth.currentUser?.uid || null;
 
+
+
   useEffect(() => {
+
     if (!userId) {
+
       setProgress(new Map());
+
       setIsLoading(false);
+
       return;
+
     }
+
+
+
     setIsLoading(true);
-    const allowed = new Set(normalizedOrganIds);
-    const includeAll = allowed.size === 0;
+
+    const allowedLower = new Set(lowerIds);
+
+    const includeAll = allowedLower.size === 0;
+
+    const listeners = [];
+
+    const localMap = new Map();
+
     const progressRef = collection(db, "userProgress", userId, "topics");
-    const unsubscribe = onSnapshot(
-      progressRef,
-      (querySnapshot) => {
-        const progressMap = new Map();
-        querySnapshot.forEach((doc) => {
-          const data = doc.data() || {};
-          const chapterId = String(data?.chapterId || "")
-            .trim()
-            .toLowerCase();
-          if (includeAll || allowed.has(chapterId)) {
-            progressMap.set(doc.id, { id: doc.id, ...data });
+
+    let isMounted = true;
+
+
+
+    const emit = () => {
+
+      if (!isMounted) return;
+
+      setProgress(new Map(localMap));
+
+    };
+
+
+
+    const readyChunks = new Set();
+
+    const markReady = (id, total) => {
+
+      readyChunks.add(id);
+
+      if (isMounted && readyChunks.size >= total) {
+
+        setIsLoading(false);
+
+      }
+
+    };
+
+
+
+    if (includeAll) {
+
+      const unsubscribe = onSnapshot(
+
+        progressRef,
+
+        (snapshot) => {
+
+          localMap.clear();
+
+          snapshot.forEach((doc) => {
+
+            const data = doc.data() || {};
+
+            localMap.set(doc.id, { id: doc.id, ...data });
+
+          });
+
+          if (isMounted) {
+
+            setProgress(new Map(localMap));
+
+            setIsLoading(false);
+
           }
+
+        },
+
+        (error) => {
+
+          console.error("Error fetching real-time user progress:", error);
+
+          if (isMounted) {
+
+            setIsLoading(false);
+
+          }
+
+        },
+
+      );
+
+      listeners.push(unsubscribe);
+
+    } else {
+
+      const chunkSize = 10;
+
+      const chunks = [];
+
+      for (let i = 0; i < rawIds.length; i += chunkSize) {
+
+        chunks.push(rawIds.slice(i, i + chunkSize));
+
+      }
+
+
+
+      if (chunks.length === 0) {
+
+        setProgress(new Map());
+
+        setIsLoading(false);
+
+      } else {
+
+        chunks.forEach((chunk, index) => {
+
+          const chunkId = `chunk-${index}`;
+
+          const q = query(progressRef, where("chapterId", "in", chunk));
+
+          const unsubscribe = onSnapshot(
+
+            q,
+
+            (snapshot) => {
+
+              snapshot.docChanges().forEach((change) => {
+
+                const docId = change.doc.id;
+
+                const data = change.doc.data() || {};
+
+                const chapterLower = String(data?.chapterId || "")
+
+                  .trim()
+
+                  .toLowerCase();
+
+
+
+                if (change.type === "removed" || !allowedLower.has(chapterLower)) {
+
+                  localMap.delete(docId);
+
+                } else {
+
+                  localMap.set(docId, { id: docId, ...data });
+
+                }
+
+              });
+
+              emit();
+
+              markReady(chunkId, chunks.length);
+
+            },
+
+            (error) => {
+
+              console.error("Error fetching real-time user progress:", error);
+
+              markReady(chunkId, chunks.length);
+
+            },
+
+          );
+
+          listeners.push(unsubscribe);
+
         });
-        setProgress(progressMap);
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching real-time user progress:", error);
-        setIsLoading(false);
-      },
-    );
-    return () => unsubscribe();
-  }, [userId, organKey, normalizedOrganIds]);
+
+      }
+
+    }
+
+
+
+    return () => {
+
+      isMounted = false;
+
+      listeners.forEach((unsubscribe) => {
+
+        try {
+
+          unsubscribe?.();
+
+        } catch (err) {
+
+          console.error("Failed to unsubscribe progress listener", err);
+
+        }
+
+      });
+
+    };
+
+  }, [userId, organKey]);
+
+
+
   return { progress, isLoading };
+
 };
+
+
 
 const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode }) => {
   // UI State
