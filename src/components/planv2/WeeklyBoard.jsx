@@ -60,6 +60,7 @@ export default function WeeklyBoard({
   onUpdateDayCap,
   onMarkDayDone,
   onAddFromMaster,
+  onScheduleQueueRun,
   onAutoFillWeek,
   isAutoFilling = false,
   onRefresh,
@@ -476,18 +477,39 @@ export default function WeeklyBoard({
       }
 
       try {
+        const canScheduleViaParent = typeof onScheduleQueueRun === "function";
         setUiMsg("Scheduling...");
-        await scheduleTopicToDay(uid, iso, payload.seq);
+        const result = canScheduleViaParent
+          ? await onScheduleQueueRun(iso, payload.seq)
+          : await scheduleTopicToDay(uid, iso, payload.seq);
+        if (
+          !canScheduleViaParent &&
+          result &&
+          result.message === "No remaining capacity"
+        ) {
+          setUiMsg("Day is at capacity.");
+          setTimeout(() => setUiMsg(""), 1800);
+          return;
+        }
         setUiMsg("Scheduled from queue");
         setTimeout(() => setUiMsg(""), 1500);
-        onRefresh?.();
+        if (!canScheduleViaParent) {
+          onRefresh?.();
+        }
       } catch (err) {
         console.error(err);
         setUiMsg(err?.message || "Failed to schedule");
         setTimeout(() => setUiMsg(""), 2000);
       }
     },
-    [uid, canAcceptDragPayload, doneDays, openCapacityModal, onRefresh],
+    [
+      uid,
+      canAcceptDragPayload,
+      doneDays,
+      openCapacityModal,
+      onRefresh,
+      onScheduleQueueRun,
+    ],
   );
 
   const handleMarkDoneClick = useCallback(

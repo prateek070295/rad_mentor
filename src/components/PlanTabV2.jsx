@@ -764,6 +764,33 @@ export default function PlanTabV2() {
     }
   };
 
+  const handleScheduleQueueRun = useCallback(
+    async (iso, seq) => {
+      if (!uid || !weekKey || !iso || !seq) return null;
+      await flushDayCapPatch(iso);
+      const result = await scheduleTopicToDay(uid, iso, seq);
+      const slices = Array.isArray(result?.slices) ? result.slices : [];
+      if (slices.length) {
+        setWeekDoc((prev) => {
+          if (!prev) return prev;
+          const prevAssigned = Array.isArray(prev.assigned?.[iso])
+            ? prev.assigned[iso]
+            : [];
+          return {
+            ...prev,
+            assigned: {
+              ...(prev.assigned || {}),
+              [iso]: [...prevAssigned, ...slices],
+            },
+          };
+        });
+      }
+      refreshQueue();
+      return result;
+    },
+    [uid, weekKey, flushDayCapPatch, refreshQueue],
+  );
+
   // labels/metrics
   const weekLabel = useMemo(() => {
     const [monday, sunday] = [weekDates[0], weekDates[6]];
@@ -868,6 +895,7 @@ export default function PlanTabV2() {
               onUpdateDayCap={handleUpdateDayCap}
               onMarkDayDone={handleMarkDayDone}
               onAddFromMaster={handleAddFromMaster}
+              onScheduleQueueRun={handleScheduleQueueRun}
               onRefresh={handleBoardRefresh}
               onPrevWeek={undefined}
               onNextWeek={undefined}
