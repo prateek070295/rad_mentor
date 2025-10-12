@@ -1,3 +1,5 @@
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -685,7 +687,8 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
   const callTutorApi = useCallback(async (body) => {
     if (!auth.currentUser) throw new Error("User not authenticated.");
     const token = await auth.currentUser.getIdToken();
-    const response = await fetch('/tutor/step', {
+    const stepEndpoint = API_BASE ? `${API_BASE}/tutor/step` : '/tutor/step';
+      const response = await fetch(stepEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(body),
@@ -713,7 +716,8 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
       if (!auth.currentUser) throw new Error("User not logged in.");
       const token = await auth.currentUser.getIdToken();
 
-      const messagesResponse = await fetch(`/tutor/messages/${topic.id}`, {
+      const messagesEndpoint = API_BASE ? `${API_BASE}/tutor/messages/${topic.id}` : `/tutor/messages/${topic.id}`;
+      const messagesResponse = await fetch(messagesEndpoint, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!messagesResponse.ok) throw new Error('Failed to fetch message history.');
