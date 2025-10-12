@@ -93,7 +93,7 @@ const StatTile = ({ label, value, helper, accent, children }) => (
   </div>
 );
 
-const AchievementHighlightCard = ({ highlight, onOpenAchievements }) => {
+const AchievementHighlightCard = ({ highlight, achievements = [], onOpenAchievements }) => {
   const data = highlight || {};
   const currentStreak = Number(data.currentStreak ?? 0);
   const cumulativeMinutes = Number(data.cumulativeMinutes ?? 0);
@@ -109,6 +109,8 @@ const AchievementHighlightCard = ({ highlight, onOpenAchievements }) => {
   const recentlyUnlocked = Array.isArray(data.recentlyUnlocked)
     ? data.recentlyUnlocked
     : [];
+
+  const achievementList = Array.isArray(achievements) ? achievements : [];
 
   const nextPercent =
     nextAchievement && Number(nextAchievement.targetValue) > 0
@@ -242,6 +244,30 @@ const AchievementHighlightCard = ({ highlight, onOpenAchievements }) => {
           ) : (
             <p className="mt-2 text-xs text-slate-500">
               Unlock achievements by logging consistent study sessions.
+            </p>
+          )}
+        </div>
+        <div className="pt-5 border-t border-indigo-100/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+            Achievements
+          </p>
+          {achievementList.length > 0 ? (
+            <ul className="mt-3 space-y-3">
+              {achievementList.map((achievement, index) => (
+                <li
+                  key={achievement.key || `${achievement.title}-${index}`}
+                  className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-sm text-indigo-900 shadow-sm"
+                >
+                  <p className="font-semibold">{achievement.title}</p>
+                  <p className="text-xs text-indigo-600/80">
+                    {achievement.description}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">
+              Achievements will appear as you complete study sessions and hit consistency streaks.
             </p>
           )}
         </div>
@@ -652,6 +678,7 @@ function Dashboard({
       <div className="flex flex-col gap-6 xl:col-span-1">
         <AchievementHighlightCard
           highlight={highlightData}
+          achievements={achievementItems}
           onOpenAchievements={onOpenAchievements}
         />
         {showAtGlance && (
@@ -935,33 +962,6 @@ function Dashboard({
           <div className="rounded-2xl border border-dashed border-indigo-200 bg-white/70 p-6 text-center text-sm text-slate-500">
             No revision items are pending. Completed topics will prompt reminders once they reach their spaced revision window.
           </div>
-        )}
-      </SectionCard>
-      <SectionCard
-        tone="bg-emerald-50"
-        accentShadow="shadow-xl shadow-emerald-200/40"
-        className="xl:col-span-1"
-        title="Achievements"
-        description="Milestones unlocked from recent progress."
-      >
-        {achievementItems.length > 0 ? (
-          <ul className="space-y-3">
-            {achievementItems.map((achievement, index) => (
-              <li
-                key={achievement.key || `${achievement.title}-${index}`}
-                className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm"
-              >
-                <p className="font-semibold">{achievement.title}</p>
-                <p className="text-xs text-emerald-700/80">
-                  {achievement.description}
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-500">
-            Achievements will appear as you complete study sessions and hit consistency streaks.
-          </p>
         )}
       </SectionCard>
       <SectionCard
