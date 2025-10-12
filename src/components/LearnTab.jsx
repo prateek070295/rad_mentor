@@ -63,214 +63,112 @@ const useUserProgress = (organIds) => {
 
 
   useEffect(() => {
-
     if (!userId) {
-
       setProgress(new Map());
-
       setIsLoading(false);
-
       return;
-
     }
-
-
 
     setIsLoading(true);
-
     const allowedLower = new Set(lowerIds);
-
     const includeAll = allowedLower.size === 0;
-
     const listeners = [];
-
     const localMap = new Map();
-
     const progressRef = collection(db, "userProgress", userId, "topics");
-
     let isMounted = true;
 
-
-
     const emit = () => {
-
       if (!isMounted) return;
-
       setProgress(new Map(localMap));
-
     };
 
-
-
-    const readyChunks = new Set();
-
-    const markReady = (id, total) => {
-
-      readyChunks.add(id);
-
-      if (isMounted && readyChunks.size >= total) {
-
-        setIsLoading(false);
-
-      }
-
+    const finishLoading = () => {
+      if (!isMounted) return;
+      setIsLoading(false);
     };
 
-
+    const detachAll = () => {
+      listeners.forEach((unsubscribe) => {
+        try {
+          unsubscribe?.();
+        } catch (err) {
+          console.error("Failed to unsubscribe progress listener", err);
+        }
+      });
+    };
 
     if (includeAll) {
-
       const unsubscribe = onSnapshot(
-
         progressRef,
-
         (snapshot) => {
-
           localMap.clear();
-
           snapshot.forEach((doc) => {
-
             const data = doc.data() || {};
-
             localMap.set(doc.id, { id: doc.id, ...data });
-
           });
-
-          if (isMounted) {
-
-            setProgress(new Map(localMap));
-
-            setIsLoading(false);
-
-          }
-
+          emit();
+          finishLoading();
         },
-
         (error) => {
-
           console.error("Error fetching real-time user progress:", error);
-
-          if (isMounted) {
-
-            setIsLoading(false);
-
-          }
-
+          finishLoading();
         },
-
       );
-
       listeners.push(unsubscribe);
-
     } else {
-
-      const chunkSize = 10;
-
-      const chunks = [];
-
-      for (let i = 0; i < rawIds.length; i += chunkSize) {
-
-        chunks.push(rawIds.slice(i, i + chunkSize));
-
-      }
-
-
-
-      if (chunks.length === 0) {
-
-        setProgress(new Map());
-
-        setIsLoading(false);
-
+      if (!rawIds.length) {
+        localMap.clear();
+        emit();
+        finishLoading();
       } else {
-
-        chunks.forEach((chunk, index) => {
-
-          const chunkId = `chunk-${index}`;
-
-          const q = query(progressRef, where("chapterId", "in", chunk));
-
-          const unsubscribe = onSnapshot(
-
-            q,
-
+        const readySet = new Set();
+        const total = rawIds.length;
+        rawIds.forEach((chapterIdRaw) => {
+          const chapterId = chapterIdRaw;
+          const chapterLower = chapterId.toLowerCase();
+          const listener = onSnapshot(
+            query(progressRef, where("chapterId", "==", chapterId)),
             (snapshot) => {
-
-              snapshot.docChanges().forEach((change) => {
-
-                const docId = change.doc.id;
-
-                const data = change.doc.data() || {};
-
-                const chapterLower = String(data?.chapterId || "")
-
-                  .trim()
-
-                  .toLowerCase();
-
-
-
-                if (change.type === "removed" || !allowedLower.has(chapterLower)) {
-
-                  localMap.delete(docId);
-
-                } else {
-
-                  localMap.set(docId, { id: docId, ...data });
-
-                }
-
+              const activeDocIds = new Set();
+              snapshot.forEach((doc) => {
+                activeDocIds.add(doc.id);
+                const data = doc.data() || {};
+                localMap.set(doc.id, { id: doc.id, ...data });
               });
 
+              for (const [docId, value] of Array.from(localMap.entries())) {
+                const docChapterLower = String(value?.chapterId || "")
+                  .trim()
+                  .toLowerCase();
+                if (docChapterLower === chapterLower && !activeDocIds.has(docId)) {
+                  localMap.delete(docId);
+                }
+              }
+
               emit();
-
-              markReady(chunkId, chunks.length);
-
+              readySet.add(chapterId);
+              if (readySet.size >= total) {
+                finishLoading();
+              }
             },
-
             (error) => {
-
               console.error("Error fetching real-time user progress:", error);
-
-              markReady(chunkId, chunks.length);
-
+              readySet.add(chapterId);
+              if (readySet.size >= total) {
+                finishLoading();
+              }
             },
-
           );
-
-          listeners.push(unsubscribe);
-
+          listeners.push(listener);
         });
-
       }
-
     }
 
-
-
     return () => {
-
       isMounted = false;
-
-      listeners.forEach((unsubscribe) => {
-
-        try {
-
-          unsubscribe?.();
-
-        } catch (err) {
-
-          console.error("Failed to unsubscribe progress listener", err);
-
-        }
-
-      });
-
+      detachAll();
     };
-
-  }, [userId, organKey, lowerIds, rawIds]);
-
-
+  }, [userId, organKey, rawIds, lowerIds]);
 
   return { progress, isLoading };
 
