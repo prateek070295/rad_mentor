@@ -154,25 +154,6 @@ const useUserProgress = (organIds) => {
       }
     }
 
-              emit();
-              readySet.add(chapterId);
-              if (readySet.size >= total) {
-                finishLoading();
-              }
-            },
-            (error) => {
-              console.error("Error fetching real-time user progress:", error);
-              readySet.add(chapterId);
-              if (readySet.size >= total) {
-                finishLoading();
-              }
-            },
-          );
-          listeners.push(listener);
-        });
-      }
-    }
-
     return () => {
       isMounted = false;
       detachAll();
