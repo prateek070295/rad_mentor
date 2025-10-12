@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy, getCountFromServer } from "firebase/firestore";
+import { auth } from '../firebase';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
 
 const QuestionPaperViewer = () => {
     // --- State variables ---
@@ -24,32 +25,70 @@ const QuestionPaperViewer = () => {
     // --- Data Fetching useEffect ---
     useEffect(() => {
         console.log("--- 1. Starting to fetch papers ---");
+        let isMounted = true;
+        const controller = new AbortController();
+
         const fetchAllPapers = async () => {
             setIsLoading(true);
+            setError('');
             try {
-                const snapshot = await getDocs(collection(db, "papers"));
-                const papersData = snapshot.docs.map(doc => doc.data());
+                if (!API_BASE) {
+                    throw new Error("Test API base URL is not configured.");
+                }
+                const user = auth.currentUser;
+                if (!user) {
+                    throw new Error("You must be signed in to view question papers.");
+                }
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_BASE}/tests/papers`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    signal: controller.signal,
+                });
+
+                const payload = await response.json();
+                if (!response.ok) {
+                    const message = payload?.error || "Failed to fetch papers.";
+                    throw new Error(message);
+                }
+
+                if (!isMounted) return;
+
+                const papersData = Array.isArray(payload?.papers) ? payload.papers : [];
                 console.log("--- 2. Fetched papersData:", papersData);
                 setPapersList(papersData);
 
                 const uniqueYears = [...new Set(
                     papersData
-                        .map(p => p?.year)
-                        .filter(year => typeof year === 'number')
+                        .map((p) => p?.year)
+                        .filter((value) => typeof value === "number")
                 )].sort((a, b) => b - a);
 
                 console.log("--- 3. Processed uniqueYears:", uniqueYears);
                 setYearOptions(uniqueYears);
 
             } catch (err) {
+                if (controller.signal.aborted || !isMounted) return;
                 console.error("Failed to fetch or process papers:", err);
-                setError("Could not load paper list. See console for details.");
+                const message = err?.message || "Could not load paper list. See console for details.";
+                setError(message);
+                setPapersList([]);
+                setYearOptions([]);
             } finally {
-                setIsLoading(false);
-                console.log("--- 4. Finished fetching papers ---");
+                if (isMounted) {
+                    setIsLoading(false);
+                    console.log("--- 4. Finished fetching papers ---");
+                }
             }
         };
+
         fetchAllPapers();
+
+        return () => {
+            isMounted = false;
+            controller.abort();
+        };
     }, []);
 
     // ✨ FIX: Restored original logic for all other useEffects and handlers ✨
@@ -82,39 +121,67 @@ const QuestionPaperViewer = () => {
     }, [month, year, papersList]);
 
     useEffect(() => {
-        if ((view === 'test_mode' || view === 'practice_mode') && selectedPaper) {
-            const fetchPaperQuestions = async () => {
-                setIsLoading(true); setError(''); setQuestions([]);
-                try {
-                    const paperKey = `${selectedPaper.exam}|${selectedPaper.year}|${selectedPaper.month}|${selectedPaper.paper}`;
-                    const q = query(
-                        collection(db, "paperAppearances"),
-                        where("paperKey", "==", paperKey),
-                        orderBy("questionNumber")
-                    );
-                    const querySnapshot = await getDocs(q);
-
-                    if (querySnapshot.empty) {
-                        setError("No questions found for the selected paper.");
-                    } else {
-                        const fetchedQuestions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        const questionsWithCounts = await Promise.all(
-                            fetchedQuestions.map(async (q) => {
-                                const countQuery = query(collection(db, "paperAppearances"), where("questionId", "==", q.questionId));
-                                const snapshot = await getCountFromServer(countQuery);
-                                return { ...q, repeatCount: snapshot.data().count };
-                            })
-                        );
-                        setQuestions(questionsWithCounts);
-                    }
-                } catch (err) {
-                    console.error("Error fetching questions:", err);
-                    setError("An error occurred. (Check console - you may need to create a Firestore index).");
-                }
-                finally { setIsLoading(false); }
-            };
-            fetchPaperQuestions();
+        if (!selectedPaper || (view !== 'test_mode' && view !== 'practice_mode')) {
+            return;
         }
+
+        let isMounted = true;
+        const controller = new AbortController();
+
+        const fetchPaperQuestions = async () => {
+            setIsLoading(true);
+            setError('');
+            setQuestions([]);
+            try {
+                if (!API_BASE) {
+                    throw new Error("Test API base URL is not configured.");
+                }
+                const user = auth.currentUser;
+                if (!user) {
+                    throw new Error("You must be signed in to view question papers.");
+                }
+                const paperKey = `${selectedPaper.exam}|${selectedPaper.year}|${selectedPaper.month}|${selectedPaper.paper}`;
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_BASE}/tests/paper-questions?paperKey=${encodeURIComponent(paperKey)}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    signal: controller.signal,
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    const message = payload?.error || "Failed to fetch paper questions.";
+                    throw new Error(message);
+                }
+
+                if (!isMounted) return;
+
+                const fetchedQuestions = Array.isArray(payload?.questions) ? payload.questions : [];
+                if (fetchedQuestions.length === 0) {
+                    setError("No questions found for the selected paper.");
+                    setQuestions([]);
+                } else {
+                    setQuestions(fetchedQuestions);
+                }
+            } catch (err) {
+                if (controller.signal.aborted || !isMounted) return;
+                console.error("Error fetching questions:", err);
+                const message = err?.message || "An error occurred while loading paper questions.";
+                setError(message);
+                setQuestions([]);
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        fetchPaperQuestions();
+
+        return () => {
+            isMounted = false;
+            controller.abort();
+        };
     }, [view, selectedPaper]);
 
     useEffect(() => {

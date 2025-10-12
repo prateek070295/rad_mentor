@@ -1,42 +1,65 @@
 import React, { useState, useEffect } from "react";
-import { db } from "../firebase";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { auth } from "../firebase";
 import QuestionPaperViewer from "./QuestionPaperViewer";
 import TopicTestViewer from "./TopicTestViewer";
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
 
 const TestTab = ({ organSystems }) => {
   const [view, setView] = useState("hub");
   const [topics, setTopics] = useState([]);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState(null);
+  const [topicError, setTopicError] = useState("");
 
   useEffect(() => {
     if (view !== "section-selection" || topics.length > 0) return;
 
     let isMounted = true;
+    const controller = new AbortController();
+
     (async () => {
       setIsLoadingTopics(true);
+      setTopicError("");
       try {
-        const topicQuery = query(
-          collection(db, "questionTopics"),
-          orderBy("name")
-        );
-        const snapshot = await getDocs(topicQuery);
+        if (!API_BASE) {
+          throw new Error("Test API base URL is not configured.");
+        }
+        const user = auth.currentUser;
+        if (!user) {
+          throw new Error("You must be signed in to load section tests.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(`${API_BASE}/tests/topics`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const message = payload?.error || "Failed to fetch topics.";
+          throw new Error(message);
+        }
+
         if (!isMounted) return;
-        const topicsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const topicsData = Array.isArray(payload?.topics) ? payload.topics : [];
         setTopics(topicsData);
       } catch (error) {
+        if (controller.signal.aborted || !isMounted) return;
         console.error("Error fetching topics:", error);
+        setTopicError(error?.message || "Unable to load topics right now.");
+        setTopics([]);
       } finally {
-        if (isMounted) setIsLoadingTopics(false);
+        if (isMounted) {
+          setIsLoadingTopics(false);
+        }
       }
     })();
 
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, [view, topics.length]);
 
@@ -194,6 +217,12 @@ const TestTab = ({ organSystems }) => {
                       className="h-24 animate-pulse rounded-2xl border border-dashed border-indigo-100 bg-white/60"
                     />
                   ))
+                : topicError
+                ? (
+                    <div className="col-span-full rounded-2xl border border-red-200 bg-red-50/80 px-4 py-6 text-center text-sm font-semibold text-red-600 shadow-inner shadow-red-100/40">
+                      {topicError}
+                    </div>
+                  )
                 : topics.length > 0
                 ? topics.map((topic) => (
                     <button
