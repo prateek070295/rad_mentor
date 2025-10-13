@@ -246,19 +246,26 @@ export default function PlanTabV2() {
     };
   }, [uid, meta?.updatedAt, queueRefreshKey]);
 
-  // choose "This Week" key from today
+  // choose active week based on currentDayISO (fall back to calendar week)
   useEffect(() => {
     if (!uid) return;
-    try {
-      const wk = weekKeyFromDate
-        ? weekKeyFromDate(new Date())
-        : toISO(startOfWeekSun(new Date()));
-      setWeekKey(wk);
-    } catch {
-      const wk = toISO(startOfWeekSun(new Date()));
-      setWeekKey(wk);
+    const sourceIso = meta?.currentDayISO || toISO(new Date());
+    let baseDate = new Date(sourceIso);
+    if (Number.isNaN(baseDate.getTime())) {
+      baseDate = new Date();
     }
-  }, [uid]);
+    let computedWeek = "";
+    try {
+      computedWeek = weekKeyFromDate
+        ? weekKeyFromDate(baseDate)
+        : toISO(startOfWeekSun(baseDate));
+    } catch {
+      computedWeek = toISO(startOfWeekSun(baseDate));
+    }
+    if (computedWeek && computedWeek !== weekKey) {
+      setWeekKey(computedWeek);
+    }
+  }, [uid, meta?.currentDayISO, weekKey]);
 
   const defaultDailyMinutes = useMemo(() => {
     if (meta?.dailyMinutes != null) return Number(meta.dailyMinutes);
@@ -793,7 +800,6 @@ export default function PlanTabV2() {
     : "Hang tight - we'll refresh as soon as the new blocks are in place.";
 
   const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
-
   if (!uid) {
     return (
       <div className="p-6">
@@ -843,7 +849,7 @@ export default function PlanTabV2() {
         {/* Main column */}
         <main className="flex min-w-0 flex-col gap-6">
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-4 shadow-xl shadow-indigo-200/50 backdrop-blur">
-          <WeeklyBoard
+            <WeeklyBoard
               uid={uid}
               weekKey={weekKey}
               weekDates={weekDates}
