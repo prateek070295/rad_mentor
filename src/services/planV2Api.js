@@ -322,17 +322,35 @@ export async function completeDayAndAdvance(uid, weekKey, iso) {
   const arr = weekDatesFromKey(weekKey);
   const idx = arr.indexOf(iso);
   let nextISO = iso;
+  let rolledWeekKey = null;
+  const fallbackDailyMinutes = (() => {
+    const caps = weekDoc?.dayCaps || {};
+    for (const dayIso of arr) {
+      const minutes = NUM(caps?.[dayIso], NaN);
+      if (Number.isFinite(minutes) && minutes > 0) {
+        return minutes;
+      }
+    }
+    return 90;
+  })();
   if (idx >= 0 && idx < 6) {
     nextISO = arr[idx + 1];
   } else if (idx === 6) {
-    nextISO = nextWeekKey(weekKey);
+    const ensureRes = await ensureNextWeekInitialized(
+      uid,
+      weekKey,
+      metaRef,
+      fallbackDailyMinutes,
+    );
+    rolledWeekKey = ensureRes.weekKey || nextWeekKey(weekKey);
+    nextISO = rolledWeekKey;
   }
   await updateDoc(metaRef, {
     currentDayISO: nextISO,
     updatedAt: new Date().toISOString(),
   });
 
-  return { nextISO, completedCount };
+  return { nextISO, completedCount, rolledWeekKey };
 }
 
 export async function loadDayAssignments(uid, iso) {
@@ -394,6 +412,40 @@ function makeSliceMatchKeys(slice = {}) {
     keys.push(`sub:${subId}`);
   }
   return keys;
+}
+
+async function ensureNextWeekInitialized(
+  uid,
+  currentWeekKey,
+  metaRef,
+  fallbackDailyMinutes = 90,
+) {
+  if (!uid || !currentWeekKey) {
+    return { weekKey: null };
+  }
+  const upcomingWeekKey = nextWeekKey(currentWeekKey);
+  let defaultDailyMinutes = Number.isFinite(Number(fallbackDailyMinutes))
+    ? Number(fallbackDailyMinutes)
+    : 90;
+  try {
+    const metaSnap = metaRef
+      ? await getDoc(metaRef)
+      : await getDoc(doc(db, "plans", uid));
+    if (metaSnap.exists()) {
+      defaultDailyMinutes = NUM(
+        metaSnap.data()?.dailyMinutes,
+        defaultDailyMinutes,
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Failed to load plan meta for next-week initialization:",
+      error,
+    );
+  }
+
+  await loadOrInitWeek(uid, upcomingWeekKey, defaultDailyMinutes);
+  return { weekKey: upcomingWeekKey };
 }
 
 async function applyCompletionToWeekAssignments(
@@ -1664,23 +1716,43 @@ export async function markDayDoneAndAdvance(uid, weekKey, iso) {
   if (!uid || !weekKey || !iso)
     throw new Error("markDayDoneAndAdvance: bad args");
   const ref = doc(db, "plans", uid, "weeks", weekKey);
+  const weekSnap = await getDoc(ref);
+  const weekDoc = weekSnap.exists() ? weekSnap.data() || {} : {};
   await updateDoc(ref, { [`doneDays.${iso}`]: true });
 
   // Advance currentDayISO in meta to next day (or next week's Monday when week ends)
   const metaRef = doc(db, "plans", uid);
   const arr = weekDatesFromKey(weekKey);
   const idx = arr.indexOf(iso);
+  const fallbackDailyMinutes = (() => {
+    const caps = weekDoc?.dayCaps || {};
+    for (const dayIso of arr) {
+      const minutes = NUM(caps?.[dayIso], NaN);
+      if (Number.isFinite(minutes) && minutes > 0) {
+        return minutes;
+      }
+    }
+    return 90;
+  })();
   let nextISO = iso;
+  let rolledWeekKey = null;
   if (idx >= 0 && idx < 6) {
     nextISO = arr[idx + 1];
   } else if (idx === 6) {
-    nextISO = nextWeekKey(weekKey); // Monday of next week
+    const ensureRes = await ensureNextWeekInitialized(
+      uid,
+      weekKey,
+      metaRef,
+      fallbackDailyMinutes,
+    );
+    rolledWeekKey = ensureRes.weekKey || nextWeekKey(weekKey);
+    nextISO = rolledWeekKey; // Next week's start
   }
   await updateDoc(metaRef, {
     currentDayISO: nextISO,
     updatedAt: new Date().toISOString(),
   });
-  return { nextISO };
+  return { nextISO, rolledWeekKey };
 }
 
 /* --------------------------- UTIL (rarely used) --------------------------- */
@@ -1894,4 +1966,16 @@ export async function moveTopicSlicesToNextDay(uid, iso, seq) {
   const movedCount = Math.max(0, toMove.length - overflowForSeq);
 
   return { moved: movedCount, overflow: overflowCount };
+}
+
+export async function debugForceAdvanceWeek(uid, weekKey) {
+  if (!uid || !weekKey)
+    throw new Error("debugForceAdvanceWeek: missing uid/weekKey");
+  const dates = weekDatesFromKey(weekKey);
+  if (!dates.length) {
+    return { message: "No dates found for week", success: false };
+  }
+  const lastIso = dates[dates.length - 1];
+  const result = await completeDayAndAdvance(uid, weekKey, lastIso);
+  return { ...result, success: true };
 }
