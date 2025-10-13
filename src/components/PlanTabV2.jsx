@@ -14,7 +14,6 @@ import {
   savePlanMeta,
   loadOrInitWeek,
   patchWeek,
-  completeDayAndAdvance,
   weekKeyFromDate,
   autoFillWeekFromMaster,
   scheduleTopicToDay,
@@ -616,44 +615,6 @@ export default function PlanTabV2() {
     [scheduleDayCapUpdate],
   );
 
-  const handleMarkDayDone = async (iso) => {
-    if (!uid || !weekKey) return null;
-
-    return runWithPending(async () => {
-      try {
-        const result = await completeDayAndAdvance(uid, weekKey, iso);
-
-        setWeekDoc((prev) => {
-          if (!prev) return prev;
-          const nextDoneDays = { ...(prev.doneDays || {}), [iso]: true };
-          return { ...prev, doneDays: nextDoneDays };
-        });
-
-        if (result?.nextISO) {
-          setMeta((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  currentDayISO: result.nextISO,
-                  updatedAt: new Date().toISOString(),
-                }
-              : prev,
-          );
-        }
-
-        refreshWeekData();
-        refreshQueue();
-        return result;
-      } catch (err) {
-        console.error(err);
-        if (typeof window !== "undefined") {
-          window.alert(err?.message || "Failed to mark the day as done");
-        }
-        throw err;
-      }
-    });
-  };
-
   const calcRemaining = (iso) => {
     const cap = Number(dayCaps?.[iso] || 0);
     const items = assigned?.[iso] || [];
@@ -893,7 +854,6 @@ export default function PlanTabV2() {
               currentDayISO={currentDayISO}
               onToggleOffDay={handleToggleOffDay}
               onUpdateDayCap={handleUpdateDayCap}
-              onMarkDayDone={handleMarkDayDone}
               onAddFromMaster={handleAddFromMaster}
               onScheduleQueueRun={handleScheduleQueueRun}
               onRefresh={handleBoardRefresh}

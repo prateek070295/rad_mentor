@@ -312,12 +312,10 @@ export async function completeDayAndAdvance(uid, weekKey, iso) {
     ? weekDoc.assigned[iso]
     : [];
 
-  const itemIds = collectScheduledItemIds(dayAssignments);
-  if (itemIds.length) {
-    await markStudyItemsCompleted(itemIds);
-  }
+  const completedCount = collectScheduledItemIds(dayAssignments).length;
 
   await finalizeQueueAfterDayCompletion(uid, iso, dayAssignments);
+  await applyCompletionToWeekAssignments(uid, weekKey, iso, dayAssignments);
   await updateDoc(weekRef, { [`doneDays.${iso}`]: true });
 
   const metaRef = doc(db, "plans", uid);
@@ -334,7 +332,259 @@ export async function completeDayAndAdvance(uid, weekKey, iso) {
     updatedAt: new Date().toISOString(),
   });
 
-  return { nextISO, completedCount: itemIds.length };
+  return { nextISO, completedCount };
+}
+
+export async function loadDayAssignments(uid, iso) {
+  if (!uid || !iso) {
+    return { assignments: [], weekDoc: null, weekKey: null };
+  }
+
+  const { ref: weekRef, data: weekDoc, wkKey } = await loadWeekDoc(uid, iso);
+  if (!weekDoc) {
+    return { assignments: [], weekDoc: null, weekKey: wkKey, weekRef };
+  }
+
+  const assignments = Array.isArray(weekDoc.assigned?.[iso])
+    ? [...weekDoc.assigned[iso]]
+    : [];
+
+  return { assignments, weekDoc, weekKey: wkKey, weekRef };
+}
+
+function normalizeId(value) {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function makeSliceMatchKeys(slice = {}) {
+  const keys = [];
+  const seq = slice?.seq;
+  if (seq != null) {
+    const seqKey = `seq:${String(seq)}`;
+    keys.push(seqKey);
+    const subIdx = Number(slice?.subIdx);
+    if (Number.isFinite(subIdx)) {
+      keys.push(`${seqKey}|subIdx:${subIdx}`);
+    }
+  }
+  const topicId = normalizeId(
+    slice?.topicId ??
+      slice?.topicID ??
+      slice?.id ??
+      slice?.chapterId ??
+      slice?.chapterID ??
+      "",
+  ).toLowerCase();
+  if (topicId) {
+    keys.push(`topic:${topicId}`);
+  }
+  const subId = normalizeId(
+    slice?.subId ??
+      slice?.subID ??
+      slice?.itemId ??
+      slice?.itemID ??
+      slice?.subtopicId ??
+      slice?.subtopicID ??
+      "",
+  ).toLowerCase();
+  if (topicId && subId) {
+    keys.push(`topic:${topicId}|sub:${subId}`);
+  } else if (subId) {
+    keys.push(`sub:${subId}`);
+  }
+  return keys;
+}
+
+async function applyCompletionToWeekAssignments(
+  uid,
+  weekKey,
+  iso,
+  slices = [],
+) {
+  if (!uid || !weekKey || !iso) return;
+  if (!Array.isArray(slices) || !slices.length) return;
+
+  const weekRef = doc(db, "plans", uid, "weeks", weekKey);
+  const sliceKeySet = new Set();
+  slices.forEach((slice) => {
+    makeSliceMatchKeys(slice).forEach((key) => {
+      if (key) sliceKeySet.add(key);
+    });
+  });
+  if (!sliceKeySet.size) return;
+  const timestamp = new Date().toISOString();
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(weekRef);
+    if (!snap.exists()) return;
+    const data = snap.data() || {};
+    const assigned = Array.isArray(data.assigned?.[iso])
+      ? data.assigned[iso].map((entry) => (entry ? { ...entry } : entry))
+      : [];
+    if (!assigned.length) return;
+
+    let changed = false;
+    const updated = assigned.map((entry) => {
+      if (!entry) return entry;
+      const keys = makeSliceMatchKeys(entry);
+      const matched = keys.some((key) => sliceKeySet.has(key));
+      if (!matched) return entry;
+      if (entry.completed === true && entry.status === "completed") {
+        return entry;
+      }
+      changed = true;
+      return {
+        ...entry,
+        completed: true,
+        status: "completed",
+        completedAt: entry.completedAt || timestamp,
+        percentComplete: 100,
+      };
+    });
+
+    if (changed) {
+      tx.update(weekRef, { [`assigned.${iso}`]: updated });
+    }
+  });
+}
+
+export async function markAssignmentsCompleteFromProgress(
+  uid,
+  iso,
+  descriptors = [],
+) {
+  if (!uid || !iso || !Array.isArray(descriptors) || !descriptors.length) {
+    return { matchedSlices: 0, matchedTopics: 0, weekKey: null };
+  }
+
+  const normalize = (value) =>
+    value == null ? "" : String(value).trim();
+  const toKey = (value) => normalize(value).toLowerCase();
+
+  const topicMap = new Map();
+  const extractSubId = (value) => {
+    if (value == null) return "";
+    if (typeof value === "string" || typeof value === "number") {
+      return normalize(value);
+    }
+    if (typeof value === "object") {
+      return normalize(
+        value.subtopicId ??
+          value.subId ??
+          value.itemId ??
+          value.id ??
+          value.topicId ??
+          "",
+      );
+    }
+    return "";
+  };
+  descriptors.forEach((raw) => {
+    if (raw == null) return;
+    if (typeof raw === "string") {
+      const topicId = normalize(raw);
+      if (!topicId) return;
+      const entry =
+        topicMap.get(topicId) || { topicId, subIds: new Set(), fullTopic: false };
+      entry.fullTopic = true;
+      topicMap.set(topicId, entry);
+      return;
+    }
+
+    const topicId =
+      normalize(
+        raw.topicId ??
+          raw.topicID ??
+          raw.id ??
+          raw.topic ??
+          raw.chapterId ??
+          "",
+      );
+    if (!topicId) return;
+    const entry =
+      topicMap.get(topicId) || { topicId, subIds: new Set(), fullTopic: false };
+
+    if (
+      raw.completeTopic === true ||
+      raw.includeTopic === true ||
+      !Array.isArray(raw.subtopicIds) ||
+      raw.subtopicIds.length === 0
+    ) {
+      entry.fullTopic = true;
+    } else {
+      raw.subtopicIds.forEach((sub) => {
+        const subKey = extractSubId(sub);
+        if (subKey) {
+          entry.subIds.add(toKey(subKey));
+        }
+      });
+
+      if (Array.isArray(raw.subIds)) {
+        raw.subIds.forEach((sub) => {
+          const subKey = extractSubId(sub);
+          if (subKey) {
+            entry.subIds.add(toKey(subKey));
+          }
+        });
+      }
+    }
+
+    topicMap.set(topicId, entry);
+  });
+
+  if (!topicMap.size) {
+    return { matchedSlices: 0, matchedTopics: 0, weekKey: null };
+  }
+
+  const { assignments, weekDoc, weekKey } = await loadDayAssignments(uid, iso);
+  if (!assignments.length || !weekDoc) {
+    return { matchedSlices: 0, matchedTopics: 0, weekKey };
+  }
+
+  const matched = [];
+  assignments.forEach((slice) => {
+    if (!slice) return;
+    const topicId = normalize(slice.topicId || slice.topicID || slice.id);
+    if (!topicId) return;
+    const topicEntry = topicMap.get(topicId);
+    if (!topicEntry) return;
+    if (topicEntry.fullTopic) {
+      matched.push(slice);
+      return;
+    }
+
+    const subIdKey = toKey(
+      slice.subId ??
+        slice.subID ??
+        slice.itemId ??
+        slice.itemID ??
+        "",
+    );
+    if (!subIdKey) return;
+    if (topicEntry.subIds.has(subIdKey)) {
+      matched.push(slice);
+    }
+  });
+
+  if (!matched.length) {
+    return { matchedSlices: 0, matchedTopics: 0, weekKey };
+  }
+
+  await finalizeQueueAfterDayCompletion(uid, iso, matched);
+  await applyCompletionToWeekAssignments(uid, weekKey, iso, matched);
+
+  const matchedTopics = new Set(
+    matched
+      .map((slice) => normalize(slice.topicId || slice.topicID || slice.id))
+      .filter(Boolean),
+  ).size;
+
+  return {
+    matchedSlices: matched.length,
+    matchedTopics,
+    weekKey,
+  };
 }
 
 export function weekDatesFromKey(weekKey) {

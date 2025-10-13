@@ -814,6 +814,7 @@ function AppShell() {
             todayFocusDetails={dashboardData.todayFocusDetails}
             userName={dashboardData.userName}
             setIsFocusMode={setIsFocusMode}
+            planContext={planV2Context}
           />
         );
       case 'test':
