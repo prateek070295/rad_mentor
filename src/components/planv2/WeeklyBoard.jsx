@@ -47,6 +47,25 @@ const defaultSearchFields = (row) => {
   return out.filter(Boolean).map((x) => String(x).toLowerCase());
 };
 
+const CompletionBadge = ({ className = "" }) => (
+  <span
+    className={`inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ${className}`}
+    aria-hidden="true"
+  >
+    <svg
+      viewBox="0 0 12 12"
+      className="h-3 w-3"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6.5 5.1 8.6 9 4" />
+    </svg>
+  </span>
+);
+
 export default function WeeklyBoard({
   uid,
   weekKey,
@@ -58,7 +77,6 @@ export default function WeeklyBoard({
   currentDayISO,
   onToggleOffDay,
   onUpdateDayCap,
-  onMarkDayDone,
   onAddFromMaster,
   onScheduleQueueRun,
   onAutoFillWeek,
@@ -150,12 +168,23 @@ export default function WeeklyBoard({
             label:
               item?.title || item?.topicName || item?.chapterName || "Topic",
             minutes: 0,
+            totalSlices: 0,
+            completedSlices: 0,
           });
         }
         const entry = perTopic.get(topicKey);
         entry.minutes += Number(item?.minutes || 0);
+        entry.totalSlices += 1;
+        if (item?.completed || item?.status === "completed") {
+          entry.completedSlices += 1;
+        }
       });
-      map[iso] = Array.from(perTopic.values());
+      map[iso] = Array.from(perTopic.values()).map((entry) => ({
+        ...entry,
+        isCompleted:
+          entry.totalSlices > 0 &&
+          entry.completedSlices >= entry.totalSlices,
+      }));
     });
     return map;
   }, [assigned, weekIsoList]);
@@ -199,11 +228,19 @@ export default function WeeklyBoard({
           name: item?.title || item?.topicName || "Topic",
           section: item?.section || "",
           totalMinutes: 0,
+          totalSlices: 0,
+          completedSlices: 0,
           subtopics: [],
         });
       }
       const topic = chapter.topics.get(topicKey);
       topic.totalMinutes += minutes;
+      topic.totalSlices += 1;
+      const sliceCompleted =
+        item?.completed === true || item?.status === "completed";
+      if (sliceCompleted) {
+        topic.completedSlices += 1;
+      }
       const subName =
         item?.subName ||
         (Number.isFinite(Number(item?.subIdx))
@@ -216,6 +253,7 @@ export default function WeeklyBoard({
         order: Number.isFinite(Number(item?.subIdx))
           ? Number(item.subIdx)
           : topic.subtopics.length,
+        completed: sliceCompleted,
       });
     });
 
@@ -231,6 +269,9 @@ export default function WeeklyBoard({
         name: topic.name,
         section: topic.section,
         totalMinutes: topic.totalMinutes,
+        completed:
+          topic.totalSlices > 0 &&
+          topic.completedSlices >= topic.totalSlices,
         subtopics: topic.subtopics
           .slice()
           .sort((a, b) => a.order - b.order)
@@ -238,6 +279,7 @@ export default function WeeklyBoard({
             key: sub.key,
             name: sub.name,
             minutes: sub.minutes,
+            completed: sub.completed === true,
           })),
       })),
     }));
@@ -512,59 +554,6 @@ export default function WeeklyBoard({
     ],
   );
 
-  const handleMarkDoneClick = useCallback(
-    async (iso) => {
-      if (!onMarkDayDone || !iso) return;
-      if (doneDays?.[iso]) {
-        setUiMsg("Day already marked done.");
-        setTimeout(() => setUiMsg(""), 1800);
-        return;
-      }
-      try {
-        setUiMsg("Locking day...");
-        const result = await onMarkDayDone(iso);
-        const completedCount =
-          typeof result?.completedCount === "number"
-            ? result.completedCount
-            : null;
-        if (completedCount != null) {
-          const suffix =
-            completedCount > 0 ? ` (${completedCount} items completed)` : "";
-          setUiMsg(`Day marked done${suffix}`);
-        } else {
-          setUiMsg("Day marked done");
-        }
-
-        const currentIdx = weekIsoList.indexOf(iso);
-        let targetISO =
-          result?.nextISO && weekIsoList.includes(result.nextISO)
-            ? result.nextISO
-            : null;
-        if (!targetISO) {
-          if (currentIdx >= 0 && currentIdx < weekIsoList.length - 1) {
-            targetISO = weekIsoList[currentIdx + 1];
-          } else {
-            targetISO =
-              weekIsoList.find(
-                (candidate) => candidate !== iso && !doneDays?.[candidate],
-              ) || null;
-          }
-        }
-        if (targetISO && targetISO !== iso) {
-          setExpandedISO(targetISO);
-          setMode("day");
-        }
-        onRefresh?.();
-      } catch (err) {
-        console.error(err);
-        setUiMsg(err?.message || "Failed to mark day done");
-      } finally {
-        setTimeout(() => setUiMsg(""), 2200);
-      }
-    },
-    [onMarkDayDone, weekIsoList, doneDays, onRefresh],
-  );
-
   const currentCap = expandedISO ? Number(dayCaps?.[expandedISO] || 0) : 0;
   const currentUsed = expandedISO ? Number(usedByDay?.[expandedISO] || 0) : 0;
   const currentRemaining = expandedISO
@@ -729,11 +718,12 @@ export default function WeeklyBoard({
                           Marked off day
                         </div>
                       )}
-                      {isDone && (
-                        <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                          Marked complete
-                        </div>
-                      )}
+                    {isDone && (
+                      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <CompletionBadge className="h-3 w-3" />
+                        Completed
+                      </div>
+                    )}
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <button
@@ -752,9 +742,12 @@ export default function WeeklyBoard({
                     {summaryItems.slice(0, 4).map((item) => (
                       <li
                         key={`${iso}-${item.key}`}
-                        className="flex justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-slate-600 shadow-sm"
+                        className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-slate-600 shadow-sm"
                       >
-                        <span className="truncate">{item.label}</span>
+                        <span className="flex items-center gap-2 truncate">
+                          {item.isCompleted ? <CompletionBadge /> : null}
+                          <span className="truncate">{item.label}</span>
+                        </span>
                         <span>{Number(item.minutes || 0)}m</span>
                       </li>
                     ))}
@@ -784,13 +777,6 @@ export default function WeeklyBoard({
                       disabled={isDone}
                     >
                       Adjust day
-                    </button>
-                    <button
-                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100 disabled:opacity-60"
-                      onClick={() => handleMarkDoneClick(iso)}
-                      disabled={isDone}
-                    >
-                      {isDone ? "Done" : "Mark done"}
                     </button>
                     {onAddFromMaster && (
                       <button
@@ -834,7 +820,7 @@ export default function WeeklyBoard({
                     )}
                     {expandedIsDone && (
                       <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                        Marked complete
+                        Completed
                       </div>
                     )}
                   </div>
@@ -882,13 +868,6 @@ export default function WeeklyBoard({
                     disabled={expandedIsDone}
                   >
                     {offDays?.[expandedISO] ? "Mark study day" : "Mark off day"}
-                  </button>
-                  <button
-                    className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100 disabled:opacity-60"
-                    onClick={() => handleMarkDoneClick(expandedISO)}
-                    disabled={expandedIsDone}
-                  >
-                    {expandedIsDone ? "Done" : "Mark done"}
                   </button>
                   <button
                     className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50"
@@ -959,9 +938,10 @@ export default function WeeklyBoard({
                               className="rounded-2xl border border-indigo-100 bg-white px-4 py-3 shadow-sm shadow-indigo-100/40"
                             >
                               <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="font-semibold text-slate-800">
-                                    {topic.name}
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 font-semibold text-slate-800">
+                                    {topic.completed ? <CompletionBadge /> : null}
+                                    <span className="truncate">{topic.name}</span>
                                   </div>
                                   {topic.section && (
                                     <div className="text-xs uppercase tracking-wide text-slate-500">
@@ -998,10 +978,11 @@ export default function WeeklyBoard({
                                   {topic.subtopics.map((sub) => (
                                     <li
                                       key={sub.key}
-                                      className="flex justify-between gap-2 rounded-xl bg-slate-50 px-3 py-1.5 text-slate-600"
+                                      className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-1.5 text-slate-600"
                                     >
-                                      <span className="truncate">
-                                        {sub.name}
+                                      <span className="flex items-center gap-2 truncate">
+                                        {sub.completed ? <CompletionBadge /> : null}
+                                        <span className="truncate">{sub.name}</span>
                                       </span>
                                       <span>
                                         {Number(sub.minutes || 0)} min
@@ -1130,3 +1111,4 @@ export default function WeeklyBoard({
     </div>
   );
 }
+

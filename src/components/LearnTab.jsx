@@ -4,6 +4,11 @@ import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase
 import ReactMarkdown from 'react-markdown';
 import TopicNode from './TopicNode';
 import MCQForm from './MCQForm';
+import {
+  loadDayAssignments,
+  markAssignmentsCompleteFromProgress,
+  completeDayAndAdvance,
+} from '../services/planV2Api';
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
@@ -166,7 +171,13 @@ const useUserProgress = (organIds) => {
 
 
 
-const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode }) => {
+const LearnTab = ({
+  todayFocus,
+  todayFocusDetails = [],
+  userName,
+  setIsFocusMode,
+  planContext = null,
+}) => {
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [scheduledChapters, setScheduledChapters] = useState([]);
@@ -182,6 +193,26 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
   const [isMentorTyping, setIsMentorTyping] = useState(false);
   const [activeTopic, setActiveTopic] = useState(null);
   const lastCardRef = useRef(null);
+  const [dayAssignments, setDayAssignments] = useState([]);
+  const [dayAssignmentsMeta, setDayAssignmentsMeta] = useState({
+    weekKey: null,
+    isDayDone: false,
+  });
+  const syncedCompletionKeysRef = useRef(new Set());
+  const dayCompletionTriggeredRef = useRef(false);
+  const previousIsoRef = useRef(null);
+  const planUid = planContext?.uid || null;
+  const planTodayIso = planContext?.todayIso || null;
+  const planWeekKey = planContext?.weekKey || null;
+
+  useEffect(() => {
+    const isoKey = planTodayIso || null;
+    if (previousIsoRef.current !== isoKey) {
+      syncedCompletionKeysRef.current.clear();
+      dayCompletionTriggeredRef.current = false;
+      previousIsoRef.current = isoKey;
+    }
+  }, [planTodayIso]);
   
   const { progress: userProgress, isLoading: isProgressLoading } = useUserProgress(
     scheduledChapters.map((chapter) => chapter.sectionName),
@@ -192,6 +223,58 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
       setIsFocusMode(!isSidebarOpen);
     }
   }, [isSidebarOpen, setIsFocusMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchDayAssignments = async () => {
+      if (!planUid || !planTodayIso) {
+        if (!cancelled) {
+          setDayAssignments([]);
+          setDayAssignmentsMeta({
+            weekKey: null,
+            isDayDone: false,
+          });
+        }
+        syncedCompletionKeysRef.current.clear();
+        dayCompletionTriggeredRef.current = false;
+        return;
+      }
+
+      try {
+        const result = await loadDayAssignments(planUid, planTodayIso);
+        if (cancelled) return;
+        setDayAssignments(
+          Array.isArray(result.assignments) ? result.assignments : [],
+        );
+        const alreadyDone = !!(result.weekDoc?.doneDays?.[planTodayIso]);
+        setDayAssignmentsMeta({
+          weekKey: result.weekKey || planWeekKey,
+          isDayDone: alreadyDone,
+        });
+        if (alreadyDone) {
+          dayCompletionTriggeredRef.current = true;
+        }
+      } catch (error) {
+        console.error("Failed to load day assignments:", error);
+        if (!cancelled) {
+          setDayAssignments([]);
+          setDayAssignmentsMeta({
+            weekKey: planWeekKey,
+            isDayDone: false,
+          });
+        }
+        syncedCompletionKeysRef.current.clear();
+        dayCompletionTriggeredRef.current = false;
+      }
+    };
+
+    fetchDayAssignments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planUid, planTodayIso, planWeekKey]);
 
   // EFFECT 1: Parse today's focus (Unchanged)
   useEffect(() => {
@@ -611,6 +694,181 @@ const LearnTab = ({ todayFocus, todayFocusDetails = [], userName, setIsFocusMode
     });
     setChapterGroups(Array.from(uniqueGroups.values()));
   }, [userProgress, sourceTopicsTree, isProgressLoading]);
+
+  const topicStatusLookup = useMemo(() => {
+    const normalize = (value) =>
+      value == null ? "" : String(value).trim();
+    const toKey = (value) => normalize(value).toLowerCase();
+    const map = new Map();
+    const registerNode = (node) => {
+      if (!node) return;
+      const statusRaw =
+        typeof node.status === "string" ? node.status.trim().toLowerCase() : "";
+      const completed =
+        statusRaw === "completed" ||
+        node.completed === true ||
+        (typeof node.percentComplete === "number" &&
+          node.percentComplete >= 100);
+      const info = { status: statusRaw, completed, node };
+      const ids = [
+        node.id,
+        node.topicId,
+        node.itemId,
+        node.topicID,
+        node.nodeId,
+        node.chapterId,
+        node.topicid,
+      ];
+      ids.forEach((id) => {
+        const key = toKey(id);
+        if (!key) return;
+        const existing = map.get(key);
+        if (!existing || (completed && !existing.completed)) {
+          map.set(key, info);
+        }
+      });
+      if (Array.isArray(node.children)) {
+        node.children.forEach(registerNode);
+      }
+    };
+    chapterGroups.forEach((group) => {
+      (group.topics || []).forEach(registerNode);
+    });
+    return map;
+  }, [chapterGroups]);
+
+  const isSliceCompleted = useCallback(
+    (slice) => {
+      if (!slice || topicStatusLookup.size === 0) return false;
+      const normalize = (value) =>
+        value == null ? "" : String(value).trim();
+      const toKey = (value) => normalize(value).toLowerCase();
+      const topicKey = toKey(slice.topicId ?? slice.topicID ?? slice.id);
+      const subKey = toKey(
+        slice.subId ?? slice.subID ?? slice.itemId ?? slice.itemID ?? "",
+      );
+      const topicEntry = topicStatusLookup.get(topicKey);
+      const subEntry = subKey ? topicStatusLookup.get(subKey) : null;
+      return Boolean(topicEntry?.completed || subEntry?.completed);
+    },
+    [topicStatusLookup],
+  );
+
+  useEffect(() => {
+    if (!planUid || !planTodayIso) return;
+    if (!Array.isArray(dayAssignments) || dayAssignments.length === 0) return;
+    if (!topicStatusLookup || topicStatusLookup.size === 0) return;
+
+    const normalize = (value) =>
+      value == null ? "" : String(value).trim();
+    const toKey = (value) => normalize(value).toLowerCase();
+
+    const descriptorMap = new Map();
+    const newlySyncedKeys = new Set();
+
+    dayAssignments.forEach((slice) => {
+      if (!slice) return;
+      const topicKey = toKey(slice.topicId ?? slice.topicID ?? slice.id);
+      if (!topicKey) return;
+      if (syncedCompletionKeysRef.current.has(topicKey)) return;
+      if (!isSliceCompleted(slice)) return;
+
+      newlySyncedKeys.add(topicKey);
+      if (!descriptorMap.has(topicKey)) {
+        const rawTopicId =
+          slice.topicId ?? slice.topicID ?? slice.id ?? "";
+        if (!rawTopicId) return;
+        const descriptor =
+          typeof rawTopicId === "string"
+            ? rawTopicId.trim()
+            : String(rawTopicId).trim();
+        if (!descriptor) return;
+        descriptorMap.set(topicKey, {
+          topicId: descriptor,
+          includeTopic: true,
+        });
+      }
+    });
+
+    if (!descriptorMap.size) return;
+
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        const result = await markAssignmentsCompleteFromProgress(
+          planUid,
+          planTodayIso,
+          Array.from(descriptorMap.values()),
+        );
+        if (cancelled) return;
+        if (result?.matchedSlices > 0) {
+          newlySyncedKeys.forEach((key) =>
+            syncedCompletionKeysRef.current.add(key),
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Failed to sync completed planner topics from Learn tab:",
+          error,
+        );
+      }
+    };
+
+    sync();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planUid, planTodayIso, dayAssignments, topicStatusLookup, isSliceCompleted]);
+
+  useEffect(() => {
+    if (!planUid || !planTodayIso) return;
+    if (!dayAssignmentsMeta.weekKey || dayAssignmentsMeta.isDayDone) return;
+    if (!Array.isArray(dayAssignments) || dayAssignments.length === 0) return;
+    if (!topicStatusLookup || topicStatusLookup.size === 0) return;
+
+    const allComplete = dayAssignments.every((slice) => isSliceCompleted(slice));
+    if (!allComplete) {
+      dayCompletionTriggeredRef.current = false;
+      return;
+    }
+
+    if (dayCompletionTriggeredRef.current) return;
+    dayCompletionTriggeredRef.current = true;
+
+    let cancelled = false;
+    const finalizeDay = async () => {
+      try {
+        await completeDayAndAdvance(
+          planUid,
+          dayAssignmentsMeta.weekKey,
+          planTodayIso,
+        );
+        if (cancelled) return;
+        setDayAssignmentsMeta((prev) => ({
+          ...prev,
+          isDayDone: true,
+        }));
+      } catch (error) {
+        console.error("Failed to mark planner day complete:", error);
+        dayCompletionTriggeredRef.current = false;
+      }
+    };
+
+    finalizeDay();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    planUid,
+    planTodayIso,
+    dayAssignments,
+    topicStatusLookup,
+    isSliceCompleted,
+    dayAssignmentsMeta.weekKey,
+    dayAssignmentsMeta.isDayDone,
+  ]);
 
   useEffect(() => {
     lastCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
