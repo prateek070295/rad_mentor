@@ -1,9 +1,9 @@
 // file: src/components/StructuredContentEditor.jsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ReviewAndSave from './ReviewAndSave';
 
-const StructuredContentEditor = ({ organ, topicId, initialContent }) => {
+const StructuredContentEditor = ({ organ, topicId, topicName, path, initialContent, onNotify }) => {
   const [rawText, setRawText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   // The structuredContent state is now initialized from the new prop
@@ -20,6 +20,19 @@ const StructuredContentEditor = ({ organ, topicId, initialContent }) => {
     }
   }, [initialContent]);
 
+  const notify = useCallback(
+    (type, text) => {
+      if (!text) return;
+      if (typeof onNotify === 'function') {
+        onNotify({ type, text });
+      } else if (type === 'error') {
+        console.error(text);
+      } else {
+        console.log(text);
+      }
+    },
+    [onNotify],
+  );
 
   const handleGenerate = async () => {
     setStructuredContent(null);
@@ -37,10 +50,11 @@ const StructuredContentEditor = ({ organ, topicId, initialContent }) => {
       }
       const data = await response.json();
       setStructuredContent(data.structured);
+      notify('success', 'Structured outline generated. Review and refine before saving.');
     } catch (err) {
       console.error('Failed to generate structure:', err);
       setError(err.message);
-      alert(`Error: ${err.message}`);
+      notify('error', err.message || 'Failed to generate structured content.');
     } finally {
       setIsLoading(false);
     }
@@ -59,15 +73,17 @@ const StructuredContentEditor = ({ organ, topicId, initialContent }) => {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to save content.');
       }
-      
+
       const result = await response.json();
-      alert(result.message);
+      notify('success', result.message || 'Structured content saved.');
       // After saving, we clear the view. The parent will refetch.
       setStructuredContent(null); 
-
-    } catch (err) { // <-- SYNTAX ERROR WAS HERE
+      setRawText('');
+      setError('');
+    } catch (err) {
       console.error('Failed to save content:', err);
-      alert(`Error: ${err.message}`);
+      setError(err.message);
+      notify('error', err.message || 'Failed to save structured content.');
     }
   };
 
@@ -78,6 +94,23 @@ const StructuredContentEditor = ({ organ, topicId, initialContent }) => {
 
   return (
     <div className="p-4 bg-gray-50 rounded-lg shadow-inner mt-4">
+      <div className="mb-4 space-y-1 text-xs text-gray-500">
+        {topicName && (
+          <p>
+            <span className="font-semibold text-gray-700">Editing:</span> {topicName}
+          </p>
+        )}
+        {path && (
+          <p>
+            <span className="font-semibold text-gray-700">Path:</span> {path}
+          </p>
+        )}
+        {topicId && (
+          <p className="font-mono text-[11px] text-gray-400">
+            Document ID: {topicId}
+          </p>
+        )}
+      </div>
       {/* The main conditional logic remains the same */}
       {!structuredContent ? (
         <>

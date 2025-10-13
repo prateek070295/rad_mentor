@@ -1,14 +1,28 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
 import App from './App';
 import LandingPage from './pages/LandingPage';
 import reportWebVitals from './reportWebVitals';
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 2 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    {window?.location?.pathname === '/landing' ? <LandingPage /> : <App />}
+    <QueryClientProvider client={queryClient}>
+      {window?.location?.pathname === '/landing' ? <LandingPage /> : <App />}
+    </QueryClientProvider>
   </React.StrictMode>
 );
 
