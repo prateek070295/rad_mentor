@@ -1,6 +1,17 @@
 import React, { useMemo } from 'react';
 import { useAdminPanel } from '../context/AdminPanelContext';
 
+const statusColorClass = (status) => {
+  switch ((status || '').toLowerCase()) {
+    case 'green':
+      return 'bg-emerald-500';
+    case 'yellow':
+      return 'bg-amber-400';
+    default:
+      return 'bg-slate-400';
+  }
+};
+
 const NavigationPanel = () => {
   const {
     sectionsQuery,
@@ -175,18 +186,13 @@ const LevelList = ({
   </div>
 );
 
-const StatusBadge = ({ status }) => {
-  const badgeClass =
-    status === 'green'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-      : status === 'yellow'
-        ? 'border-amber-200 bg-amber-50 text-amber-600'
-        : 'border-slate-200 bg-slate-100 text-slate-600';
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${badgeClass}`}>
-      {status}
-    </span>
-  );
-};
+const StatusBadge = ({ status }) => (
+  <span
+    className={`inline-flex h-2.5 w-2.5 rounded-full ${statusColorClass(status)}`}
+    title={status ? `${status} status` : 'Status unknown'}
+  >
+    <span className="sr-only">{status || 'unknown'}</span>
+  </span>
+);
 
 export default NavigationPanel;

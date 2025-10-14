@@ -1,8 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAdminPanel } from '../context/AdminPanelContext';
 import { useAdminToasts } from '../context/AdminToastContext';
 import StructuredEditorPane from './StructuredEditorPane';
 import { useStructuredContent, useUpdateNodeMetadata } from '../hooks/useAdminData';
+import ReactMarkdown from 'react-markdown';
+import { auth, db } from '../../firebase';
+import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
 const CATEGORY_OPTIONS = [
   { label: 'Must Know', value: 'Must Know' },
@@ -20,6 +25,66 @@ const normalizeCategory = (value) => {
   const key = value.trim().toLowerCase();
   return CATEGORY_MAP[key] || value;
 };
+
+const MAX_DRY_RUN_STEPS = 12;
+
+const describeAutoInput = (input) => {
+  if (input === undefined) return 'No further input required.';
+  if (typeof input === 'string') return `Auto reply: "${input}".`;
+  if (input && typeof input === 'object' && Number.isInteger(input.selectedIndex)) {
+    return `Auto selected option #${input.selectedIndex + 1}.`;
+  }
+  return 'Auto response submitted.';
+};
+
+const computeAutoAdvance = (card) => {
+  switch (card?.type) {
+    case 'OBJECTIVES_CARD': {
+      const nextInput = 'Ready to begin';
+      return { nextInput, note: describeAutoInput(nextInput), done: false };
+    }
+    case 'TEACH_CARD': {
+      const nextInput = 'Here is my understanding of the key point.';
+      return { nextInput, note: describeAutoInput(nextInput), done: false };
+    }
+    case 'TRANSITION_CARD': {
+      const nextInput = 'continue';
+      return { nextInput, note: describeAutoInput(nextInput), done: false };
+    }
+    case 'MCQ_CHECKPOINT': {
+      const nextInput = { selectedIndex: 0 };
+      return {
+        nextInput,
+        note: card?.options?.length
+          ? `Auto selected "${card.options[0]}" (option #1).`
+          : describeAutoInput(nextInput),
+        done: false,
+      };
+    }
+    case 'SHORT_CHECKPOINT': {
+      const nextInput = 'My answer is that the described finding is likely benign.';
+      return { nextInput, note: describeAutoInput(nextInput), done: false };
+    }
+    case 'FEEDBACK_CARD': {
+      const nextInput = 'continue';
+      return { nextInput, note: describeAutoInput(nextInput), done: false };
+    }
+    case 'SUMMARY_CARD': {
+      const nextInput = 'continue';
+      const done = card?.isTopicComplete === true;
+      return { nextInput, note: describeAutoInput(nextInput), done };
+    }
+    case 'TOPIC_COMPLETE':
+      return { nextInput: undefined, note: 'Session reached topic completion.', done: true };
+    default:
+      return { nextInput: undefined, note: 'Auto-run halted: unhandled card type.', done: true };
+  }
+};
+
+const formatCardType = (value) =>
+  typeof value === 'string'
+    ? value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase())
+    : 'Unknown';
 
 
 const ContentWorkspace = () => {
@@ -53,6 +118,52 @@ const ContentWorkspace = () => {
     topicId: selectedNode?.id,
     enabled: !!section && !!selectedNode,
   });
+
+  const [dryRunCards, setDryRunCards] = useState([]);
+  const [isDryRunModalOpen, setIsDryRunModalOpen] = useState(false);
+  const [isDryRunRunning, setIsDryRunRunning] = useState(false);
+
+  const callTutorStep = useCallback(async (payload) => {
+    if (!auth.currentUser) throw new Error('You must be signed in to run the tutor.');
+    const token = await auth.currentUser.getIdToken();
+    const endpoint = API_BASE ? `${API_BASE}/tutor/step` : '/tutor/step';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let errorMessage = `Tutor request failed (${response.status})`;
+      try {
+        const errorBody = await response.json();
+        if (errorBody?.error) errorMessage = errorBody.error;
+      } catch (_) {
+        // ignore JSON parse errors, fallback to default message
+      }
+      throw new Error(errorMessage);
+    }
+    return response.json();
+  }, []);
+
+  const clearPreviousSession = useCallback(async (userId, topicKey) => {
+    try {
+      const sessionRef = doc(db, 'userProgress', userId, 'sessions', topicKey);
+      const messagesSnapshot = await getDocs(collection(sessionRef, 'messages'));
+      const deletions = messagesSnapshot.docs.map((docSnapshot) => deleteDoc(docSnapshot.ref));
+      await Promise.all(deletions);
+      await deleteDoc(sessionRef);
+    } catch (_) {
+      // ignore cleanup failures
+    }
+    try {
+      await deleteDoc(doc(db, 'userProgress', userId, 'topics', topicKey));
+    } catch (_) {
+      // ignore cleanup failures
+    }
+  }, []);
 
   const updateMetadataMutation = useUpdateNodeMetadata(section?.id);
 
@@ -140,13 +251,115 @@ const ContentWorkspace = () => {
     }
   };
 
-  const handleTutorDryRun = () => {
-    pushToast({
-      type: 'info',
-      title: 'Tutor dry run (preview)',
-      message: 'Tutor dry run will hook into the sandbox endpoint in a future iteration.',
-    });
-  };
+  const handleTutorDryRun = useCallback(async () => {
+    if (!selectedNode) {
+      pushToast({
+        type: 'info',
+        title: 'Select a topic',
+        message: 'Choose a specific topic or subtopic before running a tutor dry run.',
+      });
+      return;
+    }
+    if (!section) {
+      pushToast({
+        type: 'warning',
+        title: 'Missing section context',
+        message: 'Select a section before running the tutor.',
+      });
+      return;
+    }
+    if (!auth.currentUser) {
+      pushToast({
+        type: 'error',
+        title: 'Sign in required',
+        message: 'You must be signed in to execute a tutor dry run.',
+      });
+      return;
+    }
+
+    const topicKey = selectedNode.topicId || selectedNode.id;
+    if (!topicKey) {
+      pushToast({
+        type: 'error',
+        title: 'Topic identifier missing',
+        message: 'This node is missing a topic identifier and cannot run through the tutor.',
+      });
+      return;
+    }
+
+    const organId = section.id;
+    const userId = auth.currentUser.uid;
+
+    setIsDryRunRunning(true);
+
+    try {
+      await clearPreviousSession(userId, topicKey);
+
+      const cards = [];
+      let autoInput;
+      let finished = false;
+      let iterations = 0;
+
+      while (!finished && iterations < MAX_DRY_RUN_STEPS) {
+        const payload = { topicId: topicKey, organ: organId };
+        if (iterations === 0) {
+          payload.userName = auth.currentUser.displayName || 'Admin Tester';
+        }
+        if (autoInput !== undefined) {
+          payload.userInput = autoInput;
+        }
+
+        const response = await callTutorStep(payload);
+        const ui = response?.ui;
+        if (!ui) {
+          throw new Error('Tutor response was missing UI payload.');
+        }
+
+        const { nextInput, note, done } = computeAutoAdvance(ui);
+        cards.push({ ui, autoNote: note });
+        autoInput = nextInput;
+        finished = done || nextInput === undefined;
+        iterations += 1;
+      }
+
+      await clearPreviousSession(userId, topicKey);
+
+      if (cards.length === 0) {
+        pushToast({
+          type: 'warning',
+          title: 'Tutor dry run',
+          message: 'Tutor did not return any cards for this topic.',
+        });
+        return;
+      }
+
+      if (!finished) {
+        pushToast({
+          type: 'warning',
+          title: 'Tutor dry run truncated',
+          message: `Stopped after ${cards.length} card${cards.length === 1 ? '' : 's'} (safety limit ${MAX_DRY_RUN_STEPS}). Review the output below.`,
+        });
+      } else {
+        pushToast({
+          type: 'success',
+          title: 'Tutor dry run complete',
+          message: `Captured ${cards.length} card${cards.length === 1 ? '' : 's'}.`,
+        });
+      }
+
+      setDryRunCards(cards);
+      setIsDryRunModalOpen(true);
+    } catch (error) {
+      console.error('Tutor dry run failed', error);
+      pushToast({
+        type: 'error',
+        title: 'Tutor dry run failed',
+        message: error.message || 'Unable to execute tutor dry run.',
+      });
+    } finally {
+      setIsDryRunRunning(false);
+    }
+  }, [selectedNode, section, pushToast, clearPreviousSession, callTutorStep]);
 
   if (!selectedNode) {
     return (
@@ -179,8 +392,13 @@ const ContentWorkspace = () => {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {status ? (
-                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase ${statusBadgeClassName(status)}`}>
-                  {status}
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1">
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${statusColorClass(status)}`}
+                    title={`Status ${status}`}
+                  >
+                    <span className="sr-only">{status}</span>
+                  </span>
                 </span>
               ) : null}
               <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-mono text-slate-500">
@@ -289,27 +507,93 @@ const ContentWorkspace = () => {
           Tutor utilities
         </h3>
         <p className="mt-2 text-sm text-slate-600">
-          Run a dry run of the tutor experience using the current draft (stub).
+          Run a dry run of the tutor experience using canned answers to surface missing content or schema issues before publishing.
         </p>
         <button
           onClick={handleTutorDryRun}
-          className="mt-3 inline-flex items-center rounded-full border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50"
+          disabled={isDryRunRunning}
+          className={`mt-3 inline-flex items-center rounded-full border border-indigo-200 px-4 py-2 text-sm font-semibold transition ${
+            isDryRunRunning
+              ? 'cursor-not-allowed border-indigo-100 bg-indigo-100 text-indigo-400'
+              : 'text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
+          }`}
         >
-          Tutor dry run (sandbox)
+          {isDryRunRunning ? 'Running dry run…' : 'Tutor dry run (sandbox)'}
         </button>
       </section>
+      {isDryRunModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 backdrop-blur-sm">
+          <div className="relative flex w-full max-w-4xl flex-col rounded-3xl border border-indigo-100 bg-white/95 p-6 shadow-2xl shadow-indigo-200/60">
+            <header className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Tutor Dry Run Output</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Auto responses were used to advance the tutor flow. Review the returned cards to catch missing data or prompt issues.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDryRunModalOpen(false);
+                  setDryRunCards([]);
+                }}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              >
+                Close
+              </button>
+            </header>
+            <div className="mt-5 max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+              {dryRunCards.map((entry, index) => (
+                <article
+                  key={index}
+                  className="rounded-2xl border border-slate-200 bg-white/95 px-5 py-4 shadow-sm shadow-slate-200/40"
+                >
+                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    <span>
+                      Step {index + 1}: {formatCardType(entry.ui?.type)}
+                    </span>
+                    {entry.autoNote ? (
+                      <span className="text-[11px] font-medium normal-case tracking-normal text-indigo-500">
+                        {entry.autoNote}
+                      </span>
+                    ) : null}
+                  </div>
+                  {entry.ui?.message ? (
+                    <div className="prose prose-sm mt-3 max-w-none text-slate-700">
+                      <ReactMarkdown>{entry.ui.message}</ReactMarkdown>
+                    </div>
+                  ) : null}
+                  {Array.isArray(entry.ui?.options) && entry.ui.options.length > 0 ? (
+                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600">
+                      {entry.ui.options.map((option, optionIndex) => (
+                        <li key={optionIndex}>
+                          Option {optionIndex + 1}: {option}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              ))}
+              {dryRunCards.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+                  No cards were generated. Try running the dry run again after ensuring the topic has structured content.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
 
-const statusBadgeClassName = (status) => {
-  switch (status) {
+const statusColorClass = (status) => {
+  switch ((status || '').toLowerCase()) {
     case 'green':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-600';
+      return 'bg-emerald-500';
     case 'yellow':
-      return 'border-amber-200 bg-amber-50 text-amber-600';
+      return 'bg-amber-400';
     default:
-      return 'border-slate-200 bg-slate-100 text-slate-600';
+      return 'bg-slate-400';
   }
 };
 

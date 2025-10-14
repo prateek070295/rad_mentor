@@ -53,7 +53,31 @@ router.post("/", express.json(), async (req, res) => {
 
     const result = await runWithRetry(() => model.generateContent(fullPrompt));
     const response = await result.response;
-    const structuredContent = JSON.parse(response.text());
+    const rawOutput = (await response.text()).trim();
+
+    const stripCodeFences = (text) =>
+      text
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+
+    const extractJsonPayload = (text) => {
+      const cleaned = stripCodeFences(text);
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+        throw new Error('AI response did not contain a JSON object.');
+      }
+      return cleaned.slice(firstBrace, lastBrace + 1);
+    };
+
+    let structuredContent;
+    try {
+      structuredContent = JSON.parse(extractJsonPayload(rawOutput));
+    } catch (parseError) {
+      console.error('Failed to parse AI response as JSON:', rawOutput);
+      throw new Error(`AI response was not valid JSON: ${parseError.message}`);
+    }
 
     if (!validateStructure(structuredContent)) {
       console.error("AI output failed validation:", validateStructure.errors);
@@ -71,7 +95,7 @@ router.post("/", express.json(), async (req, res) => {
     if (error?.status === 503 || error?.status === 429) {
       return res.status(503).json({ error: "Our AI tutor is busy. Please try again in a few seconds." });
     }
-    res.status(500).json({ error: "An unexpected error occurred." });
+    res.status(500).json({ error: error.message || "An unexpected error occurred." });
   }
 });
 
