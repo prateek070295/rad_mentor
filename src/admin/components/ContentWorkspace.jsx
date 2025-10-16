@@ -122,6 +122,8 @@ const ContentWorkspace = () => {
   const [dryRunCards, setDryRunCards] = useState([]);
   const [isDryRunModalOpen, setIsDryRunModalOpen] = useState(false);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
+  const [showTopicDetails, setShowTopicDetails] = useState(false);
+  const [showLegacyPanel, setShowLegacyPanel] = useState(false);
 
   const callTutorStep = useCallback(async (payload) => {
     if (!auth.currentUser) throw new Error('You must be signed in to run the tutor.');
@@ -178,6 +180,10 @@ const ContentWorkspace = () => {
       category: normalizeCategory(selectedNode?.category),
     });
   }, [selectedNode]);
+  useEffect(() => {
+    setShowTopicDetails(false);
+    setShowLegacyPanel(false);
+  }, [selectedNodeId]);
 
   const status = selectedNode
     ? sectionNodesQuery.statusMap?.[selectedNode.topicId || selectedNode.id] ?? 'grey'
@@ -363,14 +369,14 @@ const ContentWorkspace = () => {
 
   if (!selectedNode) {
     return (
-      <div className="flex w-full max-w-4xl flex-1 items-center justify-center rounded-3xl border border-dashed border-indigo-200 bg-white/80 px-8 py-12 text-center text-slate-600">
+      <div className="flex w-full flex-1 items-center justify-center rounded-3xl border border-dashed border-indigo-200 bg-white/80 px-8 py-12 text-center text-slate-600">
         Select a chapter, topic, or subtopic from the navigation to edit its details.
       </div>
     );
   }
 
   return (
-    <div className="flex w-full max-w-4xl flex-1 flex-col gap-6 overflow-y-auto px-2 py-4 sm:px-6 lg:px-8">
+    <div className="flex w-full flex-1 flex-col gap-6 overflow-y-auto px-1 py-4 sm:px-4 lg:px-6 xl:px-8 2xl:px-10">
       <section className="rounded-3xl border border-indigo-100 bg-white/90 p-6 shadow-xl shadow-indigo-200/40">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -404,6 +410,11 @@ const ContentWorkspace = () => {
               <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-mono text-slate-500">
                 ID: {selectedNode.topicId || selectedNode.id}
               </span>
+              {metadataForm.category ? (
+                <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">
+                  Category: {metadataForm.category}
+                </span>
+              ) : null}
               {selectedNode.updatedAt ? (
                 <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">
                   Updated {formatTimestamp(selectedNode.updatedAt)}
@@ -411,73 +422,85 @@ const ContentWorkspace = () => {
               ) : null}
             </div>
           </div>
-          <button
-            onClick={() => setMetadataForm({
-              name: selectedNode.name || selectedNode.title || '',
-              category: selectedNode.category || '',
-            })}
-            className="hidden"
-            aria-hidden
-          />
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTopicDetails((value) => !value)}
+              className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50"
+            >
+              {showTopicDetails ? 'Hide metadata form' : 'Edit topic metadata'}
+            </button>
+            {legacyText ? (
+              <button
+                type="button"
+                onClick={() => setShowLegacyPanel((value) => !value)}
+                className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
+              >
+                {showLegacyPanel ? 'Hide legacy content' : 'Show legacy content'}
+              </button>
+            ) : null}
+          </div>
         </header>
 
-        <form
-          onSubmit={handleMetadataSubmit}
-          className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_200px]"
-        >
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-              Name
-            </label>
-            <input
-              value={metadataForm.name}
-              onChange={(event) =>
-                setMetadataForm((current) => ({ ...current, name: event.target.value }))
-              }
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-800 shadow-inner focus:border-indigo-400 focus:outline-none focus:ring"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-              Category
-            </label>
-            <select
-              value={metadataForm.category || ''}
-              onChange={(event) =>
-                setMetadataForm((current) => ({
-                  ...current,
-                  category: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-800 shadow-inner focus:border-indigo-400 focus:outline-none focus:ring"
-            >
-              <option value="" disabled>
-                Select category
-              </option>
-              {CATEGORY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+        {showTopicDetails ? (
+          <form
+            onSubmit={handleMetadataSubmit}
+            className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_200px]"
+          >
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                Name
+              </label>
+              <input
+                value={metadataForm.name}
+                onChange={(event) =>
+                  setMetadataForm((current) => ({ ...current, name: event.target.value }))
+                }
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-800 shadow-inner focus:border-indigo-400 focus:outline-none focus:ring"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                Category
+              </label>
+              <select
+                value={metadataForm.category || ''}
+                onChange={(event) =>
+                  setMetadataForm((current) => ({
+                    ...current,
+                    category: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-800 shadow-inner focus:border-indigo-400 focus:outline-none focus:ring"
+              >
+                <option value="" disabled>
+                  Select category
                 </option>
-              ))}
-            </select>
-          </div>
-          <div className="md:col-span-2 flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={updateMetadataMutation.isLoading}
-              className={`inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition ${
-                updateMetadataMutation.isLoading
-                  ? 'cursor-not-allowed bg-indigo-300'
-                  : 'bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg'
-              }`}
-            >
-              {updateMetadataMutation.isLoading ? 'Saving...' : 'Save metadata'}
-            </button>
-          </div>
-        </form>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2 flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={updateMetadataMutation.isLoading}
+                className={`inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition ${
+                  updateMetadataMutation.isLoading
+                    ? 'cursor-not-allowed bg-indigo-300'
+                    : 'bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg'
+                }`}
+              >
+                {updateMetadataMutation.isLoading ? 'Saving...' : 'Save metadata'}
+              </button>
+            </div>
+          </form>
+        ) : null}
       </section>
 
-      {legacyText ? (
+      {legacyText && showLegacyPanel ? (
         <section className="rounded-3xl border border-slate-200 bg-slate-50/70 p-6 shadow-inner shadow-slate-100/50">
           <header>
             <h3 className="text-lg font-semibold text-slate-800">Legacy content</h3>
@@ -518,7 +541,7 @@ const ContentWorkspace = () => {
               : 'text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
           }`}
         >
-          {isDryRunRunning ? 'Running dry run…' : 'Tutor dry run (sandbox)'}
+          {isDryRunRunning ? 'Running dry run...' : 'Tutor dry run (sandbox)'}
         </button>
       </section>
       {isDryRunModalOpen ? (
@@ -615,3 +638,5 @@ const formatTimestamp = (input) => {
 
 
 export default ContentWorkspace;
+
+

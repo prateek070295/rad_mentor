@@ -12,7 +12,7 @@ const statusColorClass = (status) => {
   }
 };
 
-const NavigationPanel = () => {
+const NavigationPanel = ({ onCollapse }) => {
   const {
     sectionsQuery,
     sectionNodesQuery,
@@ -57,12 +57,23 @@ const NavigationPanel = () => {
   }, [activeTopic, index]);
 
   return (
-    <aside className="flex w-[320px] flex-shrink-0 flex-col border-r border-indigo-100 bg-white">
+    <aside className="flex w-[320px] flex-shrink-0 flex-col border-r border-indigo-100 bg-white shadow-lg shadow-indigo-100/40">
       <div className="border-b border-indigo-50 px-6 pb-4 pt-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-indigo-600">
           Navigation
         </p>
-        <h2 className="mt-1 text-xl font-semibold text-slate-900">Syllabus Sections</h2>
+        <div className="mt-1 flex items-start justify-between gap-2">
+          <h2 className="text-xl font-semibold text-slate-900">Syllabus Sections</h2>
+          {onCollapse ? (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 transition hover:border-slate-300 hover:bg-slate-100"
+            >
+              Close
+            </button>
+          ) : null}
+        </div>
         <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
           Organ
         </label>

@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import QuestionUploader from '../../components/QuestionUploader';
 import QPPreviewSave from '../../components/QPpreview_save';
 import { useAdminPanel } from '../context/AdminPanelContext';
 import { useAdminToasts } from '../context/AdminToastContext';
 
-const QuestionIngestionPane = () => {
+const QuestionIngestionPane = ({ defaultOpen = false, variant = 'drawer' }) => {
   const { sectionsQuery } = useAdminPanel();
   const { pushToast } = useAdminToasts();
-  const [isOpen, setIsOpen] = useState(false);
+  const isStandalone = variant === 'standalone';
+  const [isOpen, setIsOpen] = useState(isStandalone ? true : defaultOpen);
   const [extractedData, setExtractedData] = useState(null);
   const [lastReport, setLastReport] = useState(null);
 
@@ -44,22 +45,29 @@ const QuestionIngestionPane = () => {
     setExtractedData(null);
   };
 
+  const containerClass = useMemo(() => {
+    if (isStandalone) {
+      return 'relative flex h-full w-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/80 shadow-inner';
+    }
+    return `relative flex h-full flex-shrink-0 flex-col overflow-hidden rounded-l-3xl border-l border-slate-200 bg-slate-50/80 shadow-inner transition-all duration-300 ease-in-out ${
+      isOpen ? 'w-[360px]' : 'w-16'
+    }`;
+  }, [isOpen, isStandalone]);
+
   return (
-    <aside
-      className={`relative flex h-full flex-shrink-0 flex-col overflow-hidden rounded-l-3xl border-l border-slate-200 bg-slate-50/80 shadow-inner transition-all duration-300 ease-in-out ${
-        isOpen ? 'w-[360px]' : 'w-16'
-      }`}
-    >
-      <button
-        onClick={() => setIsOpen((value) => !value)}
-        className="absolute right-3 top-4 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50"
-      >
-        {isOpen ? 'Close ingestion' : 'Open ingestion'}
-      </button>
+    <aside className={containerClass}>
+      {!isStandalone ? (
+        <button
+          onClick={() => setIsOpen((value) => !value)}
+          className="absolute right-3 top-4 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50"
+        >
+          {isOpen ? 'Close ingestion' : 'Open ingestion'}
+        </button>
+      ) : null}
       <div
-        className={`flex-1 overflow-y-auto px-4 pb-6 pt-16 transition-opacity duration-200 ${
-          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        className={`flex-1 overflow-y-auto px-4 pb-6 ${
+          isStandalone ? 'pt-12' : 'pt-16'
+        } transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
       >
         <div className="rounded-3xl border border-indigo-100 bg-white/90 p-5 shadow-xl shadow-indigo-200/40">
           <header>

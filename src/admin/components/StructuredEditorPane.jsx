@@ -1,5 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import ReviewAndSave from '../../components/ReviewAndSave';
+import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import {
+  SectionList,
+  SectionEditor,
+  TopicArrayEditor,
+  EditorActionTypes,
+  structuredEditorReducer,
+  createEditorState,
+  selectSections,
+  selectObjectives,
+  selectKeyPoints,
+  selectTopic,
+  createEmptySection,
+  hasMeaningfulChanges,
+} from './structured-editor';
 import { useAdminToasts } from '../context/AdminToastContext';
 
 const LOCAL_STORAGE_DRAFT_KEY = 'admin_structured_drafts';
@@ -39,42 +52,50 @@ const StructuredEditorPane = ({
   onPublishSuccess,
 }) => {
   const { pushToast } = useAdminToasts();
+
+  const [editorState, dispatch] = useReducer(
+    structuredEditorReducer,
+    initialStructuredContent,
+    (initial) => createEditorState(initial || {}),
+  );
+
   const [rawText, setRawText] = useState('');
-  const [structuredContent, setStructuredContent] = useState(initialStructuredContent || null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState(null);
   const [versionHistory, setVersionHistory] = useState([]);
+  const [isEditorActive, setIsEditorActive] = useState(Boolean(initialStructuredContent));
+  const [activeSectionId, setActiveSectionId] = useState(null);
+  const [pendingFocus, setPendingFocus] = useState(null);
 
-  useEffect(() => {
-    setStructuredContent(initialStructuredContent || null);
-  }, [initialStructuredContent]);
+  const sections = selectSections(editorState);
+  const objectives = selectObjectives(editorState);
+  const keyPoints = selectKeyPoints(editorState);
+  const topic = selectTopic(editorState);
+
+  const isDirty = useMemo(() => hasMeaningfulChanges(editorState), [editorState]);
 
   const draftKey = useMemo(() => `${topicId}`, [topicId]);
   const versionKey = useMemo(() => `${organId}:${topicId}`, [organId, topicId]);
 
-  useEffect(() => {
-    if (!topicId) return;
-    const drafts = readStorage(LOCAL_STORAGE_DRAFT_KEY);
-    const existing = drafts[draftKey];
-    if (existing) {
-      setRawText(existing.rawText || '');
-      setDraftSavedAt(existing.savedAt || null);
-      if (existing.structuredContent) {
-        setStructuredContent(existing.structuredContent);
-      }
-    } else {
-      setRawText('');
-      setDraftSavedAt(null);
-    }
-  }, [draftKey, topicId]);
+  const activateEditor = useCallback(
+    (structured) => {
+      dispatch({
+        type: EditorActionTypes.RESET,
+        payload: { topic: structured || {} },
+      });
+      setIsEditorActive(true);
+      setPendingFocus({ mode: 'first' });
+    },
+    [dispatch],
+  );
 
   const persistDraft = useCallback(
-    (nextDraft) => {
+    ({ rawText: nextRaw, structuredContent }) => {
       const drafts = readStorage(LOCAL_STORAGE_DRAFT_KEY);
       drafts[draftKey] = {
-        rawText: nextDraft.rawText,
-        structuredContent: nextDraft.structuredContent,
+        rawText: nextRaw,
+        structuredContent,
         savedAt: Date.now(),
       };
       writeStorage(LOCAL_STORAGE_DRAFT_KEY, drafts);
@@ -91,20 +112,96 @@ const StructuredEditorPane = ({
   }, [draftKey]);
 
   useEffect(() => {
+    if (!topicId) return;
+    const drafts = readStorage(LOCAL_STORAGE_DRAFT_KEY);
+    const existing = drafts[draftKey];
+    if (existing?.structuredContent) {
+      activateEditor(existing.structuredContent);
+      setRawText(existing.rawText || '');
+      setDraftSavedAt(existing.savedAt || null);
+    } else {
+      if (initialStructuredContent) {
+        activateEditor(initialStructuredContent);
+      } else {
+        dispatch({
+          type: EditorActionTypes.RESET,
+          payload: { topic: {} },
+        });
+        setIsEditorActive(false);
+        setPendingFocus(null);
+      }
+      setRawText('');
+      setDraftSavedAt(null);
+    }
+  }, [draftKey, topicId, initialStructuredContent, activateEditor]);
+
+  useEffect(() => {
     if (!versionKey) return;
     const allVersions = readStorage(LOCAL_STORAGE_VERSIONS_KEY);
     setVersionHistory(allVersions[versionKey] || []);
   }, [versionKey]);
 
+  useEffect(() => {
+    if (!isEditorActive || sections.length === 0) {
+      setActiveSectionId(null);
+      return;
+    }
+    const firstId = sections[0].localId || sections[0].id;
+    setActiveSectionId((current) => {
+      if (!current) return firstId;
+      const exists = sections.some(
+        (section) => section.localId === current || section.id === current,
+      );
+      return exists ? current : firstId;
+    });
+  }, [sections, isEditorActive]);
+
+  useEffect(() => {
+    if (!pendingFocus || !isEditorActive || sections.length === 0) return;
+    if (pendingFocus.mode === 'first') {
+      const firstId = sections[0].localId || sections[0].id;
+      setActiveSectionId(firstId);
+      setPendingFocus(null);
+      return;
+    }
+    if (pendingFocus.mode === 'explicit') {
+      const exists = sections.some(
+        (section) =>
+          section.localId === pendingFocus.newId || section.id === pendingFocus.newId,
+      );
+      if (exists) {
+        setActiveSectionId(pendingFocus.newId);
+        setPendingFocus(null);
+      }
+      return;
+    }
+    if (pendingFocus.mode === 'after') {
+      const index = sections.findIndex(
+        (section) =>
+          section.localId === pendingFocus.referenceId ||
+          section.id === pendingFocus.referenceId,
+      );
+      if (index !== -1 && sections[index + 1]) {
+        const nextId = sections[index + 1].localId || sections[index + 1].id;
+        if (nextId !== pendingFocus.referenceId) {
+          setActiveSectionId(nextId);
+          setPendingFocus(null);
+        }
+      } else {
+        setPendingFocus(null);
+      }
+    }
+  }, [pendingFocus, sections, isEditorActive]);
+
   const appendVersion = useCallback(
-    (payload) => {
+    (snapshot) => {
       const allVersions = readStorage(LOCAL_STORAGE_VERSIONS_KEY);
       const current = allVersions[versionKey] || [];
       const next = [
         {
           id: `${Date.now()}`,
           savedAt: Date.now(),
-          snapshot: payload,
+          snapshot,
         },
         ...current,
       ].slice(0, 10);
@@ -114,6 +211,23 @@ const StructuredEditorPane = ({
     },
     [versionKey],
   );
+
+  const handlePrefillLegacy = () => {
+    if (!legacyText) {
+      pushToast({
+        type: 'info',
+        title: 'No legacy content',
+        message: 'This topic does not have legacy rich text content to convert.',
+      });
+      return;
+    }
+    setRawText(legacyText);
+    pushToast({
+      type: 'success',
+      title: 'Legacy content copied',
+      message: 'Legacy content copied into the generator. Review it, then run the converter.',
+    });
+  };
 
   const handleGenerate = async () => {
     if (!rawText.trim()) {
@@ -143,7 +257,7 @@ const StructuredEditorPane = ({
       if (!result?.structured) {
         throw new Error('No structured content returned by pipeline');
       }
-      setStructuredContent(result.structured);
+      activateEditor(result.structured);
       persistDraft({ rawText, structuredContent: result.structured });
       pushToast({
         type: 'success',
@@ -162,11 +276,35 @@ const StructuredEditorPane = ({
     }
   };
 
-  const handlePublish = async (payload) => {
+  const handlePublish = async () => {
+    if (!isEditorActive) {
+      pushToast({
+        type: 'warning',
+        title: 'Nothing to publish',
+        message: 'Generate or load a structure before publishing.',
+      });
+      return;
+    }
+
+    const structured = selectTopic(editorState);
+    const publishReady = {
+      ...structured,
+      objectives: (structured.objectives || []).map((value) => String(value || '').trim()).filter(Boolean),
+      key_points: (structured.key_points || []).map((value) => String(value || '').trim()).filter(Boolean),
+    };
+    if (!structured.sections?.length) {
+      pushToast({
+        type: 'error',
+        title: 'Missing sections',
+        message: 'Add at least one section before publishing.',
+      });
+      return;
+    }
+
     setIsPublishing(true);
-    const publishPayload = { ...payload };
+    const publishPayload = { organ: organId, topicId, structured: publishReady };
     const versionSnapshot = {
-      ...payload,
+      structured: publishReady,
       rawText,
     };
     try {
@@ -182,6 +320,10 @@ const StructuredEditorPane = ({
       const result = await response.json();
       appendVersion(versionSnapshot);
       removeDraft();
+      dispatch({
+        type: EditorActionTypes.RESET,
+        payload: { topic: structured },
+      });
       pushToast({
         type: 'success',
         title: 'Published',
@@ -200,29 +342,16 @@ const StructuredEditorPane = ({
     }
   };
 
-  const handleCancel = () => {
-    setStructuredContent(null);
-  };
-
-  const handlePrefillLegacy = () => {
-    if (!legacyText) {
+  const handleDraftSave = () => {
+    if (!isEditorActive) {
       pushToast({
         type: 'info',
-        title: 'No legacy content',
-        message: 'This topic does not have legacy rich text content to convert.',
+        title: 'Nothing to save',
+        message: 'Generate structure content before saving a draft.',
       });
       return;
     }
-    setRawText(legacyText);
-    pushToast({
-      type: 'success',
-      title: 'Legacy content copied',
-      message: 'Legacy content copied into the generator. Review it, then run the converter.',
-    });
-  };
-
-  const handleDraftSave = () => {
-    persistDraft({ rawText, structuredContent });
+    persistDraft({ rawText, structuredContent: topic });
     pushToast({
       type: 'success',
       title: 'Draft saved',
@@ -233,7 +362,16 @@ const StructuredEditorPane = ({
   const handleDraftDiscard = () => {
     removeDraft();
     setRawText('');
-    setStructuredContent(initialStructuredContent || null);
+    if (initialStructuredContent) {
+      activateEditor(initialStructuredContent);
+    } else {
+      dispatch({
+        type: EditorActionTypes.RESET,
+        payload: { topic: {} },
+      });
+      setIsEditorActive(false);
+      setPendingFocus(null);
+    }
     pushToast({
       type: 'info',
       title: 'Draft cleared',
@@ -243,11 +381,11 @@ const StructuredEditorPane = ({
 
   const handleVersionRestore = (version) => {
     if (!version?.snapshot) return;
-    setStructuredContent(version.snapshot.structured || null);
+    activateEditor(version.snapshot.structured || {});
     setRawText(version.snapshot.rawText || '');
     persistDraft({
       rawText: version.snapshot.rawText || '',
-      structuredContent: version.snapshot.structured || null,
+      structuredContent: version.snapshot.structured || {},
     });
     pushToast({
       type: 'success',
@@ -256,18 +394,118 @@ const StructuredEditorPane = ({
     });
   };
 
+  const handleObjectivesChange = (next) => {
+    dispatch({
+      type: EditorActionTypes.SET_TOPIC_ARRAY,
+      payload: { field: 'objectives', values: next },
+    });
+  };
+
+  const handleKeyPointsChange = (next) => {
+    dispatch({
+      type: EditorActionTypes.SET_TOPIC_ARRAY,
+      payload: { field: 'key_points', values: next },
+    });
+  };
+
+  const handleSectionSelect = (sectionId) => {
+    setActiveSectionId(sectionId);
+  };
+
+  const handleSectionAdd = () => {
+    const newSection = createEmptySection(sections.length + 1);
+    setPendingFocus({ mode: 'explicit', newId: newSection.localId });
+    dispatch({
+      type: EditorActionTypes.ADD_SECTION,
+      payload: { section: newSection },
+    });
+  };
+
+  const handleSectionAddBelow = (sectionId) => {
+    const newSection = createEmptySection(sections.length + 1);
+    setPendingFocus({ mode: 'explicit', newId: newSection.localId });
+    dispatch({
+      type: EditorActionTypes.ADD_SECTION,
+      payload: { afterId: sectionId, section: newSection },
+    });
+  };
+
+  const handleSectionClone = (sectionId) => {
+    setPendingFocus({ mode: 'after', referenceId: sectionId });
+    dispatch({
+      type: EditorActionTypes.CLONE_SECTION,
+      payload: { sectionId },
+    });
+  };
+
+  const handleSectionRemove = (sectionId) => {
+    dispatch({
+      type: EditorActionTypes.REMOVE_SECTION,
+      payload: { sectionId },
+    });
+  };
+
+  const handleSectionReorder = (fromIndex, toIndex) => {
+    dispatch({
+      type: EditorActionTypes.REORDER_SECTION,
+      payload: { fromIndex, toIndex },
+    });
+  };
+
+  const handleSectionMove = (direction, sectionId, index) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sections.length) return;
+    handleSectionReorder(index, targetIndex);
+  };
+
+  const handleResetToGenerator = () => {
+    setIsEditorActive(false);
+    setPendingFocus(null);
+    dispatch({
+      type: EditorActionTypes.RESET,
+      payload: { topic: {} },
+    });
+  };
+
+  const activeSection = useMemo(
+    () =>
+      sections.find(
+        (section) => section.localId === activeSectionId || section.id === activeSectionId,
+      ) || null,
+    [sections, activeSectionId],
+  );
+
+  const activeSectionIndex = useMemo(
+    () =>
+      sections.findIndex(
+        (section) => section.localId === activeSectionId || section.id === activeSectionId,
+      ),
+    [sections, activeSectionId],
+  );
+
   return (
     <section className="rounded-3xl border border-indigo-100 bg-white/90 p-6 shadow-xl shadow-indigo-200/40">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Structured Content</h2>
           <p className="text-sm text-slate-500">
-            Generate, refine, and publish topic content with version safety nets.
+            {topicName ? `Curating: ${topicName}` : 'Generate, refine, and publish topic content.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          {isEditorActive ? (
+            <span
+              className={`inline-flex items-center rounded-full border px-3 py-1 font-semibold ${
+                isDirty
+                  ? 'border-amber-200 bg-amber-50 text-amber-600'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-600'
+              }`}
+            >
+              {isDirty ? 'Unsaved changes' : 'All changes synced locally'}
+            </span>
+          ) : null}
           {draftSavedAt ? (
-            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-semibold text-amber-600">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-500">
               Draft saved {formatRelativeTime(draftSavedAt)}
             </span>
           ) : (
@@ -276,12 +514,14 @@ const StructuredEditorPane = ({
             </span>
           )}
           <button
+            type="button"
             onClick={handleDraftSave}
             className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1 font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50"
           >
             Save draft
           </button>
           <button
+            type="button"
             onClick={handleDraftDiscard}
             className="inline-flex items-center rounded-full border border-rose-200 px-3 py-1 font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50"
           >
@@ -290,7 +530,7 @@ const StructuredEditorPane = ({
         </div>
       </header>
       <div className="mt-6 space-y-6">
-        {!structuredContent ? (
+        {!isEditorActive ? (
           <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-inner shadow-indigo-100/40">
             <h3 className="text-lg font-semibold text-slate-800">1. Prepare source text</h3>
             <p className="mt-1 text-sm text-slate-500">
@@ -304,12 +544,14 @@ const StructuredEditorPane = ({
             />
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
+                type="button"
                 onClick={handlePrefillLegacy}
                 className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-indigo-200 hover:text-indigo-600"
               >
                 Convert legacy content
               </button>
               <button
+                type="button"
                 onClick={handleGenerate}
                 disabled={isGenerating}
                 className={`inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition ${
@@ -318,23 +560,85 @@ const StructuredEditorPane = ({
                     : 'bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg'
                 }`}
               >
-                {isGenerating ? 'Generating...' : 'Generate structure'}
+                {isGenerating ? 'Generating…' : 'Generate structure'}
               </button>
             </div>
           </div>
         ) : (
-          <>
-            <ReviewAndSave
-              structuredContent={structuredContent}
-              onSave={handlePublish}
-              onCancel={handleCancel}
-              organ={organId}
-              topicId={topicId}
+          <div className="grid gap-6 lg:grid-cols-[320px,1fr] xl:grid-cols-[360px,1fr] 2xl:grid-cols-[400px,1fr]">
+            <SectionList
+              sections={sections}
+              activeSectionId={activeSectionId}
+              onSelect={handleSectionSelect}
+              onAddSection={handleSectionAdd}
+              onCloneSection={handleSectionClone}
+              onRemoveSection={handleSectionRemove}
+              onReorderSection={handleSectionReorder}
             />
-            {isPublishing ? (
-              <p className="text-sm text-slate-500">Publishing...</p>
-            ) : null}
-          </>
+            <div className="space-y-6">
+              <TopicArrayEditor
+                label="Objectives"
+                description="Set expectations for what the learner should master."
+                values={objectives}
+                onChange={handleObjectivesChange}
+                placeholder="By the end, the learner should be able to…"
+              />
+              {activeSection ? (
+                <SectionEditor
+                  section={activeSection}
+                  index={activeSectionIndex === -1 ? 0 : activeSectionIndex}
+                  totalSections={sections.length}
+                  dispatch={dispatch}
+                  onMove={handleSectionMove}
+                  onClone={handleSectionClone}
+                  onRemove={handleSectionRemove}
+                  onAddBelow={handleSectionAddBelow}
+                />
+              ) : (
+                <div className="rounded-3xl border border-dashed border-indigo-200 bg-indigo-50/60 p-6 text-center text-sm text-indigo-600">
+                  Select a section to edit its content.
+                </div>
+              )}
+              <TopicArrayEditor
+                label="Key Points"
+                description="Publish-ready recap bullets that reinforce mastery."
+                values={keyPoints}
+                onChange={handleKeyPointsChange}
+                placeholder="High-yield takeaway…"
+              />
+              <footer className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span>
+                    {sections.length} section{sections.length === 1 ? '' : 's'} ·{' '}
+                    {sections.reduce((total, section) => total + (section.checkpoints?.length || 0), 0)}{' '}
+                    checkpoint(s)
+                  </span>
+                  <span>Last edit {formatRelativeTime(editorState.lastChange)}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetToGenerator}
+                    className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
+                  >
+                    Return to generator
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePublish}
+                    disabled={isPublishing}
+                    className={`inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition ${
+                      isPublishing
+                        ? 'cursor-not-allowed bg-indigo-300'
+                        : 'bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg'
+                    }`}
+                  >
+                    {isPublishing ? 'Publishing…' : 'Publish updates'}
+                  </button>
+                </div>
+              </footer>
+            </div>
+          </div>
         )}
       </div>
       {versionHistory.length > 0 ? (
@@ -363,6 +667,7 @@ const StructuredEditorPane = ({
                   <p className="text-xs text-slate-500">Local snapshot</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleVersionRestore(version)}
                   className="rounded-full border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50"
                 >
