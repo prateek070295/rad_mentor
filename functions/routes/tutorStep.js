@@ -101,6 +101,7 @@ const sanitizeUiForFirestore = (ui) => {
     else delete safe.tables;
   }
   if (Array.isArray(safe.options)) {
+    const candidateKeys = ["text", "label", "value", "title", "name"];
     safe.options = safe.options
       .map((option) => {
         if (option == null) return null;
@@ -112,20 +113,20 @@ const sanitizeUiForFirestore = (ui) => {
           return option.map((value) => toStringSafe(value));
         }
         if (typeof option === "object") {
-          const candidate =
-            typeof option.text === "string"
-              ? option.text
-              : typeof option.label === "string"
-                ? option.label
-                : typeof option.value === "string"
-                  ? option.value
-                  : null;
-          if (candidate && candidate.trim().length > 0) {
-            return candidate.trim();
+          const candidate = candidateKeys
+            .map((key) => (typeof option[key] === "string" ? option[key] : null))
+            .find((value) => value && value.trim().length > 0);
+          if (candidate) return candidate.trim();
+          if (Array.isArray(option.richText)) {
+            const text = option.richText
+              .map((piece) => (typeof piece === "string" ? piece : ""))
+              .join(" ")
+              .trim();
+            if (text) return text;
           }
           try {
             return JSON.stringify(option);
-          } catch (err) {
+          } catch (error) {
             return toStringSafe(option);
           }
         }
@@ -352,6 +353,9 @@ router.post("/", express.json(), async (req, res) => {
       currentState = sessionSnap.data().sessionState;
       if (!currentState?.organ && chapterId) {
         currentState = { ...currentState, organ: chapterId };
+      }
+      if (!currentState?.topicId && topicId) {
+        currentState = { ...currentState, topicId };
       }
       if (!currentState?.userName && safeUserName) {
         currentState = { ...currentState, userName: safeUserName };
@@ -820,15 +824,28 @@ async function checkpointPhase(
   getNodeData,
   { sectionDoc: providedSectionDoc = null, checkpointsSnapshot: providedSnapshot = null } = {},
 ) {
-  const sectionDoc =
-    providedSectionDoc || (await getSectionDoc(nextState.sectionIndex + 1));
+  const sectionDocPromise = providedSectionDoc
+    ? Promise.resolve(providedSectionDoc)
+    : getSectionDoc(nextState.sectionIndex + 1);
+  const [sectionDoc, allCheckpointsSnapshot] = await Promise.all([
+    sectionDocPromise,
+    providedSnapshot
+      ? Promise.resolve(providedSnapshot)
+      : sectionDocPromise.then((doc) => {
+          if (!doc) return null;
+          return doc.ref
+            .collection('checkpoints')
+            .orderBy('bloom_level')
+            .select('question_md', 'options', 'type', 'rationale_md', 'correct_index')
+            .get();
+        }),
+  ]);
   if (!sectionDoc) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
-  const checkpointsRef = sectionDoc.ref.collection('checkpoints');
-  const allCheckpointsSnapshot =
-    providedSnapshot ||
-    (await checkpointsRef.orderBy('bloom_level').select('question_md', 'options', 'type', 'rationale_md', 'correct_index').get());
+  if (!allCheckpointsSnapshot) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
   if (allCheckpointsSnapshot.empty || nextState.checkpointIndex >= allCheckpointsSnapshot.size) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
@@ -855,13 +872,20 @@ async function evalPhase(
   getSectionDoc,
   getNodeData,
 ) {
-  const sectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+  const sectionDocPromise = getSectionDoc(nextState.sectionIndex + 1);
+  const [sectionDoc, orderedSnapshot] = await Promise.all([
+    sectionDocPromise,
+    sectionDocPromise.then((doc) => {
+      if (!doc) return null;
+      return doc.ref.collection('checkpoints').orderBy('bloom_level').get();
+    }),
+  ]);
   if (!sectionDoc) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
-
-  const checkpointsRef = sectionDoc.ref.collection('checkpoints');
-  const orderedSnapshot = await checkpointsRef.orderBy('bloom_level').get();
+  if (!orderedSnapshot) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
   if (
     orderedSnapshot.empty ||
     nextState.checkpointIndex >= orderedSnapshot.size ||
@@ -875,7 +899,8 @@ async function evalPhase(
   let feedbackMessage = '';
 
   if (checkpointData.type === 'mcq') {
-    const selectedIndex = Number(userInput?.selectedIndex);
+    const idx = Number(userInput?.selectedIndex);
+    const selectedIndex = Number.isFinite(idx) ? idx : -1;
     const normalizedOptions = Array.isArray(checkpointData.options)
       ? checkpointData.options
       : [];
@@ -905,17 +930,23 @@ async function evalPhase(
 }
 
 async function advancePhase(nextState, getSectionDoc, getNodeData) {
-  const currentSectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+  const currentSectionDocPromise = getSectionDoc(nextState.sectionIndex + 1);
+  const [currentSectionDoc, checkpointsSnapshot] = await Promise.all([
+    currentSectionDocPromise,
+    currentSectionDocPromise.then((doc) => {
+      if (!doc) return null;
+      return doc.ref
+        .collection('checkpoints')
+        .orderBy('bloom_level')
+        .select('question_md', 'options', 'type', 'rationale_md', 'correct_index')
+        .get();
+    }),
+  ]);
   if (!currentSectionDoc) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
 
-  const checkpointsRef = currentSectionDoc.ref.collection('checkpoints');
-  const checkpointsSnapshot = await checkpointsRef
-    .orderBy('bloom_level')
-    .select('question_md', 'options', 'type', 'rationale_md', 'correct_index')
-    .get();
-  const totalCheckpoints = checkpointsSnapshot.size;
+  const totalCheckpoints = checkpointsSnapshot ? checkpointsSnapshot.size : 0;
 
   if (Number.isFinite(totalCheckpoints) && totalCheckpoints > 0) {
     if (nextState.checkpointIndex + 1 < totalCheckpoints) {
