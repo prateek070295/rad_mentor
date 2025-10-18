@@ -56,14 +56,37 @@ const Hero = () => (
   </section>
 );
 
-const CredBar = () => (
+const FoundersMission = () => (
   <section className="border-y bg-white">
-    <div className="container mx-auto px-4 sm:px-6 py-6">
-      <div className="text-center text-sm text-gray-600">Trusted by radiology residents and aspirants across India</div>
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-10 rounded bg-gray-100 border flex items-center justify-center text-gray-400 text-xs">Institution Logo</div>
-        ))}
+    <div className="container mx-auto px-4 sm:px-6 py-14">
+      <div className="grid gap-8 md:grid-cols-[auto,1fr] md:items-center">
+        <div className="mx-auto flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border-4 border-blue-100 bg-blue-50 shadow-lg md:mx-0">
+          <img src={logo} alt="Dr. Prateek Kapse" className="h-full w-full object-cover object-center" />
+        </div>
+        <div>
+          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">The Founder&apos;s Mission</h2>
+          <p className="mt-3 text-sm font-semibold text-blue-700">Dr. Prateek Kapse</p>
+          <p className="text-xs uppercase tracking-wide text-gray-500">MBBS, MD (Radio-Diagnosis), Consultant Radiologist</p>
+          <p className="mt-4 text-sm text-gray-700 leading-relaxed">
+            As a radiologist, I know the gap between simply knowing the material and truly mastering clinical
+            reasoning. I built RadMentor to be the tool I wish I had during residency—a mentor that teaches you how
+            to think, not just what to answer. My goal is to help you build the deep, confident expertise you need to excel.
+          </p>
+          <ul className="mt-4 space-y-2 text-sm text-gray-700">
+            <li className="flex items-start gap-2">
+              <span className="mt-1 inline-block h-2 w-2 rounded-full bg-blue-500"></span>
+              Crafted by a practicing radiologist who has navigated the same DNB and MD milestones.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1 inline-block h-2 w-2 rounded-full bg-blue-500"></span>
+              Designed to bridge the daily realities of residency with exam mastery.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1 inline-block h-2 w-2 rounded-full bg-blue-500"></span>
+              Focused on building confident, independent decision-makers in radiology.
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
@@ -183,13 +206,17 @@ const Roadmap = () => (
 const Pricing = () => (
   <section id="pricing" className="bg-white">
     <div className="container mx-auto px-4 sm:px-6 py-14">
-      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-800 text-center font-medium">Try Our Premium AI Tutor - Free for 7 Days! All new accounts get a one-week trial to experience AI-powered learning.</div>
-      <h3 className="mt-6 text-2xl md:text-3xl font-extrabold text-gray-900 text-center">A Plan for Every Radiology Theory Aspirant.</h3>
-      <div className="mt-8 grid md:grid-cols-3 gap-6">
+      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-800 text-center font-medium">
+        Try Our Premium AI Tutor - Free for 7 Days! All new accounts get a one-week trial to experience AI-powered learning.
+      </div>
+      <h3 className="mt-6 text-2xl md:text-3xl font-extrabold text-gray-900 text-center">
+        A Plan for Every Radiology Theory Aspirant.
+      </h3>
+      <div className="mt-8 grid gap-6 lg:grid-cols-4">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Free Demo (7-Day Access)</div>
           <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 0 <span className="text-base font-medium text-gray-500">/ 7 days</span></div>
-          <p className="mt-2 text-gray-700">Full access to the planner and AI tutor for an entire week. Build your schedule, test the tutor, and see the workflow end to end.</p>
+          <p className="mt-2 text-gray-700">Full access to the planner and AI tutor for an entire week. Build your schedule, test the tutor, and experience every workflow end to end.</p>
           <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
             <li>Plan setup wizard, weekly board, and master queue</li>
             <li>Unlimited AI Socratic tutor sessions</li>
@@ -197,29 +224,43 @@ const Pricing = () => (
           </ul>
           <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Your Free Demo</a>
         </div>
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Quarterly Access</div>
+          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 18,999 <span className="text-base font-medium text-gray-500">/ 3 months</span></div>
+          <p className="mt-2 text-gray-700">Perfect for exam season. Build momentum with full access for three focused months.</p>
+          <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
+            <li>Planner wizard, weekly board, and master queue</li>
+            <li>Unlimited AI Socratic tutor sessions</li>
+            <li>Question banks and solved papers with instant feedback</li>
+          </ul>
+          <p className="mt-4 text-xs font-semibold text-blue-600">Refer & Extend: Invite a friend and get +7 days on this plan.</p>
+          <a href="/login" className="mt-4 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Start Quarterly Access</a>
+        </div>
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Half-Yearly Access</div>
+          <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 32,999 <span className="text-base font-medium text-gray-500">/ 6 months</span></div>
+          <p className="mt-2 text-gray-700">A balanced runway for residents who want structured prep across postings.</p>
+          <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
+            <li>Everything in Quarterly plus syllabus checkpoints</li>
+            <li>OSCE & viva practice trackers with AI prompts</li>
+            <li>Priority mentor support and study reviews</li>
+          </ul>
+          <p className="mt-4 text-xs font-semibold text-blue-600">Refer & Extend: Each referral adds +15 days to this plan.</p>
+          <a href="/login" className="mt-4 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Choose Half-Yearly</a>
+        </div>
         <div className="rounded-2xl border-2 border-blue-600 bg-white p-6 shadow">
           <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Rad Mentor Full Access</div>
           <div className="mt-2 text-3xl font-extrabold text-gray-900">Rs 49,999 <span className="text-base font-medium text-gray-500">/ year</span></div>
-          <p className="mt-2 text-gray-700">All-in access for a full year—plan, learn, and test with every AI feature unlocked.</p>
+          <p className="mt-2 text-gray-700">Most cost-effective: uninterrupted access across the entire academic cycle.</p>
           <div className="mt-3 text-sm text-green-700 font-semibold">Launch offer: 50% off for the first 100 users</div>
           <div className="text-sm text-gray-500">Upgrade early and pay Rs 24,999 for your first year.</div>
           <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Lifetime planner + AI tutor access</li>
+            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Full-year planner + AI tutor access</li>
             <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Unlimited question banks with model answers</li>
             <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> AI feedback on every written response</li>
           </ul>
-          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Upgrade to Full Access</a>
-        </div>
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Refer & Extend</div>
-          <div className="mt-2 text-3xl font-extrabold text-gray-900">+1 Month <span className="text-base font-medium text-gray-500">per referral</span></div>
-          <p className="mt-2 text-gray-700">Invite a friend to Rad Mentor and earn an extra month of full-access time for both of you when they upgrade.</p>
-          <ul className="mt-4 space-y-2 text-sm text-gray-700 list-disc list-inside">
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Share your unique referral link</li>
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Friend activates the full-access plan</li>
-            <li><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500"></span> Both accounts receive one additional month</li>
-          </ul>
-          <a href="/login" className="mt-6 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Refer a Friend</a>
+          <p className="mt-4 text-xs font-semibold text-blue-600">Refer & Extend: Earn +1 month per referral on this plan.</p>
+          <a href="/login" className="mt-4 inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-blue-700">Upgrade to Full Access</a>
         </div>
       </div>
     </div>
@@ -313,7 +354,7 @@ export default function LandingPage() {
     <div className="font-inter">
       <NavBar />
       <Hero />
-      <CredBar />
+      <FoundersMission />
       <HowItWorks />
       <Problems />
       <Features />
@@ -337,6 +378,14 @@ export default function LandingPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
 
 
 
