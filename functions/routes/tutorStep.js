@@ -830,19 +830,6 @@ async function generateFallbackTeachQA({ title, body }) {
     const result = await runWithRetry(() =>
       model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          maxOutputTokens: 400,
-          candidateCount: 1,
-          responseSchema: {
-            type: 'object',
-            properties: {
-              question: { type: 'string' },
-              answer: { type: 'string' },
-            },
-            required: ['question', 'answer'],
-          },
-        },
       }),
     );
 
