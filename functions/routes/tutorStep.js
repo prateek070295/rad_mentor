@@ -725,26 +725,65 @@ async function teachPhase(nextState, getSectionDoc, getNodeData) {
       generationConfig: DEFAULT_TEXT_GENERATION_CONFIG,
     }),
   );
-  const { cleaned: cleanedMessage, answer: expectedAnswer } = extractExpectedAnswer(
+  const { cleaned: cleanedMessage, answer: initialAnswer } = extractExpectedAnswer(
     result.response.text(),
   );
-  let message = cleanedMessage;
-  if (!message.trim().endsWith('?')) {
-    const teaser = cleanedBody.slice(0, 600);
-    const suffix = cleanedBody.length > 600 ? '…' : '';
-    message = `${teaser}${suffix}\n\n**Based on this, what are your thoughts?**`;
-  }
-  const teachQuestion = message
+  let message = cleanedMessage.trim();
+  let teachAnswer = typeof initialAnswer === 'string' ? initialAnswer.trim() : '';
+  let teachQuestion = message
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
     .reverse()
     .find((line) => line.endsWith('?')) || '';
+
+  const needsFallback =
+    !teachQuestion ||
+    teachQuestion.length < 10 ||
+    !teachAnswer ||
+    teachAnswer.length < 5;
+
+  if (needsFallback) {
+    const fallback = await generateFallbackTeachQA({
+      title: sectionData.title,
+      body: cleanedBody,
+    });
+    if (fallback.question) {
+      teachQuestion = fallback.question;
+    }
+    if (fallback.answer) {
+      teachAnswer = fallback.answer;
+    }
+  }
+
+  if (!teachQuestion || teachQuestion.length < 3) {
+    teachQuestion = 'What is the single most important takeaway from this imaging discussion?';
+  } else if (!teachQuestion.trim().endsWith('?')) {
+    teachQuestion = `${teachQuestion.trim()}?`;
+  }
+
+  if (!teachAnswer || teachAnswer.length < 3) {
+    teachAnswer =
+      'Learner should summarise the critical imaging finding, technique, or decision highlighted in this teaching segment.';
+  }
+
+  if (!message) {
+    message = cleanedBody;
+  }
+
+  if (!message.includes(teachQuestion)) {
+    message = `${message}\n\n**Checkpoint Question:** ${teachQuestion}`;
+  }
+
+  if (!message.trim().endsWith('?')) {
+    message = `${message.trim()}\n\n${teachQuestion}`;
+  }
+
   const normalizedTables = sanitizeTablesForUi(sectionData.tables);
   return {
     nextState: {
       ...nextState,
-      lastTeachAnswer: expectedAnswer || '',
+      lastTeachAnswer: teachAnswer,
       lastTeachQuestion: teachQuestion,
     },
     uiResponse: {
@@ -755,6 +794,74 @@ async function teachPhase(nextState, getSectionDoc, getNodeData) {
       tables: normalizedTables,
     },
   };
+}
+
+async function generateFallbackTeachQA({ title, body }) {
+  const defaultQuestion =
+    'What specific imaging lesson or technique does this section emphasise?';
+  const defaultAnswer =
+    'It emphasises the key imaging findings and technique choices described in the section.';
+
+  try {
+    const genAI = getGenAI();
+    const model = genAI.getGenerativeModel(
+      { model: 'models/gemini-2.0-flash-lite-001' },
+      { apiVersion: 'v1' },
+    );
+
+    const prompt = [
+      'You are RadMentor.',
+      'Create a SINGLE Socratic checkpoint question and its ideal short answer using only the material below.',
+      'Question requirements:',
+      '- It must reference concrete data points from the source (e.g., views, parameters, pathology).',
+      '- It must end with a question mark and avoid vague prompts like "what are your thoughts?".',
+      'Answer requirements:',
+      '- Provide a concise, faculty-grade answer rooted entirely in the source content.',
+      '- Avoid introducing new facts.',
+      '',
+      `Topic Title: ${title}`,
+      'Source Body:',
+      `"""${body}"""`,
+      '',
+      'Respond ONLY with JSON following this schema:',
+      `{ "question": "string", "answer": "string" }`,
+    ].join('\n');
+
+    const result = await runWithRetry(() =>
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: 400,
+          candidateCount: 1,
+          responseSchema: {
+            type: 'object',
+            properties: {
+              question: { type: 'string' },
+              answer: { type: 'string' },
+            },
+            required: ['question', 'answer'],
+          },
+        },
+      }),
+    );
+
+    const raw = result?.response?.text?.() ?? '';
+    const parsed = tryParseStrictJson(raw);
+    const question =
+      typeof parsed?.question === 'string' && parsed.question.trim().length > 0
+        ? parsed.question.trim()
+        : defaultQuestion;
+    const answer =
+      typeof parsed?.answer === 'string' && parsed.answer.trim().length > 0
+        ? parsed.answer.trim()
+        : defaultAnswer;
+
+    return { question, answer };
+  } catch (error) {
+    console.error('Fallback Socratic QA generation failed', error);
+    return { question: defaultQuestion, answer: defaultAnswer };
+  }
 }
 
 async function socraticEvalPhase(
