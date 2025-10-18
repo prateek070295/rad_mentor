@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
@@ -1683,7 +1683,8 @@ const LearnTab = ({
                       disabled={isMentorTyping}
                       className={`${successButtonClass} ml-auto`}
                     >
-                      Continue to Next Topic ->
+                      Continue to Next Topic{' '}
+                      <span aria-hidden="true">{'\u2192'}</span>
                     </button>
                   ) : null}
                 </div>
@@ -1890,6 +1891,7 @@ const LearnTab = ({
 };
 
 export default LearnTab;
+
 
 
 
