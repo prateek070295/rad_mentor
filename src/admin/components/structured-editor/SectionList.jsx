@@ -64,7 +64,8 @@ const SectionList = ({
                     {section.title || 'Untitled section'}
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    {section.checkpoints?.length || 0} checkpoint(s)
+                    {section.checkpoints?.length || 0} checkpoint(s) •{' '}
+                    {section.tables?.length || 0} table(s)
                   </span>
                 </button>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">

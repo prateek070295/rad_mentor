@@ -15,6 +15,7 @@ import saveQuestionsRouter from "./routes/saveQuestions.js";
 import tutorStepRouter from './routes/tutorStep.js';
 import getContentRouter from './routes/getContent.js';
 import testDataRouter from './routes/testData.js';
+import achievementsRouter from './routes/achievements.js';
 
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -76,6 +77,7 @@ app.use("/admin/save", adminSave);
 app.use('/tutor/step', tutorStepRouter);
 app.use('/content', getContentRouter);
 app.use('/tests', testDataRouter);
+app.use('/achievements', achievementsRouter);
 
 app.use((err, req, res, _next) => {
   console.error("Global error:", err);

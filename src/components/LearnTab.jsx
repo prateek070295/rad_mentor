@@ -9,6 +9,7 @@ import {
   markAssignmentsCompleteFromProgress,
   completeDayAndAdvance,
 } from '../services/planV2Api';
+import StructuredTable from './StructuredTable';
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
@@ -895,15 +896,26 @@ const LearnTab = ({
     if (!auth.currentUser) throw new Error("User not authenticated.");
     const token = await auth.currentUser.getIdToken();
     const stepEndpoint = API_BASE ? `${API_BASE}/tutor/step` : '/tutor/step';
-      const response = await fetch(stepEndpoint, {
+
+    const response = await fetch(stepEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     });
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'API request failed.');
+      let errorData = null;
+      try {
+        errorData = await response.json();
+      } catch (parseErr) {
+        console.warn("Failed to parse tutor error response", parseErr);
+      }
+      const error = new Error(errorData?.error || `Tutor request failed with status ${response.status}`);
+      error.data = errorData;
+      error.status = response.status;
+      throw error;
     }
+
     return response.json();
   }, []);
   
@@ -974,11 +986,39 @@ const LearnTab = ({
       setTutorHistory(prev => [...prev, data.ui]);
     } catch (error) {
       console.error("Error submitting user input:", error);
-      setTutorHistory(prev => [...prev, { type: 'ERROR', message: "Sorry, I'm having trouble connecting." }]);
+      const fallbackMessage =
+        error?.data?.ui?.message ||
+        error?.data?.error ||
+        error?.message ||
+        "Sorry, I'm having trouble connecting.";
+
+      const retryPayload = {
+        userInput: typeof userInput === "object" && userInput !== null
+          ? JSON.parse(JSON.stringify(userInput))
+          : userInput,
+        displayMessage: null,
+      };
+
+      setTutorHistory(prev => [
+        ...prev,
+        {
+          type: 'ERROR',
+          message: fallbackMessage,
+          retryPayload,
+        },
+      ]);
     } finally {
       setIsMentorTyping(false);
     }
   }, [isMentorTyping, activeTopic, callTutorApi]);
+
+  const handleErrorRetry = useCallback(
+    (payload) => {
+      if (!payload || isMentorTyping) return;
+      submitTutorInteraction(payload.userInput, payload.displayMessage ?? null);
+    },
+    [isMentorTyping, submitTutorInteraction],
+  );
   
   const handleChatInputSubmit = (e) => {
     e.preventDefault();
@@ -1113,6 +1153,17 @@ const LearnTab = ({
               <div className="prose prose-lg max-w-none text-slate-800">
                 <ReactMarkdown>{card.message}</ReactMarkdown>
               </div>
+              {Array.isArray(card.tables) && card.tables.length > 0 ? (
+                <div className="mt-6 space-y-6">
+                  {card.tables.map((table, tableIndex) => (
+                    <StructuredTable
+                      key={table.table_id || `${index}-table-${tableIndex}`}
+                      table={table}
+                      indexOffset={tableIndex}
+                    />
+                  ))}
+                </div>
+              ) : null}
               {(card.assets?.images?.length > 0 ||
                 card.assets?.cases?.length > 0) && (
                 <div className="mt-6 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
@@ -1283,7 +1334,17 @@ const LearnTab = ({
         return (
           <div key={index} className="flex justify-start">
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-sm shadow-rose-200/60">
-              {card.message}
+              <div>{card.message}</div>
+              {card.retryPayload ? (
+                <button
+                  type="button"
+                  onClick={() => handleErrorRetry(card.retryPayload)}
+                  disabled={isMentorTyping}
+                  className="mt-3 inline-flex items-center rounded-full border border-rose-200 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Retry
+                </button>
+              ) : null}
             </div>
           </div>
         );
@@ -1460,3 +1521,4 @@ const LearnTab = ({
 };
 
 export default LearnTab;
+

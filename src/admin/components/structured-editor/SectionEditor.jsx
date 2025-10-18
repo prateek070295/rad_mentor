@@ -4,6 +4,7 @@ import { EditorActionTypes } from './state';
 import AssetList from './AssetList';
 import MisconceptionList from './MisconceptionList';
 import CheckpointCard from './CheckpointCard';
+import TableList from './TableList';
 
 const SectionEditor = ({
   section,
@@ -113,6 +114,7 @@ const SectionEditor = ({
           itemType="cases"
           dispatch={dispatch}
         />
+        <TableList sectionId={sectionId} tables={section.tables} dispatch={dispatch} />
       </div>
 
       <MisconceptionList sectionId={sectionId} items={section.misconceptions} dispatch={dispatch} />

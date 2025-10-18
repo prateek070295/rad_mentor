@@ -5,6 +5,7 @@ export { default as TopicArrayEditor } from './TopicArrayEditor';
 export { default as CheckpointCard } from './CheckpointCard';
 export { default as AssetList } from './AssetList';
 export { default as MisconceptionList } from './MisconceptionList';
+export { default as TableList } from './TableList';
 export {
   EditorActionTypes,
   structuredEditorReducer,
@@ -21,6 +22,9 @@ export {
   createEmptyImage,
   createEmptyCase,
   createEmptyMisconception,
+  createEmptyTable,
+  createEmptyTableRow,
+  createEmptyTableCell,
   BLOOM_LEVELS,
   DEFAULT_BLOOM_LEVEL,
 } from './state';

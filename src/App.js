@@ -262,11 +262,17 @@ function AppShell() {
   const [userAchievements, setUserAchievements] = useState([]);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
+    let cancelled = false;
+
+    const loadDefinitions = async () => {
+      if (!currentUser) {
+        setAchievementDefinitions([]);
+        return;
+      }
+
       try {
         const defs = await fetchAchievementDefinitions();
-        if (!mounted) return;
+        if (cancelled) return;
         const ordered = Array.isArray(defs)
           ? [...defs].sort(
               (a, b) =>
@@ -277,15 +283,18 @@ function AppShell() {
         setAchievementDefinitions(ordered);
       } catch (error) {
         console.error("Failed to load achievement definitions:", error);
-        if (mounted) {
+        if (!cancelled) {
           setAchievementDefinitions([]);
         }
       }
-    })();
-    return () => {
-      mounted = false;
     };
-  }, []);
+
+    loadDefinitions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
   // --- Main Data Fetching Effect ---
 
   useEffect(() => {

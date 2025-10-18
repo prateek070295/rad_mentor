@@ -8,11 +8,16 @@ const checkpointSchema = {
   properties: {
     type: { enum: ["mcq", "short"] },
     question_md: { type: "string", maxLength: 500 },
-    options: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: 5 },
-    correct_index: { type: "integer", minimum: 0, maximum: 4 },
-    answer_patterns: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: 10 },
+    options: {
+      type: "array",
+      items: { type: "string", maxLength: 300 },
+      minItems: 4,
+      maxItems: 4,
+    },
+    correct_index: { type: "integer", minimum: 0, maximum: 3 },
+    answer_patterns: { type: "array", items: { type: "string", maxLength: 300 }, maxItems: 10 },
     rationale_md: { type: "string", maxLength: 1000 },
-    hints: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: 3 },
+    hints: { type: "array", items: { type: "string", maxLength: 300 }, maxItems: 3 },
     bloom_level: { enum: ["remember", "understand", "apply", "analyze", "evaluate"] },
     figure_id: { type: ["string", "null"], maxLength: 50 },
   },
@@ -31,8 +36,8 @@ const contentSectionSchema = {
       items: {
         type: "object",
         properties: {
-          claim: { type: "string", maxLength: 200 },
-          correction: { type: "string", maxLength: 300 },
+          claim: { type: "string", maxLength: 600 },
+          correction: { type: "string", maxLength: 600 },
         },
         required: ["claim", "correction"],
       },
@@ -44,7 +49,7 @@ const contentSectionSchema = {
         type: "object",
         properties: {
           url: { type: "string" },
-          alt: { type: "string", maxLength: 150 },
+          alt: { type: "string", maxLength: 300 },
           source: { type: "string", maxLength: 100 },
           figure_id: { type: "string", maxLength: 50 },
         },
@@ -57,12 +62,47 @@ const contentSectionSchema = {
       items: {
         type: "object",
         properties: {
-          label: { type: "string", maxLength: 200 },
+          label: { type: "string", maxLength: 300 },
           url: { type: "string" },
         },
         required: ["label"],
       },
       maxItems: 5,
+    },
+    tables: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        properties: {
+          table_id: { type: "string", minLength: 3, maxLength: 100 },
+          caption: { type: "string", minLength: 3, maxLength: 400 },
+          headers: {
+            type: "array",
+            minItems: 1,
+            maxItems: 10,
+            items: { type: "string", minLength: 1, maxLength: 200 },
+          },
+          rows: {
+            type: "array",
+            minItems: 1,
+            maxItems: 40,
+            items: {
+              type: "array",
+              minItems: 1,
+              maxItems: 10,
+              items: {
+                type: "object",
+                properties: {
+                  content: { type: "string", maxLength: 400 },
+                },
+                required: ["content"],
+              },
+            },
+          },
+        },
+        required: ["table_id", "caption", "headers", "rows"],
+      },
     },
     checkpoints: {
       type: "array",
@@ -79,7 +119,7 @@ const topicStructureSchema = {
     // MOVED: 'objectives' is now at the top level
     objectives: {
       type: "array",
-      items: { type: "string", maxLength: 200 },
+      items: { type: "string", maxLength: 600 },
       maxItems: 5,
     },
     sections: {
@@ -90,7 +130,7 @@ const topicStructureSchema = {
     // MOVED: 'key_points' is now at the top level
     key_points: {
       type: "array",
-      items: { type: "string", maxLength: 200 },
+      items: { type: "string", maxLength: 600 },
       maxItems: 5,
     },
   },

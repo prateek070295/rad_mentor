@@ -67,6 +67,28 @@ export const createEmptyCheckpoint = (type = 'mcq') => {
   };
 };
 
+export const createEmptyTableCell = () => ({
+  localId: makeLocalId('tableCell'),
+  content: '',
+});
+
+export const createEmptyTableRow = (columns = 2) => {
+  const safeColumns = clamp(columns, 1, 10);
+  return Array.from({ length: safeColumns }, () => createEmptyTableCell());
+};
+
+export const createEmptyTable = (columns = 2, rows = 2) => {
+  const safeColumns = clamp(columns, 1, 10);
+  const safeRows = clamp(rows, 1, 40);
+  return {
+    localId: makeLocalId('table'),
+    table_id: makeLocalId('table'),
+    caption: '',
+    headers: Array.from({ length: safeColumns }, () => ''),
+    rows: Array.from({ length: safeRows }, () => createEmptyTableRow(safeColumns)),
+  };
+};
+
 export const createEmptySection = (order = 1) => ({
   localId: makeLocalId('section'),
   id: null,
@@ -76,6 +98,7 @@ export const createEmptySection = (order = 1) => ({
   images: [],
   cases: [],
   misconceptions: [],
+  tables: [],
   checkpoints: [createEmptyCheckpoint('mcq')],
 });
 
@@ -104,6 +127,59 @@ const normalizeMisconception = (item) => ({
   ...item,
   localId: item?.localId || makeLocalId('misconception'),
 });
+
+const normalizeTableCell = (cell) => ({
+  ...createEmptyTableCell(),
+  ...(cell && typeof cell === 'object' ? cell : { content: cell }),
+  localId: cell?.localId || makeLocalId('tableCell'),
+  content: typeof cell?.content === 'string' ? cell.content : String(cell ?? ''),
+});
+
+const normalizeTableRow = (row, columnCount) => {
+  const source = Array.isArray(row)
+    ? row
+    : row && typeof row === 'object' && Array.isArray(row.cells)
+      ? row.cells
+      : row && typeof row === 'object' && Array.isArray(row.values)
+        ? row.values
+        : [];
+  const cells = source.slice(0, columnCount);
+  const normalized = cells.map(normalizeTableCell);
+  while (normalized.length < columnCount) {
+    normalized.push(createEmptyTableCell());
+  }
+  return normalized;
+};
+
+const normalizeTable = (table) => {
+  const headers = ensureArray(table?.headers)
+    .slice(0, 10)
+    .map((header) => (header == null ? '' : String(header)));
+  const columnCount = clamp(headers.length || 1, 1, 10);
+  const safeHeaders =
+    headers.length >= columnCount
+      ? headers.slice(0, columnCount)
+      : [...headers, ...Array(columnCount - headers.length).fill('')];
+
+  const rowsInput = ensureArray(table?.rows).slice(0, 40);
+  const rows =
+    rowsInput.length > 0
+      ? rowsInput.map((row) => normalizeTableRow(row, columnCount))
+      : [createEmptyTableRow(columnCount)];
+
+  return {
+    ...createEmptyTable(columnCount, rows.length),
+    ...table,
+    localId: table?.localId || makeLocalId('table'),
+    table_id:
+      typeof table?.table_id === 'string' && table.table_id.trim()
+        ? table.table_id.trim()
+        : makeLocalId('table'),
+    caption: typeof table?.caption === 'string' ? table.caption : '',
+    headers: safeHeaders,
+    rows,
+  };
+};
 
 const normalizeCheckpoint = (item) => {
   const type = item?.type === 'short' ? 'short' : 'mcq';
@@ -171,6 +247,9 @@ const normalizeSection = (section, index = 0) => {
       createEmptyMisconception,
       { allowEmpty: true },
     ),
+    tables: normalizeArrayItems(section?.tables, normalizeTable, () => createEmptyTable(2, 2), {
+      allowEmpty: true,
+    }),
     checkpoints: normalizeArrayItems(
       section?.checkpoints,
       normalizeCheckpoint,
@@ -328,6 +407,19 @@ const cloneSection = (state, payload) => {
       id: null,
       localId: makeLocalId('checkpoint'),
     })),
+    tables: ensureArray(clone.tables).map((table) => ({
+      ...table,
+      localId: makeLocalId('table'),
+      table_id: makeLocalId('table'),
+      rows: ensureArray(table.rows).map((row) =>
+        Array.isArray(row)
+          ? row.map((cell) => ({
+              ...cell,
+              localId: cell?.localId || makeLocalId('tableCell'),
+            }))
+          : row,
+      ),
+    })),
   });
   sections.splice(index + 1, 0, clonedSection);
   return markDirty({
@@ -365,6 +457,7 @@ const addSectionItem = (state, payload) => {
     cases: createEmptyCase,
     misconceptions: createEmptyMisconception,
     checkpoints: () => createEmptyCheckpoint(payload?.checkpointType || 'mcq'),
+    tables: () => createEmptyTable(3, 3),
   };
 
   const normalizerMap = {
@@ -372,6 +465,7 @@ const addSectionItem = (state, payload) => {
     cases: normalizeCase,
     misconceptions: normalizeMisconception,
     checkpoints: normalizeCheckpoint,
+    tables: normalizeTable,
   };
 
   if (!createMap[itemType]) return state;
@@ -412,6 +506,7 @@ const updateSectionItem = (state, payload) => {
     cases: normalizeCase,
     misconceptions: normalizeMisconception,
     checkpoints: normalizeCheckpoint,
+    tables: normalizeTable,
   };
   if (!normalizerMap[itemType]) return state;
 
