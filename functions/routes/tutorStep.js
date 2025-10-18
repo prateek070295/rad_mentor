@@ -1,6 +1,7 @@
 import express from "express";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { SchemaType } from "@google/generative-ai";
 import { getGenAI, runWithRetry } from "../helpers.js";
 
 const router = express.Router();
@@ -830,6 +831,18 @@ async function generateFallbackTeachQA({ title, body }) {
     const result = await runWithRetry(() =>
       model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: 400,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              question: { type: SchemaType.STRING },
+              answer: { type: SchemaType.STRING },
+            },
+            required: ['question', 'answer'],
+          },
+        },
       }),
     );
 
@@ -1143,6 +1156,21 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
     const result = await runWithRetry(() =>
       model.generateContent({
         contents: [{ role: 'user', parts: [{ text: gradingPrompt }] }],
+        generationConfig: {
+          maxOutputTokens: 400,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              verdict: {
+                type: SchemaType.STRING,
+                enum: ['correct', 'partially_correct', 'incorrect'],
+              },
+              feedback: { type: SchemaType.STRING },
+            },
+            required: ['verdict', 'feedback'],
+          },
+        },
       }),
     );
 
