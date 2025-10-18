@@ -219,10 +219,14 @@ const LearnTab = ({
     scheduledChapters.map((chapter) => chapter.sectionName),
   );
 
+  const lastFocusModeRef = useRef(null);
+
   useEffect(() => {
-    if (setIsFocusMode) {
-      setIsFocusMode(!isSidebarOpen);
-    }
+    if (typeof setIsFocusMode !== 'function') return;
+    const nextValue = !isSidebarOpen;
+    if (lastFocusModeRef.current === nextValue) return;
+    lastFocusModeRef.current = nextValue;
+    setIsFocusMode(nextValue);
   }, [isSidebarOpen, setIsFocusMode]);
 
   useEffect(() => {
