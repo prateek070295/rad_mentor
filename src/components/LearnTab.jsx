@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
