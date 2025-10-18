@@ -25,6 +25,10 @@ const EVENT_TYPES = Object.freeze({
 });
 
 const MAX_MESSAGE_HISTORY = 50;
+const DEFAULT_TEXT_GENERATION_CONFIG = Object.freeze({
+  maxOutputTokens: 600,
+  candidateCount: 1,
+});
 
 // --- 1. Initial State Definition ---
 const INITIAL_STATE = {
@@ -309,7 +313,15 @@ router.post("/", express.json(), async (req, res) => {
     return res.status(401).json({ error: 'Authentication required.' });
   }
   
-  const { userInput, topicId, organ: chapterId, userName, resumeLast = false } = req.body || {};
+  const {
+    userInput,
+    topicId,
+    organ: chapterId,
+    userName,
+    resumeLast = false,
+  } = req.body || {};
+  const safeUserName =
+    typeof userName === 'string' ? userName.trim() : '';
   if (!topicId || !chapterId) {
     return res.status(400).json({ error: 'topicId and chapterId are required.' });
   }
@@ -325,12 +337,15 @@ router.post("/", express.json(), async (req, res) => {
     const sessionVersion = Number(sessionSnap.exists ? sessionSnap.data()?.sessionStateVersion ?? 0 : 0);
 
     if (!sessionSnap.exists) {
-      currentState = { ...INITIAL_STATE, topicId, organ: chapterId, userName: userName || "Dr." };
+      currentState = { ...INITIAL_STATE, topicId, organ: chapterId, userName: safeUserName };
       event = { type: EVENT_TYPES.START, userInput };
     } else {
       currentState = sessionSnap.data().sessionState;
       if (!currentState?.organ && chapterId) {
         currentState = { ...currentState, organ: chapterId };
+      }
+      if (!currentState?.userName && safeUserName) {
+        currentState = { ...currentState, userName: safeUserName };
       }
       if (userInput === undefined) {
         if (resumeLast === true) {
@@ -365,55 +380,6 @@ router.post("/", express.json(), async (req, res) => {
       return snap.data() || {};
     };
 
-    if (nextState.phase === PHASES.EVAL) {
-        const sectionDoc = await getSectionDoc(currentState.sectionIndex + 1);
-        if (!sectionDoc) {
-            nextState = { ...nextState, phase: PHASES.SUMMARY };
-        } else {
-            const checkpointsRef = sectionDoc.ref.collection('checkpoints');
-            const allCheckpointsSnapshot = await checkpointsRef.orderBy('bloom_level').get();
-            if (allCheckpointsSnapshot.empty || currentState.checkpointIndex >= allCheckpointsSnapshot.size) {
-                nextState = { ...nextState, phase: PHASES.SUMMARY };
-            } else {
-                const checkpointData = allCheckpointsSnapshot.docs[currentState.checkpointIndex].data();
-                let isCorrect = false;
-                let feedbackMessage = "";
-                if (checkpointData.type === 'mcq') {
-                    isCorrect = checkpointData.correct_index === userInput.selectedIndex;
-                    feedbackMessage = `**Rationale:** ${checkpointData.rationale_md}`;
-                } else if (checkpointData.type === 'short') {
-                    const gradingResult = await gradeShortCheckpointAnswer(checkpointData, userInput);
-                    isCorrect =
-                      gradingResult.verdict === 'correct' ||
-                      gradingResult.verdict === 'partially_correct';
-                    feedbackMessage = gradingResult.feedback;
-                }
-                uiResponse = { type: 'FEEDBACK_CARD', title: isCorrect ? 'Correct!' : 'Feedback', message: feedbackMessage, isCorrect };
-                nextState = reducer(nextState, { type: EVENT_TYPES.GRADE_RESULT });
-            }
-        }
-    } 
-    else if (nextState.phase === PHASES.ADVANCE) {
-        const currentSectionDoc = await getSectionDoc(currentState.sectionIndex + 1);
-        if (!currentSectionDoc) {
-            nextState = { ...nextState, phase: PHASES.SUMMARY };
-        } else {
-            const checkpointsRef = currentSectionDoc.ref.collection('checkpoints');
-            const allCheckpointsSnapshot = await checkpointsRef.get();
-            const totalCheckpoints = allCheckpointsSnapshot.size;
-            if (currentState.checkpointIndex + 1 < totalCheckpoints) {
-                nextState = { ...nextState, checkpointIndex: currentState.checkpointIndex + 1, phase: PHASES.CHECKPOINT };
-            } else {
-                 const nextSectionDoc = await getSectionDoc(currentState.sectionIndex + 2);
-                 if (nextSectionDoc) {
-                     nextState = { ...nextState, sectionIndex: currentState.sectionIndex + 1, checkpointIndex: 0, phase: PHASES.TEACH };
-                 } else {
-                     nextState = { ...nextState, phase: PHASES.SUMMARY };
-                 }
-            }
-        }
-    }
-    
     const phaseResult = await resolveTutorPhase({
       currentState,
       nextState,
@@ -428,67 +394,13 @@ router.post("/", express.json(), async (req, res) => {
     let progressPayload = null;
 
     if (shouldSaveFullProgress) {
-        console.log(`Checkpoint reached. Saving full progress at phase: ${nextState.phase}`);
-        const topicData = await getNodeData();
-        const topicTitle = topicData.name || 'Untitled Topic';
-        const chapterId = nextState.organ;
-
-        let calculatedPercent = 0;
-        try {
-            const orderedSectionDocs = await loadAllSectionDocs(sectionsRef, sectionDocCache);
-            const orderedSections = orderedSectionDocs.map((doc) => ({
-              order: Number(doc.data()?.order ?? 0),
-              ref: doc.ref,
-              data: doc.data(),
-            }));
-
-            const totalSections = orderedSections.length || 1;
-
-            if (nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE) {
-              calculatedPercent = 100;
-            } else {
-              const completedSections = Math.max(0, Math.min(nextState.sectionIndex, totalSections));
-              const currentSectionIndex = Math.min(nextState.sectionIndex, totalSections - 1);
-              const currentSectionEntry =
-                orderedSections.find((entry) => entry.order === nextState.sectionIndex + 1) ||
-                orderedSections[currentSectionIndex];
-
-              let sectionFraction = 0;
-              if (currentSectionEntry) {
-                let totalCheckpoints = Number(
-                  currentSectionEntry.data?.checkpointCount ??
-                    currentSectionEntry.data?.checkpoint_count ??
-                    NaN,
-                );
-
-                if (!Number.isFinite(totalCheckpoints) || totalCheckpoints <= 0) {
-                  const checkpointsSnapshot = await currentSectionEntry.ref.collection('checkpoints').get();
-                  totalCheckpoints = checkpointsSnapshot.size || 1;
-                }
-
-                const baseCompleted = Math.min(nextState.checkpointIndex, totalCheckpoints);
-                const adjustedCompleted =
-                  nextState.phase === PHASES.FEEDBACK
-                    ? Math.min(baseCompleted + 1, totalCheckpoints)
-                    : Math.min(baseCompleted, totalCheckpoints);
-                sectionFraction = totalCheckpoints > 0 ? adjustedCompleted / totalCheckpoints : 0;
-              }
-
-              calculatedPercent = ((completedSections + sectionFraction) / totalSections) * 100;
-              calculatedPercent = Math.max(0, Math.min(100, Math.round(calculatedPercent)));
-            }
-        } catch (progressError) {
-            console.error("Failed to compute topic progress", progressError);
-            calculatedPercent = nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE ? 100 : 0;
-        }
-        
-        progressPayload = {
-            status: (nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE) ? 'completed' : 'in-progress',
-            updatedAt: FieldValue.serverTimestamp(),
-            percentComplete: calculatedPercent,
-            topicTitle,
-            chapterId
-        };
+      console.log(`Checkpoint reached. Saving full progress at phase: ${nextState.phase}`);
+      progressPayload = await calculateProgressPayload({
+        nextState,
+        getNodeData,
+        sectionsRef,
+        sectionDocCache,
+      });
     }
 
     const sanitizedUi = sanitizeUiForFirestore(uiResponse);
@@ -550,7 +462,7 @@ router.post("/", express.json(), async (req, res) => {
       throw txnError;
     }
 
-    await trimMessageHistory(messagesRef, MAX_MESSAGE_HISTORY);
+    await trimMessageHistory(messagesRef);
 
     res.json({ ui: sanitizedUi });
 
@@ -620,7 +532,93 @@ async function loadAllSectionDocs(sectionsRef, cache) {
   return docs;
 }
 
-async function trimMessageHistory(messagesRef, maxCount = 50) {
+async function calculateProgressPayload({
+  nextState,
+  getNodeData,
+  sectionsRef,
+  sectionDocCache,
+}) {
+  try {
+    const [topicData, orderedSectionDocs] = await Promise.all([
+      getNodeData(),
+      loadAllSectionDocs(sectionsRef, sectionDocCache),
+    ]);
+
+    const topicTitle = topicData.name || 'Untitled Topic';
+    const chapterId = nextState.organ;
+    const orderedSections = orderedSectionDocs.map((doc) => ({
+      order: Number(doc.data()?.order ?? 0),
+      ref: doc.ref,
+      data: doc.data(),
+    }));
+
+    const totalSections = orderedSections.length || 1;
+    let calculatedPercent = 0;
+
+    if (nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE) {
+      calculatedPercent = 100;
+    } else {
+      const boundedSectionIndex = Math.max(0, Math.min(nextState.sectionIndex, totalSections));
+      const completedSections = Math.max(0, Math.min(nextState.sectionIndex, totalSections));
+      const currentSectionIndex = Math.min(boundedSectionIndex, totalSections - 1);
+      const currentSectionEntry =
+        orderedSections.find((entry) => entry.order === nextState.sectionIndex + 1) ||
+        orderedSections[currentSectionIndex];
+
+      let sectionFraction = 0;
+      if (currentSectionEntry) {
+        let totalCheckpoints = Number(
+          currentSectionEntry.data?.checkpointCount ??
+            currentSectionEntry.data?.checkpoint_count ??
+            NaN,
+        );
+
+        if (!Number.isFinite(totalCheckpoints) || totalCheckpoints <= 0) {
+          const checkpointsSnapshot = await currentSectionEntry.ref.collection('checkpoints').get();
+          totalCheckpoints = checkpointsSnapshot.size || 1;
+        }
+
+        const baseCompleted = Math.min(nextState.checkpointIndex, totalCheckpoints);
+        const adjustedCompleted =
+          nextState.phase === PHASES.FEEDBACK
+            ? Math.min(baseCompleted + 1, totalCheckpoints)
+            : Math.min(baseCompleted, totalCheckpoints);
+
+        sectionFraction =
+          totalCheckpoints > 0 ? adjustedCompleted / totalCheckpoints : 0;
+      }
+
+      calculatedPercent = ((completedSections + sectionFraction) / totalSections) * 100;
+      calculatedPercent = Math.max(0, Math.min(100, Math.round(calculatedPercent)));
+    }
+
+    return {
+      status:
+        nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE
+          ? 'completed'
+          : 'in-progress',
+      updatedAt: FieldValue.serverTimestamp(),
+      percentComplete: calculatedPercent,
+      topicTitle,
+      chapterId,
+    };
+  } catch (error) {
+    console.error('Failed to compute topic progress', error);
+    return {
+      status:
+        nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE
+          ? 'completed'
+          : 'in-progress',
+      updatedAt: FieldValue.serverTimestamp(),
+      percentComplete:
+        nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE ? 100 : 0,
+      topicTitle: 'Untitled Topic',
+      chapterId: nextState.organ,
+    };
+  }
+}
+
+async function trimMessageHistory(messagesRef, maxCount = MAX_MESSAGE_HISTORY) {
   try {
     if (maxCount <= 0) return;
     const countSnap = await messagesRef.count().get();
@@ -655,6 +653,10 @@ async function resolveTutorPhase({
       return socraticEvalPhase(currentState, nextState, userInput, getSectionDoc, getNodeData);
     case PHASES.CHECKPOINT:
       return checkpointPhase(nextState, getSectionDoc, getNodeData);
+    case PHASES.EVAL:
+      return evalPhase(nextState, userInput, getSectionDoc, getNodeData);
+    case PHASES.ADVANCE:
+      return advancePhase(nextState, getSectionDoc, getNodeData);
     case PHASES.FEEDBACK:
       return feedbackPhase(nextState);
     case PHASES.SUMMARY:
@@ -675,7 +677,8 @@ async function resolveTutorPhase({
 async function introPhase(nextState, getNodeData) {
   const nodeData = await getNodeData();
   const objectivesText = (nodeData.objectives || []).map((obj) => `- ${obj}`).join('\n');
-  const message = `Hello ${nextState.userName}, welcome to the topic on "${nodeData.name}".\n\nHere are our learning objectives:\n${objectivesText}\n\nReady to begin?`;
+  const salutation = nextState.userName ? `Hello ${nextState.userName}` : 'Hello';
+  const message = `${salutation}, welcome to the topic on "${nodeData.name}".\n\nHere are our learning objectives:\n${objectivesText}\n\nReady to begin?`;
   return {
     nextState,
     uiResponse: { type: 'OBJECTIVES_CARD', title: 'Topic Objectives', message },
@@ -695,13 +698,20 @@ async function teachPhase(nextState, getSectionDoc, getNodeData) {
     { apiVersion: 'v1' },
   );
   const prompt = socraticTeachPrompt(sectionData.title, cleanedBody);
-  const result = await runWithRetry(() => model.generateContent(prompt));
+  const result = await runWithRetry(() =>
+    model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: DEFAULT_TEXT_GENERATION_CONFIG,
+    }),
+  );
   const { cleaned: cleanedMessage, answer: expectedAnswer } = extractExpectedAnswer(
     result.response.text(),
   );
   let message = cleanedMessage;
   if (!message.trim().endsWith('?')) {
-    message = `${cleanedBody}\n\n**Based on this, what are your thoughts?**`;
+    const teaser = cleanedBody.slice(0, 600);
+    const suffix = cleanedBody.length > 600 ? '…' : '';
+    message = `${teaser}${suffix}\n\n**Based on this, what are your thoughts?**`;
   }
   const teachQuestion = message
     .split('\n')
@@ -765,7 +775,12 @@ async function socraticEvalPhase(
     currentState.lastTeachAnswer || '',
     currentState.lastTeachQuestion || '',
   );
-  const result = await runWithRetry(() => model.generateContent(prompt));
+  const result = await runWithRetry(() =>
+    model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: DEFAULT_TEXT_GENERATION_CONFIG,
+    }),
+  );
   const { feedback, transition } = parseFeedbackWithTransition(result.response.text());
   const transitionLine = transition || DEFAULT_TRANSITION_LINE;
   const combinedMessage = feedback ? `${feedback}\n\n${transitionLine}` : transitionLine;
@@ -805,6 +820,96 @@ async function checkpointPhase(nextState, getSectionDoc, getNodeData) {
   };
 }
 
+async function evalPhase(
+  nextState,
+  userInput,
+  getSectionDoc,
+  getNodeData,
+) {
+  const sectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+  if (!sectionDoc) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+
+  const checkpointsRef = sectionDoc.ref.collection('checkpoints');
+  const orderedSnapshot = await checkpointsRef.orderBy('bloom_level').get();
+  if (
+    orderedSnapshot.empty ||
+    nextState.checkpointIndex >= orderedSnapshot.size ||
+    nextState.checkpointIndex < 0
+  ) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+
+  const checkpointData = orderedSnapshot.docs[nextState.checkpointIndex].data();
+  let isCorrect = false;
+  let feedbackMessage = '';
+
+  if (checkpointData.type === 'mcq') {
+    const selectedIndex = Number(userInput?.selectedIndex);
+    const normalizedOptions = Array.isArray(checkpointData.options)
+      ? checkpointData.options
+      : [];
+    const withinBounds =
+      Number.isInteger(selectedIndex) &&
+      selectedIndex >= 0 &&
+      selectedIndex < normalizedOptions.length;
+    isCorrect = withinBounds && checkpointData.correct_index === selectedIndex;
+    feedbackMessage = `**Rationale:** ${checkpointData.rationale_md}`;
+  } else if (checkpointData.type === 'short') {
+    const gradingResult = await gradeShortCheckpointAnswer(checkpointData, userInput);
+    isCorrect =
+      gradingResult.verdict === 'correct' ||
+      gradingResult.verdict === 'partially_correct';
+    feedbackMessage = gradingResult.feedback;
+  }
+
+  return {
+    nextState: reducer(nextState, { type: EVENT_TYPES.GRADE_RESULT }),
+    uiResponse: {
+      type: 'FEEDBACK_CARD',
+      title: isCorrect ? 'Correct!' : 'Feedback',
+      message: feedbackMessage,
+      isCorrect,
+    },
+  };
+}
+
+async function advancePhase(nextState, getSectionDoc, getNodeData) {
+  const currentSectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+  if (!currentSectionDoc) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+
+  const checkpointsRef = currentSectionDoc.ref.collection('checkpoints');
+  const checkpointsSnapshot = await checkpointsRef.get();
+  const totalCheckpoints = checkpointsSnapshot.size;
+
+  if (Number.isFinite(totalCheckpoints) && totalCheckpoints > 0) {
+    if (nextState.checkpointIndex + 1 < totalCheckpoints) {
+      const updatedState = {
+        ...nextState,
+        checkpointIndex: nextState.checkpointIndex + 1,
+        phase: PHASES.CHECKPOINT,
+      };
+      return checkpointPhase(updatedState, getSectionDoc, getNodeData);
+    }
+  }
+
+  const nextSectionDoc = await getSectionDoc(nextState.sectionIndex + 2);
+  if (nextSectionDoc) {
+    const updatedState = {
+      ...nextState,
+      sectionIndex: nextState.sectionIndex + 1,
+      checkpointIndex: 0,
+      phase: PHASES.TEACH,
+    };
+    return teachPhase(updatedState, getSectionDoc, getNodeData);
+  }
+
+  return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+}
+
 function feedbackPhase(nextState) {
   return {
     nextState,
@@ -820,14 +925,14 @@ async function summaryPhase(nextState, getNodeData) {
   const nodeData = await getNodeData();
   const keyPointsText = (nodeData.key_points || []).map((pt) => `- ${pt}`).join('\n');
   return {
-    nextState,
+    nextState: { ...nextState, phase: PHASES.COMPLETE },
     uiResponse: {
       type: 'SUMMARY_CARD',
       title: 'Topic Summary',
       message: `Great work! Here are the key points from this topic:\n${keyPointsText}`,
       isTopicComplete: true,
       autoAdvance: true,
-      nextphase: PHASES.COMPLETE,
+      nextPhase: PHASES.COMPLETE,
     },
   };
 }
@@ -870,6 +975,8 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
 
     const generationConfig = {
       responseMimeType: 'application/json',
+      maxOutputTokens: 400,
+      candidateCount: 1,
       responseSchema: {
         type: 'object',
         properties: {
