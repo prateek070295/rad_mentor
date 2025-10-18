@@ -1028,15 +1028,22 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
       { apiVersion: 'v1' },
     );
 
+    const serializedQuestion = JSON.stringify(checkpointData.question_md ?? '');
+    const serializedRationale = JSON.stringify(checkpointData.rationale_md ?? '');
+    const serializedAnswer = JSON.stringify(
+      typeof userInput === 'string' ? userInput : userInput ?? '',
+    );
+
     const gradingPrompt = [
       'You are an expert radiology proctor.',
-      `Question: "${checkpointData.question_md}"`,
-      `Key Concepts: "${checkpointData.rationale_md}"`,
-      `Student's Answer: "${typeof userInput === 'string' ? userInput : JSON.stringify(userInput)}"`,
+      `Question (JSON): ${serializedQuestion}`,
+      `Key Concepts (JSON): ${serializedRationale}`,
+      `Student Answer (JSON): ${serializedAnswer}`,
       'Tasks:',
       '1. Evaluate the student answer.',
       '2. Determine a verdict: "correct", "partially_correct", or "incorrect".',
       '3. Provide concise feedback.',
+      'Return ONLY a JSON object that matches the provided schema. Do not wrap the response in backticks or include commentary.',
     ].join('\n');
 
     const generationConfig = {
@@ -1064,13 +1071,7 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
     );
 
     const raw = result?.response?.text?.() ?? '';
-    let parsed = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (error) {
-      console.error('Gemini grading parse error', error, raw);
-      parsed = null;
-    }
+    const parsed = tryParseStrictJson(raw);
     if (parsed && typeof parsed.verdict === 'string' && typeof parsed.feedback === 'string') {
       return parsed;
     }
@@ -1080,5 +1081,34 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
   } catch (error) {
     console.error('Failed to grade short-answer checkpoint', error);
     return fallback;
+  }
+}
+
+function tryParseStrictJson(raw) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const trimmed = raw.trim();
+    const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    if (fenceMatch) {
+      try {
+        return JSON.parse(fenceMatch[1]);
+      } catch (innerError) {
+        console.error('Failed to parse fenced JSON payload', innerError, fenceMatch[1]);
+      }
+    }
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const probable = trimmed.slice(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(probable);
+      } catch (braceError) {
+        console.error('Failed to parse extracted JSON payload', braceError, probable);
+      }
+    }
+    console.error('Gemini grading parse error', error, trimmed);
+    return null;
   }
 }
