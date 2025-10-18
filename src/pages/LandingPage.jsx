@@ -170,9 +170,9 @@ const Roadmap = () => (
           { label: "Next", text: "Practical Exams: Build OSCE-style case checklists, viva prompts, and hands-on skills tracking to stay ready for practical assessments." },
           { label: "Future", text: "More Specialties & Exams: Our vision is to bring smart planning and AI learning to every postgraduate medical student in India." },
         ].map((i, idx) => (
-          <li key={idx} className="relative pl-14 flex items-start">
-            <span className="absolute left-0 top-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-600 text-blue-700 text-xs font-bold uppercase">{i.label}</span>
-            <p className="text-gray-700 ml-2 flex-1">{i.text}</p>
+          <li key={idx} className="relative pl-16 flex items-start">
+            <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border-2 border-blue-600 text-blue-700 text-[10px] font-bold uppercase tracking-wide">{i.label}</span>
+            <p className="text-gray-700 ml-4 flex-1">{i.text}</p>
           </li>
         ))}
       </ol>
