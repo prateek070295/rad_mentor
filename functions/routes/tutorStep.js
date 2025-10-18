@@ -1153,32 +1153,15 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
       'Return ONLY a JSON object that matches the provided schema. Do not wrap the response in backticks or include commentary.',
     ].join('\n');
 
-    const generationConfig = {
-      responseMimeType: 'application/json',
-      maxOutputTokens: 400,
-      candidateCount: 1,
-      responseSchema: {
-        type: 'object',
-        properties: {
-          verdict: {
-            type: 'string',
-            enum: ['correct', 'partially_correct', 'incorrect'],
-          },
-          feedback: { type: 'string' },
-        },
-        required: ['verdict', 'feedback'],
-      },
-    };
-
     const result = await runWithRetry(() =>
       model.generateContent({
         contents: [{ role: 'user', parts: [{ text: gradingPrompt }] }],
-        generationConfig,
       }),
     );
 
     const raw = result?.response?.text?.() ?? '';
     const parsed = tryParseStrictJson(raw);
+
     if (parsed && typeof parsed.verdict === 'string' && typeof parsed.feedback === 'string') {
       return parsed;
     }
