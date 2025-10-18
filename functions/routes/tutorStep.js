@@ -833,7 +833,6 @@ async function generateFallbackTeachQA({ title, body }) {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: 400,
-          responseMimeType: 'application/json',
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
@@ -1158,7 +1157,6 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
         contents: [{ role: 'user', parts: [{ text: gradingPrompt }] }],
         generationConfig: {
           maxOutputTokens: 400,
-          responseMimeType: 'application/json',
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
