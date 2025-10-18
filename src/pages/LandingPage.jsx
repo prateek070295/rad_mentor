@@ -167,7 +167,7 @@ const Roadmap = () => (
       <ol className="mt-8 space-y-6">
         {[
           { label: "Now", text: "Radiology Theory Exam: Our platform is currently optimized to help you ace the Radiology Theory exam." },
-          { label: "Next", text: "MD Theory Exams: We are actively developing modules and plan templates for MD exams, starting with MUHS and expanding to other major universities." },
+          { label: "Next", text: "Practical Exams: Build OSCE-style case checklists, viva prompts, and hands-on skills tracking to stay ready for practical assessments." },
           { label: "Future", text: "More Specialties & Exams: Our vision is to bring smart planning and AI learning to every postgraduate medical student in India." },
         ].map((i, idx) => (
           <li key={idx} className="relative pl-10">
@@ -337,6 +337,8 @@ export default function LandingPage() {
     </div>
   );
 }
+
+
 
 
 
