@@ -5,11 +5,32 @@ import { getGenAI, runWithRetry } from "../helpers.js";
 
 const router = express.Router();
 
+const PHASES = Object.freeze({
+  INIT: 'INIT',
+  INTRO: 'INTRO',
+  TEACH: 'TEACH',
+  SOCRATIC_EVAL: 'SOCRATIC_EVAL',
+  CHECKPOINT: 'CHECKPOINT',
+  EVAL: 'EVAL',
+  FEEDBACK: 'FEEDBACK',
+  ADVANCE: 'ADVANCE',
+  SUMMARY: 'SUMMARY',
+  COMPLETE: 'COMPLETE',
+});
+
+const EVENT_TYPES = Object.freeze({
+  START: 'START',
+  USER_ANSWER: 'USER_ANSWER',
+  GRADE_RESULT: 'GRADE_RESULT',
+});
+
+const MAX_MESSAGE_HISTORY = 50;
+
 // --- 1. Initial State Definition ---
 const INITIAL_STATE = {
   sectionIndex: 0,
   checkpointIndex: 0,
-  phase: 'INIT',
+  phase: PHASES.INIT,
   mastery: {},
   history: [],
   lastTeachAnswer: "",
@@ -76,7 +97,28 @@ const sanitizeUiForFirestore = (ui) => {
     else delete safe.tables;
   }
   if (Array.isArray(safe.options)) {
-    safe.options = safe.options.map((option) => toStringSafe(option));
+    safe.options = safe.options
+      .map((option) => {
+        if (option == null) return null;
+        if (typeof option === "string") return option;
+        if (typeof option === "number" || typeof option === "boolean") {
+          return String(option);
+        }
+        if (Array.isArray(option)) {
+          return option.map((value) => toStringSafe(value));
+        }
+        if (typeof option === "object") {
+          const normalized = {};
+          Object.entries(option).forEach(([key, value]) => {
+            if (value == null) return;
+            normalized[key] =
+              typeof value === "string" ? value : toStringSafe(value);
+          });
+          return normalized;
+        }
+        return toStringSafe(option);
+      })
+      .filter((entry) => entry != null);
   }
   if (Array.isArray(safe.key_points)) {
     safe.key_points = safe.key_points.map((point) => toStringSafe(point));
@@ -166,32 +208,34 @@ const DEFAULT_TRANSITION_LINE = "We'll build on this insight in the next checkpo
 const reducer = (state, event) => {
   console.log(`Reducer: In phase ${state.phase}, received event ${event.type}`);
   switch (state.phase) {
-    case 'INIT':
-      if (event.type === 'START') return { ...state, phase: 'INTRO' };
+    case PHASES.INIT:
+      if (event.type === EVENT_TYPES.START) return { ...state, phase: PHASES.INTRO };
       break;
-    case 'INTRO':
-      if (event.type === 'USER_ANSWER') return { ...state, phase: 'TEACH' };
+    case PHASES.INTRO:
+      if (event.type === EVENT_TYPES.USER_ANSWER) return { ...state, phase: PHASES.TEACH };
       break;
-    case 'TEACH':
-      if (event.type === 'USER_ANSWER') return { ...state, phase: 'SOCRATIC_EVAL' };
+    case PHASES.TEACH:
+      if (event.type === EVENT_TYPES.USER_ANSWER)
+        return { ...state, phase: PHASES.SOCRATIC_EVAL };
       break;
-    case 'SOCRATIC_EVAL':
-      if (event.type === 'USER_ANSWER') return { ...state, phase: 'CHECKPOINT' };
+    case PHASES.SOCRATIC_EVAL:
+      if (event.type === EVENT_TYPES.USER_ANSWER)
+        return { ...state, phase: PHASES.CHECKPOINT };
       break;
-    case 'CHECKPOINT':
-      if (event.type === 'USER_ANSWER') return { ...state, phase: 'EVAL' };
+    case PHASES.CHECKPOINT:
+      if (event.type === EVENT_TYPES.USER_ANSWER) return { ...state, phase: PHASES.EVAL };
       break;
-    case 'EVAL':
-      if (event.type === 'GRADE_RESULT') return { ...state, phase: 'FEEDBACK' };
+    case PHASES.EVAL:
+      if (event.type === EVENT_TYPES.GRADE_RESULT) return { ...state, phase: PHASES.FEEDBACK };
       break;
-    case 'FEEDBACK':
-      if (event.type === 'USER_ANSWER') return { ...state, phase: 'ADVANCE' };
+    case PHASES.FEEDBACK:
+      if (event.type === EVENT_TYPES.USER_ANSWER) return { ...state, phase: PHASES.ADVANCE };
       break;
-    case 'SUMMARY':
-      if (event.type === 'USER_ANSWER') return { ...state, phase: 'COMPLETE' };
+    case PHASES.SUMMARY:
+      if (event.type === EVENT_TYPES.USER_ANSWER) return { ...state, phase: PHASES.COMPLETE };
       break;
-    case 'ADVANCE':
-    case 'COMPLETE':
+    case PHASES.ADVANCE:
+    case PHASES.COMPLETE:
       return state;
     default:
       return state;
@@ -253,6 +297,7 @@ Offer your expert evaluation now.`;
 // --- 4. The API Endpoint ---
 router.post("/", express.json(), async (req, res) => {
   const db = getFirestore();
+  const SESSION_CONFLICT = "SESSION_CONFLICT";
   let userId;
   try {
     const authHeader = req.headers.authorization;
@@ -264,9 +309,9 @@ router.post("/", express.json(), async (req, res) => {
     return res.status(401).json({ error: 'Authentication required.' });
   }
   
-  const { userInput, topicId, organ, userName } = req.body;
-  if (!topicId || !organ) {
-    return res.status(400).json({ error: 'topicId and organ are required.' });
+  const { userInput, topicId, organ: chapterId, userName, resumeLast = false } = req.body || {};
+  if (!topicId || !chapterId) {
+    return res.status(400).json({ error: 'topicId and chapterId are required.' });
   }
 
   try {
@@ -277,20 +322,26 @@ router.post("/", express.json(), async (req, res) => {
     const sessionSnap = await sessionRef.get();
     let currentState;
     let event;
+    const sessionVersion = Number(sessionSnap.exists ? sessionSnap.data()?.sessionStateVersion ?? 0 : 0);
 
     if (!sessionSnap.exists) {
-      currentState = { ...INITIAL_STATE, topicId, organ, userName: userName || "Dr." };
-      event = { type: 'START', userInput };
+      currentState = { ...INITIAL_STATE, topicId, organ: chapterId, userName: userName || "Dr." };
+      event = { type: EVENT_TYPES.START, userInput };
     } else {
       currentState = sessionSnap.data().sessionState;
+      if (!currentState?.organ && chapterId) {
+        currentState = { ...currentState, organ: chapterId };
+      }
       if (userInput === undefined) {
-        const lastMessageSnap = await messagesRef.orderBy('timestamp', 'desc').limit(1).get();
-        if (!lastMessageSnap.empty && lastMessageSnap.docs[0].data().role === 'assistant') {
-          return res.json({ ui: lastMessageSnap.docs[0].data().ui });
+        if (resumeLast === true) {
+          const lastMessageSnap = await messagesRef.orderBy('timestamp', 'desc').limit(1).get();
+          if (!lastMessageSnap.empty && lastMessageSnap.docs[0].data().role === 'assistant') {
+            return res.json({ ui: lastMessageSnap.docs[0].data().ui });
+          }
         }
-        event = { type: 'START', userInput: undefined };
+        event = { type: EVENT_TYPES.START, userInput: undefined };
       } else {
-        event = { type: 'USER_ANSWER', userInput };
+        event = { type: EVENT_TYPES.USER_ANSWER, userInput };
       }
     }
     
@@ -298,18 +349,31 @@ router.post("/", express.json(), async (req, res) => {
     let uiResponse = {};
     const nodeRef = db.collection('sections').doc(nextState.organ).collection('nodes').doc(nextState.topicId);
     
-    if (nextState.phase === 'EVAL') {
-        const sectionsRef = nodeRef.collection('contentSections');
-        const sectionQuery = sectionsRef.where('order', '==', currentState.sectionIndex + 1).limit(1);
-        const sectionSnapshot = await sectionQuery.get();
-        if (sectionSnapshot.empty) {
-            nextState = { ...nextState, phase: 'SUMMARY' };
+    const sectionsRef = nodeRef.collection('contentSections');
+    const sectionDocCache = new Map();
+    const getSectionDoc = async (order) =>
+      getSectionDocByOrder(sectionsRef, sectionDocCache, order);
+    const nodeSnapshotCache = { snapshot: null };
+    const getNodeSnapshot = async () => {
+      if (!nodeSnapshotCache.snapshot) {
+        nodeSnapshotCache.snapshot = await nodeRef.get();
+      }
+      return nodeSnapshotCache.snapshot;
+    };
+    const getNodeData = async () => {
+      const snap = await getNodeSnapshot();
+      return snap.data() || {};
+    };
+
+    if (nextState.phase === PHASES.EVAL) {
+        const sectionDoc = await getSectionDoc(currentState.sectionIndex + 1);
+        if (!sectionDoc) {
+            nextState = { ...nextState, phase: PHASES.SUMMARY };
         } else {
-            const sectionDoc = sectionSnapshot.docs[0];
             const checkpointsRef = sectionDoc.ref.collection('checkpoints');
             const allCheckpointsSnapshot = await checkpointsRef.orderBy('bloom_level').get();
             if (allCheckpointsSnapshot.empty || currentState.checkpointIndex >= allCheckpointsSnapshot.size) {
-                nextState = { ...nextState, phase: 'SUMMARY' };
+                nextState = { ...nextState, phase: PHASES.SUMMARY };
             } else {
                 const checkpointData = allCheckpointsSnapshot.docs[currentState.checkpointIndex].data();
                 let isCorrect = false;
@@ -318,234 +382,69 @@ router.post("/", express.json(), async (req, res) => {
                     isCorrect = checkpointData.correct_index === userInput.selectedIndex;
                     feedbackMessage = `**Rationale:** ${checkpointData.rationale_md}`;
                 } else if (checkpointData.type === 'short') {
-                    const genAI = getGenAI();
-                    const model = genAI.getGenerativeModel(
-                      { model: "models/gemini-2.0-flash-lite-001" },
-                      { apiVersion: "v1" }
-                    );
-                    const gradingPrompt = `You are an expert radiology proctor. CONTEXT: - Question: "${checkpointData.question_md}" - Key Concepts: "${checkpointData.rationale_md}" - Student's Answer: "${userInput}" TASK: 1. Evaluate the student's answer. 2. Determine a 'verdict': "correct", "partially_correct", or "incorrect". 3. Write a concise 'feedback' message. If 'partially_correct', praise the correct parts and explain what was missing. 4. **IMPORTANT**: Do NOT use "Key Concepts". Your response MUST be a valid JSON object: { "verdict": "...", "feedback": "..." }`;
-                    const result = await runWithRetry(() => model.generateContent(gradingPrompt));
-                    const gradingResponse = JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-                    isCorrect = gradingResponse.verdict === 'correct' || gradingResponse.verdict === 'partially_correct';
-                    feedbackMessage = gradingResponse.feedback;
+                    const gradingResult = await gradeShortCheckpointAnswer(checkpointData, userInput);
+                    isCorrect =
+                      gradingResult.verdict === 'correct' ||
+                      gradingResult.verdict === 'partially_correct';
+                    feedbackMessage = gradingResult.feedback;
                 }
                 uiResponse = { type: 'FEEDBACK_CARD', title: isCorrect ? 'Correct!' : 'Feedback', message: feedbackMessage, isCorrect };
-                nextState = reducer(nextState, { type: 'GRADE_RESULT' });
+                nextState = reducer(nextState, { type: EVENT_TYPES.GRADE_RESULT });
             }
         }
     } 
-    else if (nextState.phase === 'ADVANCE') {
-        const sectionsRef = nodeRef.collection('contentSections');
-        const currentSectionQuery = sectionsRef.where('order', '==', currentState.sectionIndex + 1).limit(1);
-        const currentSectionSnapshot = await currentSectionQuery.get();
-        if (currentSectionSnapshot.empty) {
-            nextState = { ...nextState, phase: 'SUMMARY' };
+    else if (nextState.phase === PHASES.ADVANCE) {
+        const currentSectionDoc = await getSectionDoc(currentState.sectionIndex + 1);
+        if (!currentSectionDoc) {
+            nextState = { ...nextState, phase: PHASES.SUMMARY };
         } else {
-            const checkpointsRef = currentSectionSnapshot.docs[0].ref.collection('checkpoints');
+            const checkpointsRef = currentSectionDoc.ref.collection('checkpoints');
             const allCheckpointsSnapshot = await checkpointsRef.get();
             const totalCheckpoints = allCheckpointsSnapshot.size;
             if (currentState.checkpointIndex + 1 < totalCheckpoints) {
-                nextState = { ...nextState, checkpointIndex: currentState.checkpointIndex + 1, phase: 'CHECKPOINT' };
+                nextState = { ...nextState, checkpointIndex: currentState.checkpointIndex + 1, phase: PHASES.CHECKPOINT };
             } else {
-                const nextSectionQuery = sectionsRef.where('order', '==', currentState.sectionIndex + 2).limit(1);
-                const nextSectionSnapshot = await nextSectionQuery.get();
-                if (!nextSectionSnapshot.empty) {
-                    nextState = { ...nextState, sectionIndex: currentState.sectionIndex + 1, checkpointIndex: 0, phase: 'TEACH' };
-                } else {
-                    nextState = { ...nextState, phase: 'SUMMARY' };
-                }
+                 const nextSectionDoc = await getSectionDoc(currentState.sectionIndex + 2);
+                 if (nextSectionDoc) {
+                     nextState = { ...nextState, sectionIndex: currentState.sectionIndex + 1, checkpointIndex: 0, phase: PHASES.TEACH };
+                 } else {
+                     nextState = { ...nextState, phase: PHASES.SUMMARY };
+                 }
             }
         }
     }
     
-    const sectionsRef = nodeRef.collection('contentSections');
-    switch(nextState.phase) {
-      case 'INTRO': {
-        const nodeSnap = await nodeRef.get();
-        const nodeData = nodeSnap.data();
-        const objectivesText = (nodeData.objectives || []).map(obj => `- ${obj}`).join('\n');
-        const message = `Hello ${nextState.userName}, welcome to the topic on "${nodeData.name}".\n\nHere are our learning objectives:\n${objectivesText}\n\nReady to begin?`;
-        uiResponse = { type: 'OBJECTIVES_CARD', title: `Topic Objectives`, message };
-        break;
-      }
-      case 'TEACH': {
-        const sectionQuery = sectionsRef.where('order', '==', nextState.sectionIndex + 1).limit(1);
-        const sectionSnapshot = await sectionQuery.get();
-        if (sectionSnapshot.empty) {
-            nextState.phase = 'SUMMARY';
-            // Fall through to SUMMARY case if no more sections
-        } else {
-            const sectionData = sectionSnapshot.docs[0].data();
-            const cleanedBody = stripTablesFromText(sectionData.body_md || "");
-            const genAI = getGenAI();
-            const model = genAI.getGenerativeModel(
-              { model: "models/gemini-2.0-flash-lite-001" },
-              { apiVersion: "v1" }
-            );
-            const prompt = socraticTeachPrompt(sectionData.title, cleanedBody);
-            const result = await runWithRetry(() => model.generateContent(prompt));
-            const { cleaned: cleanedMessage, answer: expectedAnswer } = extractExpectedAnswer(result.response.text());
-            let message = cleanedMessage;
-            if (!message.trim().endsWith('?')) {
-                message = `${cleanedBody}\n\n**Based on this, what are your thoughts?**`;
-            }
-            const teachQuestion =
-              message
-                .split('\n')
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .reverse()
-                .find((line) => line.endsWith('?')) || '';
-            const normalizedTables = sanitizeTablesForUi(sectionData.tables);
-            uiResponse = {
-              type: 'TEACH_CARD',
-              title: sectionData.title,
-              message,
-              assets: { images: sectionData.images || [], cases: sectionData.cases || [] },
-              tables: normalizedTables,
-            };
-            nextState = {
-              ...nextState,
-              lastTeachAnswer: expectedAnswer || "",
-              lastTeachQuestion: teachQuestion,
-            };
-            break;
-        }
-      }
-      case 'SOCRATIC_EVAL': {
-          const sectionQuery = sectionsRef.where('order', '==', currentState.sectionIndex + 1).limit(1);
-          const sectionSnapshot = await sectionQuery.get();
-          if (sectionSnapshot.empty) {
-              nextState = { ...nextState, phase: 'SUMMARY' };
-          } else {
-              const sectionData = sectionSnapshot.docs[0].data();
-              const genAI = getGenAI();
-              const model = genAI.getGenerativeModel(
-                { model: "models/gemini-2.0-flash-lite-001" },
-                { apiVersion: "v1" }
-              );
-              const prompt = socraticEvaluationPrompt(
-                stripTablesFromText(sectionData.body_md || ""),
-                userInput,
-                currentState.lastTeachAnswer || "",
-                currentState.lastTeachQuestion || "",
-              );
-              const result = await runWithRetry(() => model.generateContent(prompt));
-              const { feedback, transition } = parseFeedbackWithTransition(result.response.text());
-              const transitionLine = transition || DEFAULT_TRANSITION_LINE;
-              const combinedMessage = feedback
-                ? `${feedback}\n\n${transitionLine}`
-                : transitionLine;
-              uiResponse = {
-                type: 'TRANSITION_CARD',
-                title: "Let's review your thoughts",
-                message: combinedMessage,
-              };
-              nextState = {
-                ...nextState,
-                lastTeachAnswer: "",
-                lastTeachQuestion: "",
-              };
-          }
-          break;
-      }
-      case 'CHECKPOINT': {
-          const sectionQuery = sectionsRef.where('order', '==', nextState.sectionIndex + 1).limit(1);
-          const sectionSnapshot = await sectionQuery.get();
-          if (sectionSnapshot.empty) {
-                nextState = { ...nextState, phase: 'SUMMARY' };
-          } else {
-              const sectionDoc = sectionSnapshot.docs[0];
-              const checkpointsRef = sectionDoc.ref.collection('checkpoints');
-              const allCheckpointsSnapshot = await checkpointsRef.orderBy('bloom_level').get();
-              if (allCheckpointsSnapshot.empty || nextState.checkpointIndex >= allCheckpointsSnapshot.size) {
-                    nextState = { ...nextState, phase: 'SUMMARY' };
-              } else {
-                  const checkpointData = allCheckpointsSnapshot.docs[nextState.checkpointIndex].data();
-                  uiResponse = {
-                      type: checkpointData.type === 'mcq' ? 'MCQ_CHECKPOINT' : 'SHORT_CHECKPOINT',
-                      title: `Checkpoint for: ${sectionDoc.data().title}`,
-                      message: checkpointData.question_md,
-                      options: checkpointData.options || null,
-                  };
-              }
-          }
-          break;
-      }
-      case 'FEEDBACK': {
-        if (!uiResponse.type) {
-          uiResponse = { type: 'TRANSITION_CARD', title: "Moving On", message: "Let's proceed to the next part." };
-        }
-        break;
-      }
-      case 'SUMMARY': {
-          if (!uiResponse.type) {
-              const nodeSnap = await nodeRef.get();
-              const nodeData = nodeSnap.data();
-              const keyPointsText = (nodeData.key_points || []).map(pt => `- ${pt}`).join('\n');
-              uiResponse = { type: 'SUMMARY_CARD', title: "Topic Summary", message: `Great work! Here are the key points from this topic:\n${keyPointsText}`, isTopicComplete: true };
-          }
-          break;
-      }
-      case 'COMPLETE': {
-          uiResponse = { type: 'TOPIC_COMPLETE', title: "Topic Complete!", message: "Congratulations! You've successfully finished this topic." };
-          break;
-      }
-      default:
-        if (!uiResponse.type) {
-          uiResponse = { type: 'ERROR', message: `Reached an unknown state: ${nextState.phase}` };
-        }
-        break;
-    }
-
-    if ((nextState.phase === 'SUMMARY' || nextState.phase === 'CHECKPOINT' || nextState.phase === 'TEACH') && !uiResponse.type) {
-        // This is a consolidated fallback for generating the final card if a phase transition results in no UI
-        const nodeSnap = await nodeRef.get();
-        const nodeData = nodeSnap.data();
-        const keyPointsText = (nodeData.key_points || []).map(pt => `- ${pt}`).join('\n');
-        uiResponse = { type: 'SUMMARY_CARD', title: "Topic Summary", message: `Great work! Here are the key points from this topic:\n${keyPointsText}`, isTopicComplete: true };
-    }
-
-    const batch = db.batch();
-    
-    if (userInput !== undefined && userInput !== 'continue') {
-        const userMessageRef = messagesRef.doc();
-        batch.set(userMessageRef, {
-            role: 'user',
-            userInput: userInput,
-            timestamp: FieldValue.serverTimestamp()
-        });
-    }
-    const assistantMessageRef = messagesRef.doc();
-    const sanitizedUi = sanitizeUiForFirestore(uiResponse);
-    batch.set(assistantMessageRef, {
-      role: 'assistant',
-      ui: sanitizedUi,
-      timestamp: FieldValue.serverTimestamp(),
+    const phaseResult = await resolveTutorPhase({
+      currentState,
+      nextState,
+      userInput,
+      getSectionDoc,
+      getNodeData,
     });
+    nextState = phaseResult.nextState;
+    uiResponse = phaseResult.uiResponse;
 
-    const shouldSaveFullProgress = nextState.phase === 'FEEDBACK' || nextState.phase === 'SUMMARY' || nextState.phase === 'COMPLETE';
+    const shouldSaveFullProgress = nextState.phase === PHASES.FEEDBACK || nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE;
+    let progressPayload = null;
 
     if (shouldSaveFullProgress) {
         console.log(`Checkpoint reached. Saving full progress at phase: ${nextState.phase}`);
-        const nodeSnap = await nodeRef.get();
-        const topicData = nodeSnap.data() || {};
+        const topicData = await getNodeData();
         const topicTitle = topicData.name || 'Untitled Topic';
         const chapterId = nextState.organ;
 
         let calculatedPercent = 0;
         try {
-            const sectionsSnapshot = await sectionsRef.orderBy('order').get();
-            const orderedSections = sectionsSnapshot.docs
-              .map((doc) => ({
-                order: Number(doc.data()?.order ?? 0),
-                ref: doc.ref,
-              }))
-              .sort((a, b) => a.order - b.order);
+            const orderedSectionDocs = await loadAllSectionDocs(sectionsRef, sectionDocCache);
+            const orderedSections = orderedSectionDocs.map((doc) => ({
+              order: Number(doc.data()?.order ?? 0),
+              ref: doc.ref,
+              data: doc.data(),
+            }));
 
             const totalSections = orderedSections.length || 1;
 
-            if (nextState.phase === 'SUMMARY' || nextState.phase === 'COMPLETE') {
+            if (nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE) {
               calculatedPercent = 100;
             } else {
               const completedSections = Math.max(0, Math.min(nextState.sectionIndex, totalSections));
@@ -556,14 +455,23 @@ router.post("/", express.json(), async (req, res) => {
 
               let sectionFraction = 0;
               if (currentSectionEntry) {
-                const checkpointsSnapshot = await currentSectionEntry.ref.collection('checkpoints').get();
-                const totalCheckpoints = checkpointsSnapshot.size || 1;
+                let totalCheckpoints = Number(
+                  currentSectionEntry.data?.checkpointCount ??
+                    currentSectionEntry.data?.checkpoint_count ??
+                    NaN,
+                );
+
+                if (!Number.isFinite(totalCheckpoints) || totalCheckpoints <= 0) {
+                  const checkpointsSnapshot = await currentSectionEntry.ref.collection('checkpoints').get();
+                  totalCheckpoints = checkpointsSnapshot.size || 1;
+                }
+
                 const baseCompleted = Math.min(nextState.checkpointIndex, totalCheckpoints);
                 const adjustedCompleted =
-                  nextState.phase === 'FEEDBACK'
+                  nextState.phase === PHASES.FEEDBACK
                     ? Math.min(baseCompleted + 1, totalCheckpoints)
                     : Math.min(baseCompleted, totalCheckpoints);
-                sectionFraction = adjustedCompleted / totalCheckpoints;
+                sectionFraction = totalCheckpoints > 0 ? adjustedCompleted / totalCheckpoints : 0;
               }
 
               calculatedPercent = ((completedSections + sectionFraction) / totalSections) * 100;
@@ -571,25 +479,79 @@ router.post("/", express.json(), async (req, res) => {
             }
         } catch (progressError) {
             console.error("Failed to compute topic progress", progressError);
-            calculatedPercent = nextState.phase === 'SUMMARY' || nextState.phase === 'COMPLETE' ? 100 : 0;
+            calculatedPercent = nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE ? 100 : 0;
         }
         
-        const progressData = {
-            status: (nextState.phase === 'SUMMARY' || nextState.phase === 'COMPLETE') ? 'completed' : 'in-progress',
+        progressPayload = {
+            status: (nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE) ? 'completed' : 'in-progress',
             updatedAt: FieldValue.serverTimestamp(),
             percentComplete: calculatedPercent,
             topicTitle,
             chapterId
         };
-        batch.set(progressRef, progressData, { merge: true });
     }
-    
-    batch.set(sessionRef, { 
-        sessionState: nextState,
-        updatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
 
-    await batch.commit();
+    const sanitizedUi = sanitizeUiForFirestore(uiResponse);
+    const assistantMessageRef = messagesRef.doc();
+    const userMessageRef =
+      userInput !== undefined && userInput !== "continue" ? messagesRef.doc() : null;
+
+    try {
+      await db.runTransaction(async (tx) => {
+        const freshSessionSnap = await tx.get(sessionRef);
+        const freshVersion = Number(
+          freshSessionSnap.exists ? freshSessionSnap.data()?.sessionStateVersion ?? 0 : 0
+        );
+        if (freshVersion !== sessionVersion) {
+          throw new Error(SESSION_CONFLICT);
+        }
+
+        if (userMessageRef) {
+          tx.set(userMessageRef, {
+            role: "user",
+            userInput,
+            timestamp: FieldValue.serverTimestamp(),
+          });
+        }
+
+        tx.set(
+          assistantMessageRef,
+          {
+            role: "assistant",
+            ui: sanitizedUi,
+            timestamp: FieldValue.serverTimestamp(),
+          },
+        );
+
+        if (progressPayload) {
+          tx.set(progressRef, progressPayload, { merge: true });
+        }
+
+        tx.set(
+          sessionRef,
+          {
+            sessionState: nextState,
+            sessionStateVersion: sessionVersion + 1,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      });
+    } catch (txnError) {
+      if (txnError?.message === SESSION_CONFLICT) {
+        return res.status(409).json({
+          error: "Tutor session updated elsewhere. Please retry.",
+          ui: {
+            type: "ERROR",
+            message: "The tutor session was updated in another window. Please retry.",
+          },
+        });
+      }
+      throw txnError;
+    }
+
+    await trimMessageHistory(messagesRef, MAX_MESSAGE_HISTORY);
+
     res.json({ ui: sanitizedUi });
 
   } catch (error) {
@@ -627,3 +589,335 @@ router.post("/", express.json(), async (req, res) => {
 export default router;
 
 
+async function getSectionDocByOrder(sectionsRef, cache, order) {
+  const key = String(order);
+  if (cache.has(key)) {
+    return cache.get(key);
+  }
+  const snapshot = await sectionsRef.where('order', '==', order).limit(1).get();
+  if (snapshot.empty) {
+    cache.set(key, null);
+    return null;
+  }
+  const doc = snapshot.docs[0];
+  cache.set(key, doc);
+  return doc;
+}
+
+async function loadAllSectionDocs(sectionsRef, cache) {
+  if (cache.has('__all__')) {
+    return cache.get('__all__');
+  }
+  const snapshot = await sectionsRef.orderBy('order').get();
+  const docs = snapshot.docs;
+  docs.forEach((doc) => {
+    const key = String(Number(doc.data()?.order ?? 0));
+    if (!cache.has(key)) {
+      cache.set(key, doc);
+    }
+  });
+  cache.set('__all__', docs);
+  return docs;
+}
+
+async function trimMessageHistory(messagesRef, maxCount = 50) {
+  try {
+    if (maxCount <= 0) return;
+    const countSnap = await messagesRef.count().get();
+    const total = countSnap.data()?.count ?? 0;
+    if (total <= maxCount) return;
+
+    const excess = total - maxCount;
+    const staleSnap = await messagesRef.orderBy('timestamp', 'asc').limit(excess).get();
+    if (staleSnap.empty) return;
+
+    const batch = messagesRef.firestore.batch();
+    staleSnap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  } catch (error) {
+    console.error('Failed to trim tutor message history', error);
+  }
+}
+
+async function resolveTutorPhase({
+  currentState,
+  nextState,
+  userInput,
+  getSectionDoc,
+  getNodeData,
+}) {
+  switch (nextState.phase) {
+    case PHASES.INTRO:
+      return introPhase(nextState, getNodeData);
+    case PHASES.TEACH:
+      return teachPhase(nextState, getSectionDoc, getNodeData);
+    case PHASES.SOCRATIC_EVAL:
+      return socraticEvalPhase(currentState, nextState, userInput, getSectionDoc, getNodeData);
+    case PHASES.CHECKPOINT:
+      return checkpointPhase(nextState, getSectionDoc, getNodeData);
+    case PHASES.FEEDBACK:
+      return feedbackPhase(nextState);
+    case PHASES.SUMMARY:
+      return summaryPhase(nextState, getNodeData);
+    case PHASES.COMPLETE:
+      return completePhase(nextState);
+    default:
+      return {
+        nextState,
+        uiResponse: {
+          type: 'ERROR',
+          message: `Reached an unknown state: ${nextState.phase}`,
+        },
+      };
+  }
+}
+
+async function introPhase(nextState, getNodeData) {
+  const nodeData = await getNodeData();
+  const objectivesText = (nodeData.objectives || []).map((obj) => `- ${obj}`).join('\n');
+  const message = `Hello ${nextState.userName}, welcome to the topic on "${nodeData.name}".\n\nHere are our learning objectives:\n${objectivesText}\n\nReady to begin?`;
+  return {
+    nextState,
+    uiResponse: { type: 'OBJECTIVES_CARD', title: 'Topic Objectives', message },
+  };
+}
+
+async function teachPhase(nextState, getSectionDoc, getNodeData) {
+  const sectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+  if (!sectionDoc) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+  const sectionData = sectionDoc.data();
+  const cleanedBody = stripTablesFromText(sectionData.body_md || '');
+  const genAI = getGenAI();
+  const model = genAI.getGenerativeModel(
+    { model: 'models/gemini-2.0-flash-lite-001' },
+    { apiVersion: 'v1' },
+  );
+  const prompt = socraticTeachPrompt(sectionData.title, cleanedBody);
+  const result = await runWithRetry(() => model.generateContent(prompt));
+  const { cleaned: cleanedMessage, answer: expectedAnswer } = extractExpectedAnswer(
+    result.response.text(),
+  );
+  let message = cleanedMessage;
+  if (!message.trim().endsWith('?')) {
+    message = `${cleanedBody}\n\n**Based on this, what are your thoughts?**`;
+  }
+  const teachQuestion = message
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reverse()
+    .find((line) => line.endsWith('?')) || '';
+  const normalizedTables = sanitizeTablesForUi(sectionData.tables);
+  return {
+    nextState: {
+      ...nextState,
+      lastTeachAnswer: expectedAnswer || '',
+      lastTeachQuestion: teachQuestion,
+    },
+    uiResponse: {
+      type: 'TEACH_CARD',
+      title: sectionData.title,
+      message,
+      assets: { images: sectionData.images || [], cases: sectionData.cases || [] },
+      tables: normalizedTables,
+    },
+  };
+}
+
+async function socraticEvalPhase(
+  currentState,
+  nextState,
+  userInput,
+  getSectionDoc,
+  getNodeData,
+) {
+  if (!currentState.lastTeachAnswer || !currentState.lastTeachQuestion) {
+    return {
+      nextState: {
+        ...nextState,
+        phase: PHASES.CHECKPOINT,
+        lastTeachAnswer: '',
+        lastTeachQuestion: '',
+      },
+      uiResponse: {
+        type: 'TRANSITION_CARD',
+        title: 'Let’s keep going',
+        message: "We'll move ahead to the next checkpoint.",
+      },
+    };
+  }
+
+  const sectionDoc = await getSectionDoc(currentState.sectionIndex + 1);
+  if (!sectionDoc) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+  const sectionData = sectionDoc.data();
+  const genAI = getGenAI();
+  const model = genAI.getGenerativeModel(
+    { model: 'models/gemini-2.0-flash-lite-001' },
+    { apiVersion: 'v1' },
+  );
+  const prompt = socraticEvaluationPrompt(
+    stripTablesFromText(sectionData.body_md || ''),
+    userInput,
+    currentState.lastTeachAnswer || '',
+    currentState.lastTeachQuestion || '',
+  );
+  const result = await runWithRetry(() => model.generateContent(prompt));
+  const { feedback, transition } = parseFeedbackWithTransition(result.response.text());
+  const transitionLine = transition || DEFAULT_TRANSITION_LINE;
+  const combinedMessage = feedback ? `${feedback}\n\n${transitionLine}` : transitionLine;
+  return {
+    nextState: {
+      ...nextState,
+      lastTeachAnswer: '',
+      lastTeachQuestion: '',
+    },
+    uiResponse: {
+      type: 'TRANSITION_CARD',
+      title: "Let's review your thoughts",
+      message: combinedMessage,
+    },
+  };
+}
+
+async function checkpointPhase(nextState, getSectionDoc, getNodeData) {
+  const sectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+  if (!sectionDoc) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+  const checkpointsRef = sectionDoc.ref.collection('checkpoints');
+  const allCheckpointsSnapshot = await checkpointsRef.orderBy('bloom_level').get();
+  if (allCheckpointsSnapshot.empty || nextState.checkpointIndex >= allCheckpointsSnapshot.size) {
+    return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
+  }
+  const checkpointData = allCheckpointsSnapshot.docs[nextState.checkpointIndex].data();
+  return {
+    nextState,
+    uiResponse: {
+      type: checkpointData.type === 'mcq' ? 'MCQ_CHECKPOINT' : 'SHORT_CHECKPOINT',
+      title: `Checkpoint for: ${sectionDoc.data().title}`,
+      message: checkpointData.question_md,
+      options: checkpointData.options || null,
+    },
+  };
+}
+
+function feedbackPhase(nextState) {
+  return {
+    nextState,
+    uiResponse: {
+      type: 'TRANSITION_CARD',
+      title: 'Moving On',
+      message: "Let's proceed to the next part.",
+    },
+  };
+}
+
+async function summaryPhase(nextState, getNodeData) {
+  const nodeData = await getNodeData();
+  const keyPointsText = (nodeData.key_points || []).map((pt) => `- ${pt}`).join('\n');
+  return {
+    nextState,
+    uiResponse: {
+      type: 'SUMMARY_CARD',
+      title: 'Topic Summary',
+      message: `Great work! Here are the key points from this topic:\n${keyPointsText}`,
+      isTopicComplete: true,
+      autoAdvance: true,
+      nextphase: PHASES.COMPLETE,
+    },
+  };
+}
+
+function completePhase(nextState) {
+  return {
+    nextState,
+    uiResponse: {
+      type: 'TOPIC_COMPLETE',
+      title: 'Topic Complete!',
+      message: "Congratulations! You've successfully finished this topic.",
+    },
+  };
+}
+
+async function gradeShortCheckpointAnswer(checkpointData, userInput) {
+  const fallback = {
+    verdict: 'incorrect',
+    feedback:
+      "I couldn't automatically evaluate that response. Review the rationale above and try again.",
+  };
+
+  try {
+    const genAI = getGenAI();
+    const model = genAI.getGenerativeModel(
+      { model: 'models/gemini-2.0-flash-lite-001' },
+      { apiVersion: 'v1' },
+    );
+
+    const gradingPrompt = [
+      'You are an expert radiology proctor.',
+      `Question: "${checkpointData.question_md}"`,
+      `Key Concepts: "${checkpointData.rationale_md}"`,
+      `Student's Answer: "${typeof userInput === 'string' ? userInput : JSON.stringify(userInput)}"`,
+      'Tasks:',
+      '1. Evaluate the student answer.',
+      '2. Determine a verdict: "correct", "partially_correct", or "incorrect".',
+      '3. Provide concise feedback.',
+    ].join('\n');
+
+    const generationConfig = {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object',
+        properties: {
+          verdict: {
+            type: 'string',
+            enum: ['correct', 'partially_correct', 'incorrect'],
+          },
+          feedback: { type: 'string' },
+        },
+        required: ['verdict', 'feedback'],
+      },
+    };
+
+    const result = await runWithRetry(() =>
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: gradingPrompt }] }],
+        generationConfig,
+      }),
+    );
+
+    const raw = result?.response?.text?.() ?? '';
+    const parsed = safeJsonParse(raw);
+    if (
+      parsed &&
+      typeof parsed.verdict === 'string' &&
+      typeof parsed.feedback === 'string'
+    ) {
+      return parsed;
+    }
+
+    console.warn('Gemini returned malformed grading payload', raw);
+    return fallback;
+  } catch (error) {
+    console.error('Failed to grade short-answer checkpoint', error);
+    return fallback;
+  }
+}
+
+function safeJsonParse(raw) {
+  if (!raw) return null;
+  const trimmed = raw
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    console.error('JSON parse failed', error, trimmed);
+    return null;
+  }
+}
