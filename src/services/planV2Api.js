@@ -182,6 +182,44 @@ function calculateScheduledMinutes(topicDoc = {}, scheduledDates = {}) {
   return total;
 }
 
+function arraysEqualNumeric(a = [], b = []) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function scheduledMapsEqual(aMap = {}, bMap = {}) {
+  const normalize = (map) => {
+    const entries = [];
+    Object.keys(map || {}).forEach((key) => {
+      const list = map[key];
+      if (!Array.isArray(list) || list.length === 0) return;
+      const normalized = list
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+        .sort((x, y) => x - y);
+      if (normalized.length === 0) return;
+      entries.push([key, normalized]);
+    });
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    return entries;
+  };
+
+  const aEntries = normalize(aMap);
+  const bEntries = normalize(bMap);
+  if (aEntries.length !== bEntries.length) return false;
+  for (let i = 0; i < aEntries.length; i += 1) {
+    const [aKey, aList] = aEntries[i];
+    const [bKey, bList] = bEntries[i];
+    if (aKey !== bKey) return false;
+    if (!arraysEqualNumeric(aList, bList)) return false;
+  }
+  return true;
+}
+
 async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
   if (!uid || iso == null) return;
   if (!Array.isArray(dayAssignments) || !dayAssignments.length) return;
@@ -217,6 +255,7 @@ async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
 
         const scheduledDatesRaw = data.scheduledDates || {};
         const scheduledDates = {};
+        const scheduledBefore = {};
         Object.keys(scheduledDatesRaw).forEach((key) => {
           const list = scheduledDatesRaw[key];
           if (!Array.isArray(list)) return;
@@ -224,7 +263,8 @@ async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
             .map((value) => Number(value))
             .filter((value) => Number.isFinite(value));
           if (cleaned.length) {
-            scheduledDates[key] = cleaned;
+            scheduledDates[key] = cleaned.slice();
+            scheduledBefore[key] = cleaned.slice();
           }
         });
 
@@ -240,13 +280,12 @@ async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
           delete scheduledDates[isoKey];
         }
 
-        const completedSet = new Set(
-          Array.isArray(data.completedSubIdx)
-            ? data.completedSubIdx
-                .map((value) => Number(value))
-                .filter((value) => Number.isFinite(value))
-            : [],
-        );
+        const existingCompleted = Array.isArray(data.completedSubIdx)
+          ? data.completedSubIdx
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value))
+          : [];
+        const completedSet = new Set(existingCompleted);
 
         const subs = Array.isArray(data.subtopics) ? data.subtopics : [];
 
@@ -257,6 +296,9 @@ async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
         info.subIdx.forEach((idx) => completedSet.add(idx));
 
         const completedSubIdx = Array.from(completedSet).sort((a, b) => a - b);
+        const prevCompletedSubIdx = [...existingCompleted].sort(
+          (a, b) => a - b,
+        );
 
         const scheduledMinutes = calculateScheduledMinutes(
           data,
@@ -284,6 +326,43 @@ async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
           queueState = "queued";
         }
 
+        const prevScheduledMinutes = NUM(data.scheduledMinutes, 0);
+        const prevCompletedMinutes = NUM(data.completedMinutes, 0);
+        const prevQueueState = data.queueState || "queued";
+        const prevCompletedAt =
+          typeof data.completedAt === "string" ? data.completedAt : "";
+
+        const scheduledChanged = !scheduledMapsEqual(
+          scheduledBefore,
+          scheduledDates,
+        );
+        const completedIdxChanged = !arraysEqualNumeric(
+          prevCompletedSubIdx,
+          completedSubIdx,
+        );
+        const scheduledMinutesChanged =
+          prevScheduledMinutes !== scheduledMinutes;
+        const completedMinutesChanged =
+          prevCompletedMinutes !== completedMinutes;
+        const queueStateChanged = prevQueueState !== queueState;
+        const shouldClearCompletedAt =
+          queueState !== "done" && !!prevCompletedAt;
+        const shouldSetCompletedAt =
+          queueState === "done" && !prevCompletedAt;
+
+        let shouldUpdate =
+          scheduledChanged ||
+          completedIdxChanged ||
+          scheduledMinutesChanged ||
+          completedMinutesChanged ||
+          queueStateChanged ||
+          shouldClearCompletedAt ||
+          shouldSetCompletedAt;
+
+        if (!shouldUpdate) {
+          return;
+        }
+
         const timestamp = new Date().toISOString();
         const updatePayload = {
           scheduledDates,
@@ -292,7 +371,8 @@ async function finalizeQueueAfterDayCompletion(uid, iso, dayAssignments) {
           completedMinutes,
           queueState,
           updatedAt: timestamp,
-          completedAt: queueState === "done" ? timestamp : "",
+          completedAt:
+            queueState === "done" ? prevCompletedAt || timestamp : "",
         };
 
         tx.update(ref, updatePayload);
@@ -1954,12 +2034,16 @@ export async function moveTopicSlicesToNextDay(uid, iso, seq) {
       nextFrontKey -= 1;
     }
 
-    await updateDoc(seqCtx.ref, {
-      scheduledDates: seqCtx.scheduled,
-      scheduledMinutes,
-      sortKey,
-      queueState,
-    });
+    await setDoc(
+      seqCtx.ref,
+      {
+        scheduledDates: seqCtx.scheduled,
+        scheduledMinutes,
+        sortKey,
+        queueState,
+      },
+      { merge: true },
+    );
   }
 
   const overflowForSeq = overflowBySeq.get(seq)?.length || 0;
