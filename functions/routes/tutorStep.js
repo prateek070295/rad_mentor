@@ -717,7 +717,7 @@ async function teachPhase(nextState, getSectionDoc, getNodeData) {
   const genAI = getGenAI();
   const model = genAI.getGenerativeModel(
     { model: 'models/gemini-2.0-flash-lite-001' },
-    { apiVersion: 'v1' },
+    { apiVersion: 'v1beta' },
   );
   const prompt = socraticTeachPrompt(sectionData.title, cleanedBody);
   const result = await runWithRetry(() =>
@@ -807,7 +807,7 @@ async function generateFallbackTeachQA({ title, body }) {
     const genAI = getGenAI();
     const model = genAI.getGenerativeModel(
       { model: 'models/gemini-2.0-flash-lite-001' },
-      { apiVersion: 'v1' },
+      { apiVersion: 'v1beta' },
     );
 
     const prompt = [
@@ -833,6 +833,7 @@ async function generateFallbackTeachQA({ title, body }) {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: 400,
+          responseMimeType: 'application/json',
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
@@ -893,7 +894,7 @@ async function socraticEvalPhase(
   const genAI = getGenAI();
   const model = genAI.getGenerativeModel(
     { model: 'models/gemini-2.0-flash-lite-001' },
-    { apiVersion: 'v1' },
+    { apiVersion: 'v1beta' },
   );
   const prompt = socraticEvaluationPrompt(
     stripTablesFromText(sectionData.body_md || ''),
@@ -1131,7 +1132,7 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
     const genAI = getGenAI();
     const model = genAI.getGenerativeModel(
       { model: 'models/gemini-2.0-flash-lite-001' },
-      { apiVersion: 'v1' },
+      { apiVersion: 'v1beta' },
     );
 
     const serializedQuestion = JSON.stringify(checkpointData.question_md ?? '');
@@ -1157,6 +1158,7 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
         contents: [{ role: 'user', parts: [{ text: gradingPrompt }] }],
         generationConfig: {
           maxOutputTokens: 400,
+          responseMimeType: 'application/json',
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
