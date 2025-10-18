@@ -112,13 +112,22 @@ const sanitizeUiForFirestore = (ui) => {
           return option.map((value) => toStringSafe(value));
         }
         if (typeof option === "object") {
-          const normalized = {};
-          Object.entries(option).forEach(([key, value]) => {
-            if (value == null) return;
-            normalized[key] =
-              typeof value === "string" ? value : toStringSafe(value);
-          });
-          return normalized;
+          const candidate =
+            typeof option.text === "string"
+              ? option.text
+              : typeof option.label === "string"
+                ? option.label
+                : typeof option.value === "string"
+                  ? option.value
+                  : null;
+          if (candidate && candidate.trim().length > 0) {
+            return candidate.trim();
+          }
+          try {
+            return JSON.stringify(option);
+          } catch (err) {
+            return toStringSafe(option);
+          }
         }
         return toStringSafe(option);
       })
@@ -381,7 +390,6 @@ router.post("/", express.json(), async (req, res) => {
     };
 
     const phaseResult = await resolveTutorPhase({
-      currentState,
       nextState,
       userInput,
       getSectionDoc,
@@ -389,6 +397,7 @@ router.post("/", express.json(), async (req, res) => {
     });
     nextState = phaseResult.nextState;
     uiResponse = phaseResult.uiResponse;
+    const resumeSnapshot = phaseResult.resumeSnapshot || null;
 
     const shouldSaveFullProgress = nextState.phase === PHASES.FEEDBACK || nextState.phase === PHASES.SUMMARY || nextState.phase === PHASES.COMPLETE;
     let progressPayload = null;
@@ -426,28 +435,30 @@ router.post("/", express.json(), async (req, res) => {
           });
         }
 
-        tx.set(
-          assistantMessageRef,
-          {
-            role: "assistant",
-            ui: sanitizedUi,
-            timestamp: FieldValue.serverTimestamp(),
-          },
-        );
+        tx.set(assistantMessageRef, {
+          role: "assistant",
+          ui: sanitizedUi,
+          timestamp: FieldValue.serverTimestamp(),
+        });
 
         if (progressPayload) {
           tx.set(progressRef, progressPayload, { merge: true });
         }
 
-        tx.set(
-          sessionRef,
-          {
-            sessionState: nextState,
-            sessionStateVersion: sessionVersion + 1,
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+        const sessionUpdate = {
+          sessionState: nextState,
+          sessionStateVersion: sessionVersion + 1,
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+
+        if (resumeSnapshot) {
+          sessionUpdate.resumeSnapshot = {
+            ...resumeSnapshot,
+            ts: FieldValue.serverTimestamp(),
+          };
+        }
+
+        tx.set(sessionRef, sessionUpdate, { merge: true });
       });
     } catch (txnError) {
       if (txnError?.message === SESSION_CONFLICT) {
@@ -506,7 +517,11 @@ async function getSectionDocByOrder(sectionsRef, cache, order) {
   if (cache.has(key)) {
     return cache.get(key);
   }
-  const snapshot = await sectionsRef.where('order', '==', order).limit(1).get();
+  const snapshot = await sectionsRef
+    .where('order', '==', order)
+    .select('order', 'title', 'body_md', 'tables', 'images', 'cases', 'checkpointCount', 'checkpoint_count')
+    .limit(1)
+    .get();
   if (snapshot.empty) {
     cache.set(key, null);
     return null;
@@ -520,7 +535,10 @@ async function loadAllSectionDocs(sectionsRef, cache) {
   if (cache.has('__all__')) {
     return cache.get('__all__');
   }
-  const snapshot = await sectionsRef.orderBy('order').get();
+  const snapshot = await sectionsRef
+    .orderBy('order')
+    .select('order', 'checkpointCount', 'checkpoint_count')
+    .get();
   const docs = snapshot.docs;
   docs.forEach((doc) => {
     const key = String(Number(doc.data()?.order ?? 0));
@@ -638,7 +656,6 @@ async function trimMessageHistory(messagesRef, maxCount = MAX_MESSAGE_HISTORY) {
 }
 
 async function resolveTutorPhase({
-  currentState,
   nextState,
   userInput,
   getSectionDoc,
@@ -650,7 +667,7 @@ async function resolveTutorPhase({
     case PHASES.TEACH:
       return teachPhase(nextState, getSectionDoc, getNodeData);
     case PHASES.SOCRATIC_EVAL:
-      return socraticEvalPhase(currentState, nextState, userInput, getSectionDoc, getNodeData);
+      return socraticEvalPhase(nextState, userInput, getSectionDoc, getNodeData);
     case PHASES.CHECKPOINT:
       return checkpointPhase(nextState, getSectionDoc, getNodeData);
     case PHASES.EVAL:
@@ -737,13 +754,12 @@ async function teachPhase(nextState, getSectionDoc, getNodeData) {
 }
 
 async function socraticEvalPhase(
-  currentState,
   nextState,
   userInput,
   getSectionDoc,
   getNodeData,
 ) {
-  if (!currentState.lastTeachAnswer || !currentState.lastTeachQuestion) {
+  if (!nextState.lastTeachAnswer || !nextState.lastTeachQuestion) {
     return {
       nextState: {
         ...nextState,
@@ -759,7 +775,7 @@ async function socraticEvalPhase(
     };
   }
 
-  const sectionDoc = await getSectionDoc(currentState.sectionIndex + 1);
+  const sectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
   if (!sectionDoc) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
@@ -772,8 +788,8 @@ async function socraticEvalPhase(
   const prompt = socraticEvaluationPrompt(
     stripTablesFromText(sectionData.body_md || ''),
     userInput,
-    currentState.lastTeachAnswer || '',
-    currentState.lastTeachQuestion || '',
+    nextState.lastTeachAnswer || '',
+    nextState.lastTeachQuestion || '',
   );
   const result = await runWithRetry(() =>
     model.generateContent({
@@ -798,13 +814,21 @@ async function socraticEvalPhase(
   };
 }
 
-async function checkpointPhase(nextState, getSectionDoc, getNodeData) {
-  const sectionDoc = await getSectionDoc(nextState.sectionIndex + 1);
+async function checkpointPhase(
+  nextState,
+  getSectionDoc,
+  getNodeData,
+  { sectionDoc: providedSectionDoc = null, checkpointsSnapshot: providedSnapshot = null } = {},
+) {
+  const sectionDoc =
+    providedSectionDoc || (await getSectionDoc(nextState.sectionIndex + 1));
   if (!sectionDoc) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
   const checkpointsRef = sectionDoc.ref.collection('checkpoints');
-  const allCheckpointsSnapshot = await checkpointsRef.orderBy('bloom_level').get();
+  const allCheckpointsSnapshot =
+    providedSnapshot ||
+    (await checkpointsRef.orderBy('bloom_level').select('question_md', 'options', 'type', 'rationale_md', 'correct_index').get());
   if (allCheckpointsSnapshot.empty || nextState.checkpointIndex >= allCheckpointsSnapshot.size) {
     return summaryPhase({ ...nextState, phase: PHASES.SUMMARY }, getNodeData);
   }
@@ -816,6 +840,11 @@ async function checkpointPhase(nextState, getSectionDoc, getNodeData) {
       title: `Checkpoint for: ${sectionDoc.data().title}`,
       message: checkpointData.question_md,
       options: checkpointData.options || null,
+    },
+    resumeSnapshot: {
+      phase: PHASES.CHECKPOINT,
+      sectionIndex: nextState.sectionIndex,
+      checkpointIndex: nextState.checkpointIndex,
     },
   };
 }
@@ -882,7 +911,10 @@ async function advancePhase(nextState, getSectionDoc, getNodeData) {
   }
 
   const checkpointsRef = currentSectionDoc.ref.collection('checkpoints');
-  const checkpointsSnapshot = await checkpointsRef.get();
+  const checkpointsSnapshot = await checkpointsRef
+    .orderBy('bloom_level')
+    .select('question_md', 'options', 'type', 'rationale_md', 'correct_index')
+    .get();
   const totalCheckpoints = checkpointsSnapshot.size;
 
   if (Number.isFinite(totalCheckpoints) && totalCheckpoints > 0) {
@@ -892,7 +924,10 @@ async function advancePhase(nextState, getSectionDoc, getNodeData) {
         checkpointIndex: nextState.checkpointIndex + 1,
         phase: PHASES.CHECKPOINT,
       };
-      return checkpointPhase(updatedState, getSectionDoc, getNodeData);
+      return checkpointPhase(updatedState, getSectionDoc, getNodeData, {
+        sectionDoc: currentSectionDoc,
+        checkpointsSnapshot,
+      });
     }
   }
 
@@ -998,12 +1033,14 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
     );
 
     const raw = result?.response?.text?.() ?? '';
-    const parsed = safeJsonParse(raw);
-    if (
-      parsed &&
-      typeof parsed.verdict === 'string' &&
-      typeof parsed.feedback === 'string'
-    ) {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      console.error('Gemini grading parse error', error, raw);
+      parsed = null;
+    }
+    if (parsed && typeof parsed.verdict === 'string' && typeof parsed.feedback === 'string') {
       return parsed;
     }
 
@@ -1012,19 +1049,5 @@ async function gradeShortCheckpointAnswer(checkpointData, userInput) {
   } catch (error) {
     console.error('Failed to grade short-answer checkpoint', error);
     return fallback;
-  }
-}
-
-function safeJsonParse(raw) {
-  if (!raw) return null;
-  const trimmed = raw
-    .replace(/```json/gi, '')
-    .replace(/```/g, '')
-    .trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch (error) {
-    console.error('JSON parse failed', error, trimmed);
-    return null;
   }
 }
