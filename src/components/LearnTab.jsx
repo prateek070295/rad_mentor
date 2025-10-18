@@ -13,6 +13,76 @@ import StructuredTable from './StructuredTable';
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
+const formatSnakeCaseLabel = (value) => {
+  if (!value) return '';
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
+const formatDuration = (ms) => {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 1) return '<1s';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (!hours && (seconds || parts.length === 0)) {
+    parts.push(`${seconds}s`);
+  }
+  return parts.join(' ');
+};
+
+const formatRelativeDuration = (ms) => {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms === 0) return '0s';
+  return `+${formatDuration(ms)}`;
+};
+
+const describeTimelineEvent = (event) => {
+  if (!event || !event.type) {
+    return 'Timeline event';
+  }
+  switch (event.type) {
+    case 'SESSION_START':
+      return 'Session started';
+    case 'USER_RESPONSE': {
+      switch (event.userInputType) {
+        case 'CHECKPOINT_SELECTION':
+          return 'You answered a checkpoint';
+        case 'CONTINUE':
+          return 'You continued to the next step';
+        case 'TEXT':
+          return 'You responded';
+        case 'OBJECT':
+          return 'You submitted a response';
+        default:
+          return 'You responded';
+      }
+    }
+    case 'AI_RESPONSE': {
+      const label = formatSnakeCaseLabel(event.uiType) || 'Response';
+      return `Mentor delivered ${label.toLowerCase()}`;
+    }
+    default:
+      return formatSnakeCaseLabel(event.type) || 'Timeline event';
+  }
+};
+
+const SESSION_TIMELINE_LIMIT = 12;
+const MAX_SESSION_STATS_RETRIES = 5;
+
+const truncateSummary = (text, maxLength = 160) => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
+};
+
 // This hook for fetching user progress is correct and remains unchanged.
 const useUserProgress = (organIds) => {
 
@@ -178,6 +248,7 @@ const LearnTab = ({
   userName,
   setIsFocusMode,
   planContext = null,
+  isAdmin = false,
 }) => {
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -193,6 +264,12 @@ const LearnTab = ({
   const [chatInput, setChatInput] = useState('');
   const [isMentorTyping, setIsMentorTyping] = useState(false);
   const [activeTopic, setActiveTopic] = useState(null);
+  const [sessionStats, setSessionStats] = useState(null);
+  const [sessionStatsError, setSessionStatsError] = useState(null);
+  const [isSessionStatsLoading, setIsSessionStatsLoading] = useState(false);
+  const sessionStatsRetryRef = useRef(0);
+  const [sessionStatsAutoRetryExceeded, setSessionStatsAutoRetryExceeded] = useState(false);
+  const [showSessionInsights, setShowSessionInsights] = useState(false);
   const lastCardRef = useRef(null);
   const [dayAssignments, setDayAssignments] = useState([]);
   const [dayAssignmentsMeta, setDayAssignmentsMeta] = useState({
@@ -205,6 +282,15 @@ const LearnTab = ({
   const planUid = planContext?.uid || null;
   const planTodayIso = planContext?.todayIso || null;
   const planWeekKey = planContext?.weekKey || null;
+
+  useEffect(() => {
+    setSessionStats(null);
+    setSessionStatsError(null);
+    setIsSessionStatsLoading(false);
+    sessionStatsRetryRef.current = 0;
+    setSessionStatsAutoRetryExceeded(false);
+    setShowSessionInsights(false);
+  }, [activeTopic?.id]);
 
   useEffect(() => {
     const isoKey = planTodayIso || null;
@@ -923,6 +1009,78 @@ const LearnTab = ({
     return response.json();
   }, []);
   
+  const fetchSessionStats = useCallback(
+    async (topicId) => {
+      if (!topicId || !auth.currentUser) return;
+      setIsSessionStatsLoading(true);
+      setSessionStatsError(null);
+      try {
+        const token = await auth.currentUser.getIdToken();
+        const encodedTopic = encodeURIComponent(topicId);
+        const statsEndpoint = API_BASE
+          ? `${API_BASE}/tutor/session-stats/${encodedTopic}`
+          : `/tutor/session-stats/${encodedTopic}`;
+        const response = await fetch(statsEndpoint, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          if (response.status === 404) {
+            if (activeTopic?.id === topicId) {
+              setSessionStats({
+                topicId,
+                aggregates: null,
+                events: [],
+                pending: true,
+              });
+              setSessionStatsError(null);
+              const attempt = sessionStatsRetryRef.current + 1;
+              sessionStatsRetryRef.current = attempt;
+              if (attempt <= MAX_SESSION_STATS_RETRIES) {
+                setTimeout(() => {
+                  fetchSessionStats(topicId);
+                }, attempt * 2000);
+              } else {
+                setSessionStatsAutoRetryExceeded(true);
+              }
+            }
+            return;
+          }
+          let message = `Failed to load session stats (${response.status})`;
+          try {
+            const payload = await response.json();
+            if (payload?.error) message = payload.error;
+          } catch (parseError) {
+            // Ignore parsing errors
+          }
+          throw new Error(message);
+        }
+        const data = await response.json();
+        if (activeTopic?.id === topicId) {
+          sessionStatsRetryRef.current = 0;
+          setSessionStats(data);
+          setSessionStatsError(null);
+          setSessionStatsAutoRetryExceeded(false);
+        }
+      } catch (error) {
+        const message =
+          error?.message || 'Unable to load session timing insights right now.';
+        if (activeTopic?.id === topicId) {
+          setSessionStats(null);
+          setSessionStatsError(message);
+        }
+      } finally {
+        if (activeTopic?.id === topicId) {
+          setIsSessionStatsLoading(false);
+        }
+      }
+    },
+    [activeTopic?.id],
+  );
+  
   const handleTopicClick = useCallback(async (topic) => {
     // Parent categories are not lessons, so just let the sidebar expand/collapse.
     if (topic.children && topic.children.length > 0) {
@@ -1037,8 +1195,203 @@ const LearnTab = ({
     submitTutorInteraction({ selectedIndex }, `My answer: "${choiceText}"`);
   };
 
+  useEffect(() => {
+    if (!showSessionInsights || !isAdmin) return;
+    if (!activeTopic || !activeTopic.id) return;
+    if (!tutorHistory.length) return;
+    const lastCard = tutorHistory[tutorHistory.length - 1];
+    if (!lastCard) return;
+    const isCompletionCard =
+      lastCard.type === 'SUMMARY_CARD' || lastCard.type === 'TOPIC_COMPLETE';
+    if (!isCompletionCard) return;
+    if (sessionStats && sessionStats.topicId === activeTopic.id) return;
+    if (isSessionStatsLoading) return;
+    fetchSessionStats(activeTopic.id);
+  }, [
+    showSessionInsights,
+    isAdmin,
+    activeTopic,
+    tutorHistory,
+    sessionStats,
+    isSessionStatsLoading,
+    fetchSessionStats,
+  ]);
+  
+  const handleSessionStatsRefresh = useCallback(() => {
+    if (!activeTopic?.id) return;
+    sessionStatsRetryRef.current = 0;
+    setSessionStatsAutoRetryExceeded(false);
+    fetchSessionStats(activeTopic.id);
+  }, [activeTopic?.id, fetchSessionStats]);
 
+  const handleToggleSessionInsights = useCallback(() => {
+    if (!isAdmin || !activeTopic?.id) return;
+    setSessionStatsError(null);
+    if (!showSessionInsights) {
+      sessionStatsRetryRef.current = 0;
+      setSessionStatsAutoRetryExceeded(false);
+    }
+    setShowSessionInsights((prev) => !prev);
+  }, [isAdmin, showSessionInsights, activeTopic?.id]);
 
+  const renderSessionInsights = (isFinalCard) => {
+    if (!isFinalCard) return null;
+    if (!isAdmin || !showSessionInsights) return null;
+    if (isSessionStatsLoading) {
+      return (
+        <div className="mt-8 rounded-3xl border border-indigo-100 bg-white/70 px-5 py-4 text-sm text-slate-600 shadow-inner shadow-indigo-100/40">
+          Gathering session timing insights…
+        </div>
+      );
+    }
+    if (sessionStatsError) {
+      return (
+        <div className="mt-8 rounded-3xl border border-rose-100 bg-rose-50/80 px-5 py-4 text-sm text-rose-600 shadow-inner shadow-rose-100/40">
+          {sessionStatsError}
+        </div>
+      );
+    }
+    if (!sessionStats || sessionStats.topicId !== activeTopic?.id) {
+      return null;
+    }
+
+    if (sessionStats.pending) {
+      return (
+        <div className="mt-8 rounded-3xl border border-indigo-100 bg-white/70 px-5 py-4 text-sm text-slate-600 shadow-inner shadow-indigo-100/40">
+          <p>Timing data is still publishing—check back in a few seconds.</p>
+          {sessionStatsAutoRetryExceeded ? (
+            <button
+              type="button"
+              onClick={handleSessionStatsRefresh}
+              className="mt-4 inline-flex items-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
+            >
+              Refresh Timing Data
+            </button>
+          ) : null}
+        </div>
+      );
+    }
+
+    const { aggregates = {}, events = [] } = sessionStats;
+    const summaryItems = [
+      {
+        label: 'Learner active time',
+        value: formatDuration(aggregates.totalUserThinkMs),
+      },
+      {
+        label: 'Mentor response time',
+        value: formatDuration(aggregates.totalAiResponseMs),
+      },
+      {
+        label: 'Avg learner response',
+        value:
+          aggregates.averageUserThinkMs != null
+            ? formatDuration(aggregates.averageUserThinkMs)
+            : '—',
+      },
+      {
+        label: 'Avg mentor response',
+        value:
+          aggregates.averageAiResponseMs != null
+            ? formatDuration(aggregates.averageAiResponseMs)
+            : '—',
+      },
+      {
+        label: 'Session length',
+        value: formatDuration(aggregates.sessionDurationMs),
+      },
+      {
+        label: 'Interactions',
+        value: `${aggregates.userResponseCount || 0} learner · ${
+          aggregates.aiResponseCount || 0
+        } mentor`,
+      },
+    ];
+
+    const limitedEvents = events.slice(0, SESSION_TIMELINE_LIMIT);
+    const showMoreNotice = events.length > limitedEvents.length;
+
+    return (
+      <div className="mt-8 rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-inner shadow-indigo-100/40">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">
+          Session Timing Insights
+        </h3>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          {summaryItems.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-slate-200/60 bg-white/80 px-4 py-3 shadow-sm shadow-slate-100/40"
+            >
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                {item.label}
+              </dt>
+              <dd className="mt-1 text-base font-semibold text-slate-900">
+                {item.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-6">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Timeline
+          </h4>
+          {limitedEvents.length > 0 ? (
+            <ol className="mt-3 space-y-3">
+              {limitedEvents.map((event) => {
+                const description =
+                  event.type === 'USER_RESPONSE'
+                    ? truncateSummary(event.userInputSummary)
+                    : event.type === 'AI_RESPONSE'
+                      ? formatSnakeCaseLabel(event.uiType)
+                      : null;
+                return (
+                  <li
+                    key={event.id}
+                    className="rounded-2xl border border-slate-200/60 bg-white px-4 py-3 shadow-sm shadow-slate-100/40"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-semibold text-slate-700">
+                        {describeTimelineEvent(event)}
+                      </span>
+                      <span className="text-xs font-semibold text-indigo-500">
+                        {formatRelativeDuration(event.relativeMs)}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      {Number.isFinite(event.durationMs) ? (
+                        <span>Duration {formatDuration(event.durationMs)}</span>
+                      ) : null}
+                      {event.phaseAfter ? (
+                        <span>Phase {formatSnakeCaseLabel(event.phaseAfter)}</span>
+                      ) : null}
+                    </div>
+                    {description ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {event.type === 'AI_RESPONSE'
+                          ? `Mentor card: ${description}`
+                          : description}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">
+              Timing events will appear here once the mentor exchange begins.
+            </p>
+          )}
+          {showMoreNotice ? (
+            <p className="mt-3 text-[11px] text-slate-400">
+              Showing the first {limitedEvents.length} of {events.length} events.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  
   const handleContinue = () => {
     // We send "continue" to the backend, but `null` for the display message
     // so it doesn't appear in the chat.
@@ -1312,15 +1665,27 @@ const LearnTab = ({
               <div className="prose prose-lg max-w-none text-slate-800">
                 <ReactMarkdown>{card.message}</ReactMarkdown>
               </div>
-              {card.isTopicComplete && isLastCard ? (
-                <div className="mt-6 flex justify-end">
-                <button
-                  onClick={handleContinueToNextTopic}
-                  disabled={isMentorTyping}
-                  className={successButtonClass}
-                >
-                  Continue to Next Topic →
-                </button>
+              {card.type === "SUMMARY_CARD" ? renderSessionInsights(isLastCard) : null}
+              {(isAdmin || (card.isTopicComplete && isLastCard)) ? (
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={handleToggleSessionInsights}
+                      className="inline-flex items-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
+                    >
+                      {showSessionInsights ? 'Hide Timing Insights' : 'Show Timing Insights'}
+                    </button>
+                  ) : null}
+                  {card.isTopicComplete && isLastCard ? (
+                    <button
+                      onClick={handleContinueToNextTopic}
+                      disabled={isMentorTyping}
+                      className={`${successButtonClass} ml-auto`}
+                    >
+                      Continue to Next Topic ->
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1525,4 +1890,9 @@ const LearnTab = ({
 };
 
 export default LearnTab;
+
+
+
+
+
 

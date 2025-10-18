@@ -143,6 +143,55 @@ const sanitizeUiForFirestore = (ui) => {
   return safe;
 };
 
+const timestampToMillis = (value) => {
+  if (!value) return null;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  return null;
+};
+
+const classifyUserInput = (input) => {
+  if (input === undefined) return "NONE";
+  if (input === null) return "NULL";
+  if (input === "continue") return "CONTINUE";
+  if (typeof input === "string") return "TEXT";
+  if (typeof input === "number") return "NUMBER";
+  if (typeof input === "boolean") return "BOOLEAN";
+  if (typeof input === "object") {
+    if (Array.isArray(input)) return "ARRAY";
+    if (typeof input.selectedIndex === "number") return "CHECKPOINT_SELECTION";
+    return "OBJECT";
+  }
+  return "UNKNOWN";
+};
+
+const summarizeUserInput = (input, maxLength = 200) => {
+  if (input === undefined || input === null) return null;
+  if (input === "continue") return "continue";
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (trimmed.length > maxLength) {
+      const sliceLength = Math.max(0, maxLength - 3);
+      return `${trimmed.slice(0, sliceLength)}...`;
+    }
+    return trimmed;
+  }
+  if (typeof input === "number" || typeof input === "boolean") {
+    return String(input);
+  }
+  try {
+    const serialized = JSON.stringify(input);
+    if (serialized.length > maxLength) {
+      const sliceLength = Math.max(0, maxLength - 3);
+      return `${serialized.slice(0, sliceLength)}...`;
+    }
+    return serialized;
+  } catch {
+    return "[unserializable]";
+  }
+};
+
 const extractExpectedAnswer = (text) => {
   if (!text || typeof text !== "string") {
     return { cleaned: text || "", answer: "" };
@@ -341,11 +390,36 @@ router.post("/", express.json(), async (req, res) => {
     const progressRef = db.doc(`userProgress/${userId}/topics/${topicId}`);
     const sessionRef = db.doc(`userProgress/${userId}/sessions/${topicId}`);
     const messagesRef = sessionRef.collection('messages');
+    const eventsRef = sessionRef.collection('events');
+
+    const requestReceivedAt = Date.now();
 
     const sessionSnap = await sessionRef.get();
     let currentState;
     let event;
     const sessionVersion = Number(sessionSnap.exists ? sessionSnap.data()?.sessionStateVersion ?? 0 : 0);
+
+    let previousAssistantMessage = null;
+    if (sessionSnap.exists) {
+      try {
+        const recentMessagesSnap = await messagesRef
+          .orderBy('timestamp', 'desc')
+          .limit(5)
+          .get();
+        for (const doc of recentMessagesSnap.docs) {
+          const data = doc.data();
+          if (data?.role === 'assistant') {
+            previousAssistantMessage = data;
+            break;
+          }
+        }
+      } catch (messageFetchError) {
+        console.error(
+          `Failed to fetch previous assistant message for session ${topicId}`,
+          messageFetchError,
+        );
+      }
+    }
 
     if (!sessionSnap.exists) {
       currentState = { ...INITIAL_STATE, topicId, organ: chapterId, userName: safeUserName };
@@ -373,6 +447,18 @@ router.post("/", express.json(), async (req, res) => {
         event = { type: EVENT_TYPES.USER_ANSWER, userInput };
       }
     }
+    
+    const previousAssistantTimestampMs = timestampToMillis(previousAssistantMessage?.timestamp);
+    const isUserAnswerEvent = event.type === EVENT_TYPES.USER_ANSWER;
+    const userThinkTimeMs =
+      isUserAnswerEvent && Number.isFinite(previousAssistantTimestampMs)
+        ? Math.max(0, Math.round(requestReceivedAt - previousAssistantTimestampMs))
+        : null;
+    const userInputType = classifyUserInput(userInput);
+    const userInputSummary = summarizeUserInput(userInput);
+    const previousAssistantUiType = previousAssistantMessage?.ui?.type ?? null;
+    const phaseBefore = currentState?.phase ?? PHASES.INIT;
+    const isSessionStartEvent = isUserAnswerEvent && phaseBefore === PHASES.INTRO;
     
     let nextState = reducer(currentState, event);
     let uiResponse = {};
@@ -418,6 +504,43 @@ router.post("/", express.json(), async (req, res) => {
     }
 
     const sanitizedUi = sanitizeUiForFirestore(uiResponse);
+    const phaseAfter = nextState?.phase ?? phaseBefore;
+    const nextSessionVersion = sessionVersion + 1;
+    const aiResponseDurationMs = Math.max(0, Math.round(Date.now() - requestReceivedAt));
+    const aiEventRef = eventsRef.doc();
+    const aiEventPayload = {
+      type: "AI_RESPONSE",
+      durationMs: aiResponseDurationMs,
+      uiType: sanitizedUi.type ?? null,
+      phaseBefore,
+      phaseAfter,
+      sessionStateVersion: nextSessionVersion,
+    };
+    if (
+      sanitizedUi.type === "SUMMARY_CARD" ||
+      sanitizedUi.type === "TOPIC_COMPLETE" ||
+      sanitizedUi.isTopicComplete === true
+    ) {
+      aiEventPayload.sessionCompleted = true;
+    }
+
+    let userEventRef = null;
+    let userEventPayload = null;
+    if (userThinkTimeMs !== null) {
+      userEventRef = eventsRef.doc();
+      userEventPayload = {
+        type: isSessionStartEvent ? "SESSION_START" : "USER_RESPONSE",
+        durationMs: userThinkTimeMs,
+        userInputType,
+        userInputSummary,
+        previousAssistantUiType,
+        previousAssistantTimestamp: previousAssistantMessage?.timestamp ?? null,
+        phaseBefore,
+        phaseAfter,
+        sessionStateVersion: nextSessionVersion,
+      };
+    }
+
     const assistantMessageRef = messagesRef.doc();
     const userMessageRef =
       userInput !== undefined && userInput !== "continue" ? messagesRef.doc() : null;
@@ -450,10 +573,45 @@ router.post("/", express.json(), async (req, res) => {
           tx.set(progressRef, progressPayload, { merge: true });
         }
 
+        const metricsUpdate = {
+          lastEventAt: FieldValue.serverTimestamp(),
+          lastPhase: nextState?.phase ?? null,
+          lastUiType: sanitizedUi.type ?? null,
+          lastAiResponseMs: aiResponseDurationMs,
+          totalAiResponseMs: FieldValue.increment(aiResponseDurationMs),
+          aiResponseCount: FieldValue.increment(1),
+        };
+
+        if (userThinkTimeMs !== null) {
+          metricsUpdate.totalUserThinkMs = FieldValue.increment(userThinkTimeMs);
+          metricsUpdate.userResponseCount = FieldValue.increment(1);
+          metricsUpdate.lastUserThinkMs = userThinkTimeMs;
+        }
+
+        if (isUserAnswerEvent) {
+          metricsUpdate.lastUserInputType = userInputType;
+          if (userInputSummary != null) {
+            metricsUpdate.lastUserInputSummary = userInputSummary;
+          }
+        }
+
+        if (previousAssistantUiType) {
+          metricsUpdate.previousAssistantUiType = previousAssistantUiType;
+        }
+
+        if (isSessionStartEvent) {
+          metricsUpdate.sessionStartedAt = FieldValue.serverTimestamp();
+        }
+
+        if (aiEventPayload.sessionCompleted === true) {
+          metricsUpdate.sessionCompletedAt = FieldValue.serverTimestamp();
+        }
+
         const sessionUpdate = {
           sessionState: nextState,
-          sessionStateVersion: sessionVersion + 1,
+          sessionStateVersion: nextSessionVersion,
           updatedAt: FieldValue.serverTimestamp(),
+          metrics: metricsUpdate,
         };
 
         if (resumeSnapshot) {
@@ -479,6 +637,32 @@ router.post("/", express.json(), async (req, res) => {
     }
 
     await trimMessageHistory(messagesRef);
+
+    const eventWrites = [];
+    if (userEventRef && userEventPayload) {
+      console.log(
+        `TutorStep: logging user event for session ${sessionRef.path}, type=${userEventPayload.type}, durationMs=${userEventPayload.durationMs}`,
+      );
+      eventWrites.push(
+        userEventRef.set({
+          ...userEventPayload,
+          createdAt: FieldValue.serverTimestamp(),
+        }),
+      );
+    }
+    console.log(
+      `TutorStep: logging AI event for session ${sessionRef.path}, uiType=${aiEventPayload.uiType}, durationMs=${aiEventPayload.durationMs}`,
+    );
+    eventWrites.push(
+      aiEventRef.set({
+        ...aiEventPayload,
+        createdAt: FieldValue.serverTimestamp(),
+      }),
+    );
+    await Promise.all(eventWrites);
+    console.log(
+      `TutorStep: event logging complete for session ${sessionRef.path}, version=${nextSessionVersion}`,
+    );
 
     res.json({ ui: sanitizedUi });
 

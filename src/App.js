@@ -824,6 +824,7 @@ function AppShell() {
             userName={dashboardData.userName}
             setIsFocusMode={setIsFocusMode}
             planContext={planV2Context}
+            isAdmin={isAdmin}
           />
         );
       case 'test':

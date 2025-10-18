@@ -67,6 +67,184 @@ app.get('/tutor/messages/:topicId', async (req, res) => {
     }
 });
 
+const extractMetricsMap = (sessionData = {}) => {
+    const metrics = {};
+    if (sessionData.metrics && typeof sessionData.metrics === 'object' && !Array.isArray(sessionData.metrics)) {
+        Object.entries(sessionData.metrics).forEach(([key, value]) => {
+            if (value && typeof value.toDate === 'function') {
+                metrics[key] = value;
+            } else {
+                metrics[key] = value;
+            }
+        });
+    }
+    Object.entries(sessionData).forEach(([key, value]) => {
+        if (!key.startsWith('metrics.')) return;
+        const metricKey = key.slice('metrics.'.length);
+        if (metrics[metricKey] === undefined) {
+            metrics[metricKey] = value;
+        }
+    });
+    return metrics;
+};
+
+app.get('/tutor/session-stats/:topicId', async (req, res) => {
+    let userId;
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) throw new Error('Unauthorized');
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await getAuth().verifyIdToken(idToken);
+        userId = decodedToken.uid;
+    } catch (error) {
+        return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const { topicId } = req.params;
+    if (!topicId) {
+        return res.status(400).json({ error: 'topicId is required.' });
+    }
+
+    const sessionRef = db.doc(`userProgress/${userId}/sessions/${topicId}`);
+    const eventsRef = sessionRef.collection('events');
+
+    const toNumber = (value, fallback = 0) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const serializeTimestamp = (value) => {
+        if (!value) return null;
+        if (typeof value.toDate === 'function') {
+            return value.toDate().toISOString();
+        }
+        if (value instanceof Date) {
+            return value.toISOString();
+        }
+        if (typeof value === 'string' || typeof value === 'number') {
+            return new Date(value).toISOString();
+        }
+        return null;
+    };
+
+    try {
+        const sessionSnap = await sessionRef.get();
+        if (!sessionSnap.exists) {
+            console.warn(`session-stats: session doc missing for user ${userId}, topic ${topicId}`);
+            return res.status(404).json({ error: 'Session not found.' });
+        }
+
+        const sessionData = sessionSnap.data() || {};
+        const metricsRaw = extractMetricsMap(sessionData);
+
+        const eventsSnap = await eventsRef.orderBy('createdAt', 'asc').limit(200).get();
+        const events = [];
+        let firstEventMillis = null;
+        let lastEventMillis = null;
+
+        eventsSnap.forEach((doc) => {
+            const data = doc.data() || {};
+            const createdAt =
+                data.createdAt && typeof data.createdAt.toMillis === 'function'
+                    ? data.createdAt.toMillis()
+                    : null;
+            if (createdAt != null) {
+                if (firstEventMillis == null || createdAt < firstEventMillis) {
+                    firstEventMillis = createdAt;
+                }
+                if (lastEventMillis == null || createdAt > lastEventMillis) {
+                    lastEventMillis = createdAt;
+                }
+            }
+            events.push({
+                id: doc.id,
+                type: data.type || null,
+                uiType: data.uiType || null,
+                durationMs: toNumber(data.durationMs, null),
+                phaseBefore: data.phaseBefore || null,
+                phaseAfter: data.phaseAfter || null,
+                userInputType: data.userInputType || null,
+                userInputSummary: data.userInputSummary || null,
+                previousAssistantUiType: data.previousAssistantUiType || null,
+                sessionStateVersion: toNumber(data.sessionStateVersion, null),
+                sessionCompleted: data.sessionCompleted === true,
+                createdAt: createdAt != null ? new Date(createdAt).toISOString() : null,
+                relativeMs: null,
+            });
+        });
+
+        if (firstEventMillis != null) {
+            events.forEach((event) => {
+                if (event.createdAt) {
+                    const eventMillis = Date.parse(event.createdAt);
+                    if (Number.isFinite(eventMillis)) {
+                        event.relativeMs = Math.max(0, eventMillis - firstEventMillis);
+                    }
+                }
+            });
+        }
+
+        const totalUserThinkMs = toNumber(metricsRaw.totalUserThinkMs);
+        const totalAiResponseMs = toNumber(metricsRaw.totalAiResponseMs);
+        const userResponseCount = toNumber(metricsRaw.userResponseCount);
+        const aiResponseCount = toNumber(metricsRaw.aiResponseCount);
+
+        const averageUserThinkMs =
+            userResponseCount > 0 ? Math.round(totalUserThinkMs / userResponseCount) : null;
+        const averageAiResponseMs =
+            aiResponseCount > 0 ? Math.round(totalAiResponseMs / aiResponseCount) : null;
+
+        const sessionDurationMs =
+            firstEventMillis != null && lastEventMillis != null
+                ? Math.max(0, lastEventMillis - firstEventMillis)
+                : null;
+
+        const sanitizedMetrics = {};
+        Object.entries(metricsRaw).forEach(([key, value]) => {
+            if (value && typeof value.toDate === 'function') {
+                sanitizedMetrics[key] = value.toDate().toISOString();
+            } else {
+                sanitizedMetrics[key] = value;
+            }
+        });
+
+        const responsePayload = {
+            topicId,
+            userId,
+            sessionStateVersion: sessionData.sessionStateVersion ?? null,
+            updatedAt: serializeTimestamp(sessionData.updatedAt),
+            metrics: sanitizedMetrics,
+            aggregates: {
+                totalUserThinkMs,
+                totalAiResponseMs,
+                userResponseCount,
+                aiResponseCount,
+                averageUserThinkMs,
+                averageAiResponseMs,
+                sessionDurationMs,
+                eventCount: events.length,
+            },
+            events,
+        };
+
+        if (sessionData.sessionState) {
+            responsePayload.sessionPhase = sessionData.sessionState.phase ?? null;
+        }
+
+        if (metricsRaw.sessionStartedAt) {
+            responsePayload.sessionStartedAt = serializeTimestamp(metricsRaw.sessionStartedAt);
+        }
+        if (metricsRaw.sessionCompletedAt) {
+            responsePayload.sessionCompletedAt = serializeTimestamp(metricsRaw.sessionCompletedAt);
+        }
+
+        res.json(responsePayload);
+    } catch (error) {
+        console.error(`Error fetching session stats for user ${userId}, topic ${topicId}:`, error);
+        res.status(500).json({ error: 'Failed to retrieve session statistics.' });
+    }
+});
+
 app.use("/chat", socraticTutorRouter);
 app.use("/generate-mcq-test", generateMcqRouter);
 app.use("/generate-theory-test", generateTheoryRouter);
