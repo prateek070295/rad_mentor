@@ -21,13 +21,9 @@
         "start": "react-scripts start",
         "build": "react-scripts build",
         "test": "react-scripts test",
-        "eject": "react-scripts eject"
-    },
-    "eslintConfig": {
-        "extends": [
-            "react-app",
-            "react-app/jest"
-        ]
+        "eject": "react-scripts eject",
+        "lint": "eslint \"src/**/*.{js,jsx}\"",
+        "prepare": "husky"
     },
     "browserslist": {
         "production": [
@@ -46,6 +42,7 @@
         "autoprefixer": "^10.4.19",
         "firebase-admin": "^13.5.0",
         "postcss": "^8.4.38",
-        "tailwindcss": "^3.4.17"
+        "tailwindcss": "^3.4.17",
+        "husky": "^9.1.1"
     }
 }

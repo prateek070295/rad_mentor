@@ -1,4 +1,4 @@
-﻿// src/pages/LandingPage.jsx
+// src/pages/LandingPage.jsx
 import React from "react";
 import logo from "../assets/images/logo 1.PNG";
 

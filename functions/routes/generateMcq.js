@@ -1,11 +1,13 @@
 import { getGenAI, convertDeltaToText, runWithRetry } from "../helpers.js";
 import express from "express";
 import { getFirestore } from "firebase-admin/firestore";
+import requireAdmin from "../middleware/auth.js";
+import truncateText from "../utils/truncateText.js";
 
 // const db = getFirestore(); // This line was removed from here
 const router = express.Router();
 
-router.post("/", express.json(), async (req, res) => {
+router.post("/", requireAdmin, express.json(), async (req, res) => {
   const db = getFirestore(); // And added here
   try {
     const genAI = getGenAI();
@@ -43,6 +45,8 @@ router.post("/", express.json(), async (req, res) => {
         .status(404)
         .json({ error: `No study material found for section '${sectionName}'.` });
 
+    const safeContent = truncateText(combinedContent);
+
     const model = genAI.getGenerativeModel(
       { model: "models/gemini-2.0-flash-lite-001" },
       { apiVersion: "v1" }
@@ -58,7 +62,7 @@ Respond with ONLY a valid JSON array. Each item:
 }
 <Reference_Material>
 ---
-${combinedContent}
+${safeContent}
 ---
 </Reference_Material>
     `.trim();

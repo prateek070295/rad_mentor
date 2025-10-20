@@ -8,6 +8,7 @@ import {
   loadDayAssignments,
   markAssignmentsCompleteFromProgress,
   completeDayAndAdvance,
+  resetAssignmentsCompletion,
 } from '../services/planV2Api';
 import StructuredTable from './StructuredTable';
 
@@ -277,6 +278,7 @@ const LearnTab = ({
     isDayDone: false,
   });
   const syncedCompletionKeysRef = useRef(new Set());
+  const resetCompletionKeysRef = useRef(new Set());
   const dayCompletionTriggeredRef = useRef(false);
   const previousIsoRef = useRef(null);
   const planUid = planContext?.uid || null;
@@ -296,6 +298,7 @@ const LearnTab = ({
     const isoKey = planTodayIso || null;
     if (previousIsoRef.current !== isoKey) {
       syncedCompletionKeysRef.current.clear();
+      resetCompletionKeysRef.current.clear();
       dayCompletionTriggeredRef.current = false;
       previousIsoRef.current = isoKey;
     }
@@ -328,6 +331,7 @@ const LearnTab = ({
           });
         }
         syncedCompletionKeysRef.current.clear();
+        resetCompletionKeysRef.current.clear();
         dayCompletionTriggeredRef.current = false;
         return;
       }
@@ -356,6 +360,7 @@ const LearnTab = ({
           });
         }
         syncedCompletionKeysRef.current.clear();
+        resetCompletionKeysRef.current.clear();
         dayCompletionTriggeredRef.current = false;
       }
     };
@@ -790,42 +795,100 @@ const LearnTab = ({
     const normalize = (value) =>
       value == null ? "" : String(value).trim();
     const toKey = (value) => normalize(value).toLowerCase();
-    const map = new Map();
-    const registerNode = (node) => {
+
+    const topicEntries = new Map();
+    const subEntries = new Map();
+
+    const registerNode = (node, parentTopicKey = null) => {
       if (!node) return;
+      const isLeaf = !Array.isArray(node.children) || node.children.length === 0;
       const statusRaw =
         typeof node.status === "string" ? node.status.trim().toLowerCase() : "";
+      const percentValue = Number(node.percentComplete);
+      const percentComplete = Number.isFinite(percentValue)
+        ? Math.max(0, Math.min(100, percentValue))
+        : 0;
       const completed =
         statusRaw === "completed" ||
         node.completed === true ||
-        (typeof node.percentComplete === "number" &&
-          node.percentComplete >= 100);
-      const info = { status: statusRaw, completed, node };
-      const ids = [
-        node.id,
-        node.topicId,
-        node.itemId,
-        node.topicID,
-        node.nodeId,
-        node.chapterId,
-        node.topicid,
-      ];
-      ids.forEach((id) => {
-        const key = toKey(id);
+        percentComplete >= 100;
+
+      const info = {
+        status: statusRaw,
+        completed,
+        percentComplete,
+        node,
+        isLeaf,
+      };
+
+      const setTopicEntry = (key) => {
         if (!key) return;
-        const existing = map.get(key);
-        if (!existing || (completed && !existing.completed)) {
-          map.set(key, info);
+        const existing = topicEntries.get(key);
+        if (!existing || (!existing.completed && info.completed)) {
+          topicEntries.set(key, { ...info });
+          return;
+        }
+        if (existing.completed === info.completed &&
+          info.percentComplete > existing.percentComplete) {
+          topicEntries.set(key, { ...existing, ...info });
+        }
+      };
+
+      const topicKeyCandidates = [
+        node.topicId,
+        node.topicID,
+        node.topicid,
+        node.id,
+        parentTopicKey,
+      ];
+      let canonicalTopicKey = parentTopicKey;
+      topicKeyCandidates.forEach((candidate) => {
+        const key = toKey(candidate);
+        if (!key) return;
+        if (!canonicalTopicKey) canonicalTopicKey = key;
+        if (!isLeaf || !parentTopicKey) {
+          setTopicEntry(key);
         }
       });
+
+      if (isLeaf) {
+        const subCandidates = [
+          node.itemId,
+          node.subId,
+          node.subID,
+          node.subtopicId,
+          node.subtopicID,
+          node.id,
+        ];
+        subCandidates.forEach((candidate) => {
+          const key = toKey(candidate);
+          if (!key) return;
+          const existing = subEntries.get(key);
+          if (!existing ||
+            (!existing.completed && completed) ||
+            percentComplete > existing.percentComplete) {
+            subEntries.set(key, {
+              status: statusRaw,
+              completed,
+              percentComplete,
+              node,
+              isLeaf: true,
+            });
+          }
+        });
+      }
+
       if (Array.isArray(node.children)) {
-        node.children.forEach(registerNode);
+        const nextParent = canonicalTopicKey || parentTopicKey;
+        node.children.forEach((child) => registerNode(child, nextParent));
       }
     };
+
     chapterGroups.forEach((group) => {
-      (group.topics || []).forEach(registerNode);
+      (group.topics || []).forEach((topic) => registerNode(topic, null));
     });
-    return map;
+
+    return new Map([...topicEntries, ...subEntries]);
   }, [chapterGroups]);
 
   const isSliceCompleted = useCallback(
@@ -839,8 +902,11 @@ const LearnTab = ({
         slice.subId ?? slice.subID ?? slice.itemId ?? slice.itemID ?? "",
       );
       const topicEntry = topicStatusLookup.get(topicKey);
-      const subEntry = subKey ? topicStatusLookup.get(subKey) : null;
-      return Boolean(topicEntry?.completed || subEntry?.completed);
+      if (subKey) {
+        const subEntry = topicStatusLookup.get(subKey);
+        return Boolean(subEntry?.completed);
+      }
+      return Boolean(topicEntry?.completed);
     },
     [topicStatusLookup],
   );
@@ -850,52 +916,183 @@ const LearnTab = ({
     if (!Array.isArray(dayAssignments) || dayAssignments.length === 0) return;
     if (!topicStatusLookup || topicStatusLookup.size === 0) return;
 
+    const weekKey = dayAssignmentsMeta.weekKey;
     const normalize = (value) =>
       value == null ? "" : String(value).trim();
     const toKey = (value) => normalize(value).toLowerCase();
+    const makeSliceKey = (topicKey, subKey, subIdx) => {
+      if (subKey && subKey.length) {
+        return `${topicKey}|id:${subKey}`;
+      }
+      if (Number.isFinite(subIdx)) {
+        return `${topicKey}|idx:${subIdx}`;
+      }
+      return `${topicKey}|*`;
+    };
 
     const descriptorMap = new Map();
     const newlySyncedKeys = new Set();
+    const resetMap = new Map();
 
     dayAssignments.forEach((slice) => {
       if (!slice) return;
-      const topicKey = toKey(slice.topicId ?? slice.topicID ?? slice.id);
+      const topicIdRaw = slice.topicId ?? slice.topicID ?? slice.id ?? "";
+      const topicKey = toKey(topicIdRaw);
       if (!topicKey) return;
-      if (syncedCompletionKeysRef.current.has(topicKey)) return;
-      if (!isSliceCompleted(slice)) return;
 
-      newlySyncedKeys.add(topicKey);
-      if (!descriptorMap.has(topicKey)) {
-        const rawTopicId =
-          slice.topicId ?? slice.topicID ?? slice.id ?? "";
-        if (!rawTopicId) return;
-        const descriptor =
-          typeof rawTopicId === "string"
-            ? rawTopicId.trim()
-            : String(rawTopicId).trim();
-        if (!descriptor) return;
-        descriptorMap.set(topicKey, {
-          topicId: descriptor,
-          includeTopic: true,
-        });
+      const subIdRaw =
+        slice.subId ?? slice.subID ?? slice.itemId ?? slice.itemID ?? "";
+      const subKey = toKey(subIdRaw);
+      const subIdxValue = Number(slice.subIdx);
+      const hasSubIdx = Number.isFinite(subIdxValue);
+      const sliceKey = makeSliceKey(topicKey, subKey, hasSubIdx ? subIdxValue : null);
+      const topicCompleteKey = makeSliceKey(topicKey, "", null);
+
+      const plannerMarkedComplete =
+        slice.completed === true || slice.status === "completed";
+      const actuallyComplete = isSliceCompleted(slice);
+
+      if (!actuallyComplete) {
+        if (plannerMarkedComplete && weekKey) {
+          if (resetCompletionKeysRef.current.has(sliceKey)) {
+            return;
+          }
+          if (!resetMap.has(sliceKey)) {
+            resetMap.set(sliceKey, {
+              topicId: normalize(topicIdRaw),
+              subId: normalize(subIdRaw),
+              seq: slice.seq ?? null,
+              subIdx: hasSubIdx ? subIdxValue : undefined,
+              percentComplete: 0,
+            });
+          }
+        } else {
+          resetCompletionKeysRef.current.delete(sliceKey);
+          resetCompletionKeysRef.current.delete(topicCompleteKey);
+        }
+        return;
+      }
+
+      resetCompletionKeysRef.current.delete(sliceKey);
+      resetCompletionKeysRef.current.delete(topicCompleteKey);
+
+      if (
+        syncedCompletionKeysRef.current.has(sliceKey) ||
+        syncedCompletionKeysRef.current.has(topicCompleteKey)
+      ) {
+        return;
+      }
+
+      newlySyncedKeys.add(sliceKey);
+
+      let descriptor = descriptorMap.get(topicKey);
+      if (descriptor?.includeTopic && descriptor.subtopicIds.size === 0 && descriptor.subIdxs.size === 0) {
+        return;
+      }
+
+      if (!descriptor) {
+        const canonicalTopicId = normalize(topicIdRaw);
+        if (!canonicalTopicId) return;
+        descriptor = {
+          topicId: canonicalTopicId,
+          includeTopic: false,
+          subtopicIds: new Set(),
+          subIdxs: new Set(),
+        };
+        descriptorMap.set(topicKey, descriptor);
+      }
+
+      if (subKey) {
+        const canonicalSubId = normalize(subIdRaw);
+        if (canonicalSubId) {
+          descriptor.subtopicIds.add(canonicalSubId);
+        }
+      }
+      if (hasSubIdx) {
+        descriptor.subIdxs.add(subIdxValue);
+      }
+      if (!subKey && !hasSubIdx) {
+        descriptor.includeTopic = true;
+        descriptor.subtopicIds.clear();
+        descriptor.subIdxs.clear();
+        newlySyncedKeys.add(topicCompleteKey);
       }
     });
 
-    if (!descriptorMap.size) return;
+    const completionPayload = Array.from(descriptorMap.values())
+      .map((entry) => {
+        if (!entry.topicId) return null;
+        const hasSubIds = entry.subtopicIds.size > 0;
+        const hasSubIdxs = entry.subIdxs.size > 0;
+        const payload = { topicId: entry.topicId };
+        if (hasSubIds) {
+          payload.subtopicIds = Array.from(entry.subtopicIds);
+        }
+        if (hasSubIdxs) {
+          payload.subIdxs = Array.from(entry.subIdxs);
+        }
+        if (entry.includeTopic && !hasSubIds && !hasSubIdxs) {
+          payload.includeTopic = true;
+        } else if (!hasSubIds && !hasSubIdxs) {
+          payload.includeTopic = true;
+        }
+        return payload;
+      })
+      .filter(Boolean);
+
+    const resetPayload =
+      weekKey && resetMap.size
+        ? Array.from(resetMap.values()).filter((entry) => entry.topicId)
+        : [];
+
+    if (!completionPayload.length && !resetPayload.length) return;
 
     let cancelled = false;
     const sync = async () => {
       try {
-        const result = await markAssignmentsCompleteFromProgress(
-          planUid,
-          planTodayIso,
-          Array.from(descriptorMap.values()),
-        );
-        if (cancelled) return;
-        if (result?.matchedSlices > 0) {
-          newlySyncedKeys.forEach((key) =>
-            syncedCompletionKeysRef.current.add(key),
+        if (resetPayload.length) {
+          await resetAssignmentsCompletion(
+            planUid,
+            weekKey,
+            planTodayIso,
+            resetPayload,
           );
+          if (cancelled) return;
+          resetPayload.forEach((entry) => {
+            const topicKey = toKey(entry.topicId);
+            const subKey = toKey(entry.subId);
+            const subIdxNumber =
+              entry.subIdx === undefined || entry.subIdx === null
+                ? null
+                : Number(entry.subIdx);
+            const hasStoredSubIdx = Number.isFinite(subIdxNumber);
+            const sliceKey = makeSliceKey(
+              topicKey,
+              subKey,
+              hasStoredSubIdx ? subIdxNumber : null,
+            );
+            const topicCompleteKey = makeSliceKey(topicKey, "", null);
+            syncedCompletionKeysRef.current.delete(sliceKey);
+            syncedCompletionKeysRef.current.delete(topicCompleteKey);
+            resetCompletionKeysRef.current.add(sliceKey);
+            if (!hasStoredSubIdx && !subKey) {
+              resetCompletionKeysRef.current.add(topicCompleteKey);
+            }
+          });
+        }
+
+        if (completionPayload.length) {
+          const result = await markAssignmentsCompleteFromProgress(
+            planUid,
+            planTodayIso,
+            completionPayload,
+          );
+          if (cancelled) return;
+          if (result?.matchedSlices > 0) {
+            newlySyncedKeys.forEach((key) =>
+              syncedCompletionKeysRef.current.add(key),
+            );
+          }
         }
       } catch (error) {
         console.error(
@@ -910,7 +1107,14 @@ const LearnTab = ({
     return () => {
       cancelled = true;
     };
-  }, [planUid, planTodayIso, dayAssignments, topicStatusLookup, isSliceCompleted]);
+  }, [
+    planUid,
+    planTodayIso,
+    dayAssignments,
+    topicStatusLookup,
+    isSliceCompleted,
+    dayAssignmentsMeta.weekKey,
+  ]);
 
   useEffect(() => {
     if (!planUid || !planTodayIso) return;

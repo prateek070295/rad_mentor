@@ -1,0 +1,1281 @@
+{
+  "Syllabus": {
+    "Breast": {
+      "chapters": [
+        {
+          "topicId": "1",
+          "name": "A Systematic Approach to Imaging of Breast Lesions",
+          "category": "must know",
+          "topics": [
+            {
+              "topicId": "1.1",
+              "name": "INTRODUCTION",
+              "category": "nice to know",
+              "parentId": "1",
+              "priority": "nice"
+            },
+            {
+              "topicId": "1.2",
+              "name": "IMAGING TECHNIQUES MAMMOGRAPHY",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "1.2.1",
+                  "name": "Mammography Equipment",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "1.2.2",
+                  "name": "Mammography Projections",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.2.3",
+                  "name": "Indications for Mammography",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.2.4",
+                  "name": "Normal Mammographic Anatomy",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.2.5",
+                  "name": "Interpretation and Reporting of Mammograms",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.2.6",
+                  "name": "Breast ImagingŒReporting and Data System",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.2.7",
+                  "name": "ACR BI-RADS Assessment Categories",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.2.8",
+                  "name": "Digital Mammography",
+                  "category": "good to know",
+                  "parentId": "1.2",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "1",
+              "priority": "must"
+            },
+            {
+              "topicId": "1.3",
+              "name": "BREAST ULTRASOUND",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "1.3.1",
+                  "name": "Technique",
+                  "category": "good to know",
+                  "parentId": "1.3",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "1.3.2",
+                  "name": "Indications for Breast Ultrasound",
+                  "category": "good to know",
+                  "parentId": "1.3",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.3.3",
+                  "name": "Normal Anatomy",
+                  "category": "good to know",
+                  "parentId": "1.3",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.3.4",
+                  "name": "ACR BI-RADS Ultrasound Lexicon Descriptors",
+                  "category": "good to know",
+                  "parentId": "1.3",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.3.5",
+                  "name": "Challenges in Assigning Final Assessment Categories and the Influence of Clinical Factors",
+                  "category": "nice to know",
+                  "parentId": "1.3",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.3.6",
+                  "name": "Contrast-enhanced Ultrasound",
+                  "category": "good to know",
+                  "parentId": "1.3",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "1.3.7",
+                  "name": "Ultrasound Elastography",
+                  "category": "good to know",
+                  "parentId": "1.3",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "1",
+              "priority": "must"
+            },
+            {
+              "topicId": "1.4",
+              "name": "BREAST MAGNETIC RESONANCE IMAGING",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "1.4.1",
+                  "name": "Indications of Breast Magnetic Resonance Imaging",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.2",
+                  "name": "Technique",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.3",
+                  "name": "Kinetic Analysis",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.4",
+                  "name": "Normal Magnetic Resonance Imaging Appearances",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.5",
+                  "name": "Interpretation of Breast Magnetic Resonance Imaging",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.6",
+                  "name": "Associated Findings",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.7",
+                  "name": "Kinetic Curve Assessment",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.8",
+                  "name": "Diffusion-weighted Imaging",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "1.4.9",
+                  "name": "Sensitivity and Specificity of Magnetic Resonance Imaging",
+                  "category": "good to know",
+                  "parentId": "1.4",
+                  "priority": "must"
+                }
+              ],
+              "parentId": "1",
+              "priority": "must"
+            },
+            {
+              "topicId": "1.5",
+              "name": "NUCLEAR MEDICINE IN BREAST IMAGING",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "1.5.1",
+                  "name": "Breast-specific Gamma Imaging",
+                  "category": "good to know",
+                  "parentId": "1.5",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "1.5.2",
+                  "name": "Positron Emission Tomography",
+                  "category": "good to know",
+                  "parentId": "1.5",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "1.5.3",
+                  "name": "Positron Emission Mammography",
+                  "category": "good to know",
+                  "parentId": "1.5",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "1",
+              "priority": "good"
+            }
+          ],
+          "parentId": null,
+          "priority": "must"
+        },
+        {
+          "topicId": "2",
+          "name": "Benign and Malignant Lesions of the Breast",
+          "category": "must know",
+          "topics": [
+            {
+              "topicId": "2.1",
+              "name": "INTRODUCTION",
+              "category": "nice to know",
+              "parentId": "2",
+              "priority": "nice"
+            },
+            {
+              "topicId": "2.2",
+              "name": "PROLIFERATIVE BENIGN LESIONS OF THE BREAST",
+              "category": "must know",
+              "subtopics": [
+                {
+                  "topicId": "2.2.1",
+                  "name": "Fibrocystic Disease",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.2",
+                  "name": "Adenosis",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.3",
+                  "name": "Fibroadenoma",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.4",
+                  "name": "Cysts",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.5",
+                  "name": "Intraductal Papilloma",
+                  "category": "must know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.6",
+                  "name": "Duct Ectasia",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.7",
+                  "name": "Ductal Epithelial Hyperplasia",
+                  "category": "must know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.8",
+                  "name": "MISCELLANEOUS BENIGN BREAST CONDITIONS Lipoma",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.9",
+                  "name": "Fat Necrosis",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.10",
+                  "name": "Galactocele",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.11",
+                  "name": "Radial Scar",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.12",
+                  "name": "Hamartoma",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.13",
+                  "name": "Desmoid Tumor",
+                  "category": "must know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.14",
+                  "name": "Diabetic Mastopathy",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.15",
+                  "name": "Superficial Thrombophlebitis (Mondor's Disease)",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.16",
+                  "name": "Breast Infections",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.17",
+                  "name": "Granulomatous Mastitis",
+                  "category": "good to know",
+                  "parentId": "2.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.2.18",
+                  "name": "Breast Implants",
+                  "category": "nice to know",
+                  "parentId": "2.2",
+                  "priority": "nice"
+                }
+              ],
+              "parentId": "2",
+              "priority": "must"
+            },
+            {
+              "topicId": "2.3",
+              "name": "MALIGNANT LESIONS OF THE BREAST",
+              "category": "must know",
+              "subtopics": [
+                {
+                  "topicId": "2.3.1",
+                  "name": "Risk Factors for Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.3",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.3.2",
+                  "name": "Diagnosis of the Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.3",
+                  "priority": "must"
+                }
+              ],
+              "parentId": "2",
+              "priority": "must"
+            },
+            {
+              "topicId": "2.4",
+              "name": "BREAST CANCER SCREENING",
+              "category": "must know",
+              "subtopics": [
+                {
+                  "topicId": "2.4.1",
+                  "name": "Mammography Screening",
+                  "category": "must know",
+                  "parentId": "2.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.4.2",
+                  "name": "Magnetic Resonance Imaging Screening",
+                  "category": "must know",
+                  "parentId": "2.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.4.3",
+                  "name": "Ultrasound Screening",
+                  "category": "must know",
+                  "parentId": "2.4",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.4.4",
+                  "name": "Breast Cancer Screening in Developing Countries",
+                  "category": "must know",
+                  "parentId": "2.4",
+                  "priority": "must"
+                }
+              ],
+              "parentId": "2",
+              "priority": "must"
+            },
+            {
+              "topicId": "2.5",
+              "name": "IMAGING FEATURES OF BREAST CANCER",
+              "category": "must know",
+              "subtopics": [
+                {
+                  "topicId": "2.5.1",
+                  "name": "Preinvasive Breast Lesions",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.2",
+                  "name": "Ductal Carcinoma In Situ",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.3",
+                  "name": "Lobular Carcinoma In Situ",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.4",
+                  "name": "Invasive Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.5",
+                  "name": "Invasive Ductal Carcinoma",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.6",
+                  "name": "Invasive Lobular Carcinoma",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.7",
+                  "name": "Medullary Carcinoma",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.8",
+                  "name": "Mucinous Carcinoma",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.9",
+                  "name": "Tubular Carcinoma",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.10",
+                  "name": "Papillary Carcinoma",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "2.5.11",
+                  "name": "Triple Negative Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.5",
+                  "priority": "must"
+                }
+              ],
+              "parentId": "2",
+              "priority": "must"
+            },
+            {
+              "topicId": "2.6",
+              "name": "STAGING AND TREATMENT OF BREAST CANCER",
+              "category": "must know",
+              "subtopics": [
+                {
+                  "topicId": "2.6.1",
+                  "name": "Preoperative Breast Imaging",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.2",
+                  "name": "Breast Conservation Therapy",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.3",
+                  "name": "Mastectomy",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.4",
+                  "name": "Management of Axilla",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.5",
+                  "name": "Perioperative Breast Imaging",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.6",
+                  "name": "Adjuvant Treatment",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.7",
+                  "name": "ADVANCED BREAST CANCER Locally Advanced Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.8",
+                  "name": "Inflammatory Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.9",
+                  "name": "Neoadjuvant Chemotherapy",
+                  "category": "good to know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.10",
+                  "name": "Metastatic Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.6.11",
+                  "name": "Occult Primary Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.6",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "2",
+              "priority": "good"
+            },
+            {
+              "topicId": "2.7",
+              "name": "POST-TREATMENT BREAST IMAGING AND FOLLOW-UP",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "2.7.1",
+                  "name": "MISCELLANEOUS MALIGNANT LESIONS OF THE BREAST Paget's Disease",
+                  "category": "must know",
+                  "parentId": "2.7",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.7.2",
+                  "name": "Phyllodes Tumor",
+                  "category": "must know",
+                  "parentId": "2.7",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.7.3",
+                  "name": "Sarcoma",
+                  "category": "good to know",
+                  "parentId": "2.7",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.7.4",
+                  "name": "Metastases to Breast",
+                  "category": "good to know",
+                  "parentId": "2.7",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "2.7.5",
+                  "name": "Male Breast Cancer",
+                  "category": "must know",
+                  "parentId": "2.7",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "2",
+              "priority": "good"
+            }
+          ],
+          "parentId": null,
+          "priority": "must"
+        },
+        {
+          "topicId": "3",
+          "name": "Breast Interventions",
+          "category": "good to know",
+          "topics": [
+            {
+              "topicId": "3.1",
+              "name": "INTRODUCTION",
+              "category": "nice to know",
+              "parentId": "3",
+              "priority": "nice"
+            },
+            {
+              "topicId": "3.2",
+              "name": "BREAST BIOPSY",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "3.2.1",
+                  "name": "BREAST BIOPSY TECHNIQUES Surgical Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.2",
+                  "name": "Fine Needle Aspiration Cytology",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.3",
+                  "name": "Core Needle Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.4",
+                  "name": "Vacuum-assisted Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.5",
+                  "name": "Lesion Selection for Breast Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.6",
+                  "name": "Selection of Guiding Modality",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.7",
+                  "name": "Prebiopsy Assessment",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.8",
+                  "name": "Ultrasound-guided Breast Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.9",
+                  "name": "Stereotactic Breast Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.10",
+                  "name": "Tomosynthesis-guided Core Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.11",
+                  "name": "Specimen Radiography",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "3.2.12",
+                  "name": "Postbiopsy Care",
+                  "category": "good to know",
+                  "parentId": "3.2",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "3",
+              "priority": "good"
+            },
+            {
+              "topicId": "3.3",
+              "name": "COMPLICATIONS OF BREAST BIOPSY",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "3.3.1",
+                  "name": "Magnetic Resonance Imaging-guided Breast Biopsy",
+                  "category": "good to know",
+                  "parentId": "3.3",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.3.2",
+                  "name": "Histopathological Correlation",
+                  "category": "good to know",
+                  "parentId": "3.3",
+                  "priority": "nice"
+                }
+              ],
+              "parentId": "3",
+              "priority": "nice"
+            },
+            {
+              "topicId": "3.4",
+              "name": "PREOPERATIVE HOOKWIRE LOCALIZATION",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "3.4.1",
+                  "name": "Equipment",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.2",
+                  "name": "Technique",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.3",
+                  "name": "Other Localization Techniques",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.4",
+                  "name": "Specimen Radiography",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.5",
+                  "name": "Complications",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.6",
+                  "name": "Special Techniques of Localization",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.7",
+                  "name": "Ultrasound-guided Intraoperative Excision",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.8",
+                  "name": "MISCELLANEOUS BREAST INTERVENTIONS Ductography",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.9",
+                  "name": "Cyst Aspiration",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "3.4.10",
+                  "name": "Ultrasound-guided Axillary Lymph Node FNAC",
+                  "category": "good to know",
+                  "parentId": "3.4",
+                  "priority": "nice"
+                }
+              ],
+              "parentId": "3",
+              "priority": "nice"
+            },
+            {
+              "topicId": "3.5",
+              "name": "ABLATIVE PROCEDURES FOR BREAST CANCER",
+              "category": "must know",
+              "parentId": "3",
+              "priority": "good"
+            }
+          ],
+          "parentId": null,
+          "priority": "nice"
+        },
+        {
+          "topicId": "4",
+          "name": "Advances in Breast Imaging",
+          "category": "good to know",
+          "topics": [
+            {
+              "topicId": "4.1",
+              "name": "INTRODUCTION",
+              "category": "nice to know",
+              "parentId": "4",
+              "priority": "nice"
+            },
+            {
+              "topicId": "4.2",
+              "name": "DIGITAL BREAST TOMOSYNTHESIS",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "4.2.1",
+                  "name": "Digital Breast Tomosynthesis Technology",
+                  "category": "good to know",
+                  "parentId": "4.2",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "4.2.2",
+                  "name": "Digital Breast Tomosynthesis in a Screening Setting",
+                  "category": "must know",
+                  "parentId": "4.2",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "4.2.3",
+                  "name": "Use of Digital Breast Tomosynthesis in Diagnostic Workup",
+                  "category": "good to know",
+                  "parentId": "4.2",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "4",
+              "priority": "must"
+            },
+            {
+              "topicId": "4.3",
+              "name": "CONTRAST-ENHANCED MAMMOGRAPHY",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "4.3.1",
+                  "name": "Contrast-enhanced Mammography Acquisition and Image Analysis",
+                  "category": "good to know",
+                  "parentId": "4.3",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "4.3.2",
+                  "name": "Contrast-enhanced Mammography in Screening",
+                  "category": "must know",
+                  "parentId": "4.3",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "4.3.3",
+                  "name": "Diagnostic Performance of Contrast-enhanced Mammography",
+                  "category": "good to know",
+                  "parentId": "4.3",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "4.3.4",
+                  "name": "Contrast-enhanced Mammography as an Alternative to Magnetic Resonance Imaging",
+                  "category": "good to know",
+                  "parentId": "4.3",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "4",
+              "priority": "good"
+            },
+            {
+              "topicId": "4.4",
+              "name": "AUTOMATED BREAST VOLUME SCAN",
+              "category": "good to know",
+              "parentId": "4",
+              "priority": "good"
+            },
+            {
+              "topicId": "4.5",
+              "name": "BREAST ELASTOGRAPHY",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "4.5.1",
+                  "name": "Strain Elastography",
+                  "category": "good to know",
+                  "parentId": "4.5",
+                  "priority": "must"
+                },
+                {
+                  "topicId": "4.5.2",
+                  "name": "Shear-wave Elastography",
+                  "category": "good to know",
+                  "parentId": "4.5",
+                  "priority": "must"
+                }
+              ],
+              "parentId": "4",
+              "priority": "must"
+            },
+            {
+              "topicId": "4.6",
+              "name": "CONTRAST-ENHANCED ULTRASOUND",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "4.6.1",
+                  "name": "Ultrasound Contrast Agent and Basic Principles",
+                  "category": "good to know",
+                  "parentId": "4.6",
+                  "priority": "good"
+                },
+                {
+                  "topicId": "4.6.2",
+                  "name": "Contrast-enhanced Ultrasound Acquisition and Evaluation",
+                  "category": "good to know",
+                  "parentId": "4.6",
+                  "priority": "good"
+                }
+              ],
+              "parentId": "4",
+              "priority": "good"
+            },
+            {
+              "topicId": "4.7",
+              "name": "THERMAL IMAGING",
+              "category": "good to know",
+              "parentId": "4",
+              "priority": "nice"
+            },
+            {
+              "topicId": "4.8",
+              "name": "ARTIFICIAL INTELLIGENCE IN BREAST IMAGING",
+              "category": "good to know",
+              "parentId": "4",
+              "priority": "nice"
+            }
+          ],
+          "parentId": null,
+          "priority": "good"
+        },
+        {
+          "topicId": "5",
+          "name": "Male Breast Imaging",
+          "category": "good to know",
+          "topics": [
+            {
+              "topicId": "5.1",
+              "name": "INTRODUCTION",
+              "category": "nice to know",
+              "parentId": "5",
+              "priority": "nice"
+            },
+            {
+              "topicId": "5.2",
+              "name": "IMAGING METHODS",
+              "category": "good to know",
+              "parentId": "5",
+              "priority": "nice"
+            },
+            {
+              "topicId": "5.3",
+              "name": "ANATOMY",
+              "category": "good to know",
+              "parentId": "5",
+              "priority": "nice"
+            },
+            {
+              "topicId": "5.4",
+              "name": "NORMAL IMAGING APPEARANCE",
+              "category": "good to know",
+              "subtopics": [
+                {
+                  "topicId": "5.4.1",
+                  "name": "Gynecomastia",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.2",
+                  "name": "BENIGN NEOPLASMS OF THE MALE BREAST Angiolipoma",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.3",
+                  "name": "Schwannoma",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.4",
+                  "name": "Intraductal Papilloma",
+                  "category": "must know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.5",
+                  "name": "Lipomas",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.6",
+                  "name": "Benign Spindle Cell Neoplasms",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.7",
+                  "name": "BENIGN NON-NEOPLASTIC LESIONS OF MALE BREAST Pseudogynecomastia",
+                  "category": "must know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.8",
+                  "name": "Intramammary Lymph Nodes",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.9",
+                  "name": "Epidermal Inclusion Cyst",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.10",
+                  "name": "Duct Ectasia",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.11",
+                  "name": "Diabetic Mastopathy",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.12",
+                  "name": "Post-traumatic Hematoma/Fat Necrosis",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.13",
+                  "name": "Mastitis",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.14",
+                  "name": "Subareolar Abscess",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.15",
+                  "name": "Tuberculosis of the Breast",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.16",
+                  "name": "Pseudoangiomatous Stromal Hyperplasia",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.17",
+                  "name": "Hamartomas",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.18",
+                  "name": "Augmented Male Breasts",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.19",
+                  "name": "Venous Malformation",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.20",
+                  "name": "Secondary Syphilis",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.4.21",
+                  "name": "Nodular Fasciitis",
+                  "category": "good to know",
+                  "parentId": "5.4",
+                  "priority": "nice"
+                }
+              ],
+              "parentId": "5",
+              "priority": "nice"
+            },
+            {
+              "topicId": "5.5",
+              "name": "MALE BREAST CANCER",
+              "category": "must know",
+              "subtopics": [
+                {
+                  "topicId": "5.5.1",
+                  "name": "OTHER MALIGNANT NEOPLASMS OF THE MALE BREAST Primary Lymphoma",
+                  "category": "must know",
+                  "parentId": "5.5",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.5.2",
+                  "name": "Dermatofibrosarcoma",
+                  "category": "good to know",
+                  "parentId": "5.5",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.5.3",
+                  "name": "Multiple Myeloma",
+                  "category": "good to know",
+                  "parentId": "5.5",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.5.4",
+                  "name": "Glomus Tumors",
+                  "category": "must know",
+                  "parentId": "5.5",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.5.5",
+                  "name": "Inflammatory Myofibroblastic Tumor",
+                  "category": "must know",
+                  "parentId": "5.5",
+                  "priority": "nice"
+                },
+                {
+                  "topicId": "5.5.6",
+                  "name": "Metastasis",
+                  "category": "good to know",
+                  "parentId": "5.5",
+                  "priority": "nice"
+                }
+              ],
+              "parentId": "5",
+              "priority": "nice"
+            }
+          ],
+          "parentId": null,
+          "priority": "nice"
+        }
+      ]
+    }
+  }
+}

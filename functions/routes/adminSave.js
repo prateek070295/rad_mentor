@@ -1,6 +1,7 @@
 import express from "express";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "node:crypto";
+import requireAdmin from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -213,7 +214,7 @@ const sanitizeSection = (section, index = 0) => {
   };
 };
 
-router.post("/", express.json(), async (req, res) => {
+router.post("/", requireAdmin, express.json(), async (req, res) => {
   const db = getFirestore();
   const { organ, topicId, structured } = req.body;
 
@@ -222,30 +223,39 @@ router.post("/", express.json(), async (req, res) => {
   }
 
   try {
-    const batch = db.batch();
     const nodeRef = db.collection('sections').doc(organ).collection('nodes').doc(topicId);
     const csColRef = nodeRef.collection('contentSections');
+    const mutations = [];
 
-    // --- NEW: Update the parent node with objectives and key points ---
-    batch.set(nodeRef, {
-      objectives: sanitizeObjectives(structured.objectives),
-      key_points: sanitizeObjectives(structured.key_points),
-    }, { merge: true });
+    const enqueue = (op) => mutations.push(op);
 
-    // Step 1 - Delete all existing contentSections to prevent duplicates
+    enqueue({
+      type: "set",
+      ref: nodeRef,
+      data: {
+        objectives: sanitizeObjectives(structured.objectives),
+        key_points: sanitizeObjectives(structured.key_points),
+      },
+      options: { merge: true },
+    });
+
+    // Step 1 - Queue deletes for existing content sections and checkpoints
     const existingDocsSnapshot = await csColRef.get();
     if (!existingDocsSnapshot.empty) {
-      const checkpointDeletes = [];
-      existingDocsSnapshot.docs.forEach((doc) => {
-        const checkpointsRef = doc.ref.collection('checkpoints');
-        checkpointDeletes.push(
-          checkpointsRef.get().then((snapshot) => {
-            snapshot.docs.forEach((cpDoc) => batch.delete(cpDoc.ref));
-          })
-        );
-        batch.delete(doc.ref);
+      const checkpointSnapshots = await Promise.all(
+        existingDocsSnapshot.docs.map(async (doc) => {
+          const checkpointsRef = doc.ref.collection('checkpoints');
+          const snapshot = await checkpointsRef.get();
+          return { doc, snapshot };
+        }),
+      );
+
+      checkpointSnapshots.forEach(({ doc, snapshot }) => {
+        snapshot.docs.forEach((cpDoc) => {
+          enqueue({ type: "delete", ref: cpDoc.ref });
+        });
+        enqueue({ type: "delete", ref: doc.ref });
       });
-      await Promise.all(checkpointDeletes);
     }
 
     // Step 2 - Add the new, edited sections
@@ -254,19 +264,74 @@ router.post("/", express.json(), async (req, res) => {
         const { section: sanitizedSection, checkpoints } = sanitizeSection(section, index);
         const secRef = csColRef.doc(); // Auto-generate a new ID
 
-        batch.set(secRef, sanitizedSection);
+        enqueue({ type: "set", ref: secRef, data: sanitizedSection });
 
         if (checkpoints && checkpoints.length > 0) {
           const cpColRef = secRef.collection('checkpoints');
           checkpoints.forEach((checkpoint) => {
             const cpRef = cpColRef.doc(); // Auto-generate a new ID
-            batch.set(cpRef, checkpoint);
+            enqueue({ type: "set", ref: cpRef, data: checkpoint });
           });
         }
       });
     }
 
-    await batch.commit();
+    const MAX_OPS_PER_BATCH = 450;
+    let successBatches = 0;
+    let failedBatches = 0;
+
+    const chunks = [];
+    for (let index = 0; index < mutations.length; index += MAX_OPS_PER_BATCH) {
+      chunks.push(mutations.slice(index, index + MAX_OPS_PER_BATCH));
+    }
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    for (const [chunkIndex, chunk] of chunks.entries()) {
+      let attempt = 0;
+      let committed = false;
+      while (attempt < 3 && !committed) {
+        const batch = db.batch();
+        chunk.forEach((operation) => {
+          if (operation.type === "set") {
+            batch.set(operation.ref, operation.data, operation.options);
+          } else if (operation.type === "delete") {
+            batch.delete(operation.ref);
+          }
+        });
+
+        try {
+          await batch.commit();
+          committed = true;
+          successBatches += 1;
+        } catch (batchError) {
+          attempt += 1;
+          if (attempt >= 3) {
+            failedBatches += 1;
+            console.error(
+              `Failed to commit batch ${chunkIndex + 1} after ${attempt} attempts`,
+              batchError,
+            );
+          } else {
+            const delay = 100 * 2 ** (attempt - 1);
+            console.warn(
+              `Retrying batch ${chunkIndex + 1} (attempt ${attempt + 1}) after ${delay}ms`,
+              batchError,
+            );
+            await sleep(delay);
+          }
+        }
+      }
+    }
+
+    console.info(
+      `adminSave: committed ${successBatches} batches${failedBatches ? `, ${failedBatches} failed` : ""}`,
+    );
+
+    if (failedBatches > 0) {
+      return res.status(500).json({ error: "Failed to update some content batches." });
+    }
+
     res.status(200).json({ message: "Content updated successfully." });
 
   } catch (error) {

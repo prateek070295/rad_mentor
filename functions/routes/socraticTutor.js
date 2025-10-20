@@ -1,11 +1,12 @@
 import { getGenAI, convertDeltaToText, runWithRetry } from "../helpers.js";
 import express from "express";
 import { getFirestore } from "firebase-admin/firestore";
+import requireAdmin from "../middleware/auth.js";
 
 // const db = getFirestore(); // This line was removed from here
 const router = express.Router();
 
-router.post("/", express.json(), async (req, res) => {
+router.post("/", requireAdmin, express.json(), async (req, res) => {
   const db = getFirestore(); // And added here
   try {
     const genAI = getGenAI();

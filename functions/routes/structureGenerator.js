@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { getGenAI, runWithRetry } from "../helpers.js";
 import { validateStructure } from "../validators/contentSchema.js";
+import requireAdmin from "../middleware/auth.js";
+import truncateText from "../utils/truncateText.js";
 
 const router = express.Router();
 
@@ -728,14 +730,15 @@ Before returning:
 Return only the final JSON object (no commentary or code fences).
 `;
 
-router.post("/", express.json(), async (req, res) => {
+router.post("/", requireAdmin, express.json(), async (req, res) => {
   const { rawText } = req.body;
   if (!rawText) {
     return res.status(400).json({ error: "rawText is required." });
   }
 
   const normalizedRawText = convertAsciiTablesToMarkdown(rawText);
-  const fullPrompt = `${SYSTEM_PROMPT}\n\n--- SOURCE TEXT ---\n${normalizedRawText}\n-------------------`;
+  const truncatedRawText = truncateText(normalizedRawText);
+  const fullPrompt = `${SYSTEM_PROMPT}\n\n--- SOURCE TEXT ---\n${truncatedRawText}\n-------------------`;
 
   try {
     const genAI = getGenAI();
