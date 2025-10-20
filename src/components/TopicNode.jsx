@@ -1,48 +1,73 @@
 import React, { useState } from 'react';
 
-const TopicNode = ({ topic, onTopicSelect, currentTopicId }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+const computeNodeStatus = (node, currentTopicId) => {
+  if (!node) return 'not-started';
 
-  const hasChildren = topic.children && topic.children.length > 0;
+  const hasChildren = Array.isArray(node.children) && node.children.length > 0;
 
   const normalizedStatus =
-    typeof topic.status === "string" ? topic.status.trim().toLowerCase() : "";
-  let computedStatus = normalizedStatus;
+    typeof node.status === 'string' ? node.status.trim().toLowerCase() : '';
+  let status = normalizedStatus;
 
-  if (!computedStatus || computedStatus === "not-started") {
+  if (!status || status === 'not-started') {
     const pct =
-      typeof topic.percentComplete === "number" ? topic.percentComplete : null;
+      typeof node.percentComplete === 'number' ? node.percentComplete : null;
     if (pct !== null) {
       if (pct >= 100) {
-        computedStatus = "completed";
+        status = 'completed';
       } else if (pct > 0) {
-        computedStatus = "in-progress";
+        status = 'in-progress';
       }
     }
   }
 
-  if ((!computedStatus || computedStatus === "not-started") && topic.completed === true) {
-    computedStatus = "completed";
+  if ((!status || status === 'not-started') && node.completed === true) {
+    status = 'completed';
   }
 
-  if ((!computedStatus || computedStatus === "not-started") && topic.started === true) {
-    computedStatus = computedStatus === "completed" ? computedStatus : "in-progress";
+  if ((!status || status === 'not-started') && node.started === true) {
+    status = status === 'completed' ? status : 'in-progress';
   }
 
-  if ((!computedStatus || computedStatus === "not-started") && currentTopicId === topic.id) {
-    computedStatus = "in-progress";
+  if ((!status || status === 'not-started') && currentTopicId === node.id) {
+    status = 'in-progress';
   }
 
-  if (!computedStatus) {
-    computedStatus = "not-started";
+  if (hasChildren) {
+    const childStatuses = node.children.map((child) =>
+      computeNodeStatus(child, currentTopicId),
+    );
+
+    if (childStatuses.length > 0) {
+      const totalChildren = childStatuses.length;
+      const completedChildren = childStatuses.filter(
+        (childStatus) => childStatus === 'completed',
+      ).length;
+
+      if (completedChildren === totalChildren) {
+        status = 'completed';
+      } else if (
+        completedChildren > 0 ||
+        childStatuses.some((childStatus) => childStatus === 'in-progress')
+      ) {
+        status = 'in-progress';
+      } else if (!status) {
+        status = 'not-started';
+      }
+    }
   }
 
-  // A single handler for the entire row
+  return status || 'not-started';
+};
+
+const TopicNode = ({ topic, onTopicSelect, currentTopicId }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const hasChildren = Array.isArray(topic.children) && topic.children.length > 0;
+  const computedStatus = computeNodeStatus(topic, currentTopicId);
+
   const handleRowClick = () => {
-    // Action 1: Select the topic to view its content
     onTopicSelect(topic);
-
-    // Action 2: Toggle the expansion of its children
     if (hasChildren) {
       setIsExpanded(!isExpanded);
     }
@@ -50,43 +75,41 @@ const TopicNode = ({ topic, onTopicSelect, currentTopicId }) => {
 
   return (
     <li className="my-1">
-      <div 
-        className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 cursor-pointer" 
-        onClick={handleRowClick} // Use the new unified handler here
+      <div
+        className="flex cursor-pointer items-center space-x-2 rounded-lg p-2 hover:bg-gray-100"
+        onClick={handleRowClick}
       >
-        {/* Arrow Icon */}
         {hasChildren ? (
-          <span className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-90' : 'rotate-0'}`}>
-            ▶
+          <span className="flex h-3 w-3 items-center justify-center text-gray-500 transition-colors duration-200">
+            {isExpanded ? '▼' : '▶'}
           </span>
         ) : (
-          <span className="w-4"></span> // Placeholder for alignment
+          <span className="h-3 w-3" />
         )}
 
-        {/* Status Icon */}
         <div
-          className={`w-3 h-3 rounded-full flex-shrink-0 ${
+          className={`h-3 w-3 flex-shrink-0 rounded-full ${
             computedStatus === 'completed'
               ? 'bg-green-500'
               : computedStatus === 'in-progress'
               ? 'bg-yellow-500'
               : 'bg-gray-400'
           }`}
-        ></div>
-        
-        {/* Topic Name (no longer needs its own click handler) */}
-        <span 
-          className={`font-medium ${currentTopicId === topic.id ? 'text-blue-600 font-bold' : 'text-gray-700'}`}
+        />
+
+        <span
+          className={`font-medium ${
+            currentTopicId === topic.id ? 'font-bold text-blue-600' : 'text-gray-700'
+          }`}
         >
           {topic.name}
         </span>
       </div>
 
-      {/* Render Children if Expanded */}
       {isExpanded && hasChildren && (
-        <ul className="pl-6 border-l-2 border-gray-200 ml-4">
-          {topic.children.map(childTopic => (
-            <TopicNode 
+        <ul className="ml-4 border-l-2 border-gray-200 pl-6">
+          {topic.children.map((childTopic) => (
+            <TopicNode
               key={childTopic.id}
               topic={childTopic}
               onTopicSelect={onTopicSelect}
