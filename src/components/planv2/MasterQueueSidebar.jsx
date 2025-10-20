@@ -2,6 +2,53 @@
 import React, { useEffect, useMemo, useState, useCallback, memo } from "react";
 import { listMasterQueueLinear } from "../../services/planV2Api";
 
+function collectSubtopicStats(row) {
+  const subs = Array.isArray(row.subtopics) ? row.subtopics : [];
+
+  const scheduledIdx = new Set();
+  Object.values(row.scheduledDates || {}).forEach((arr) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach((n) => {
+      const idx = Number(n);
+      if (Number.isFinite(idx)) {
+        scheduledIdx.add(idx);
+      }
+    });
+  });
+
+  const completedIdx = new Set();
+  if (Array.isArray(row.completedSubIdx)) {
+    row.completedSubIdx.forEach((value) => {
+      const idx = Number(value);
+      if (Number.isFinite(idx)) {
+        completedIdx.add(idx);
+      }
+    });
+  }
+
+  const remainingSubs = subs.filter(
+    (_, idx) => !scheduledIdx.has(idx) && !completedIdx.has(idx),
+  );
+
+  const totalMinutes = subs.reduce(
+    (sum, sub) => sum + Number(sub?.minutes || 0),
+    0,
+  );
+  const remainingMinutes = remainingSubs.reduce(
+    (sum, sub) => sum + Number(sub?.minutes || 0),
+    0,
+  );
+
+  return {
+    subs,
+    remainingSubs,
+    scheduledIdx,
+    completedIdx,
+    totalMinutes,
+    remainingMinutes,
+  };
+}
+
 /**
  * Sidebar that mirrors the master queue order, nested as:
  * Section -> Chapter -> Topics (with subtopic count)
@@ -34,19 +81,9 @@ function MasterQueueSidebar({ uid, refreshSignal = 0 }) {
         setQueuedRuns(Array.isArray(queued) ? queued : []);
         const filteredInProgress = Array.isArray(inProgress)
           ? inProgress.filter((row) => {
-              const subs = Array.isArray(row.subtopics) ? row.subtopics : [];
+              const { subs, remainingSubs } = collectSubtopicStats(row);
               if (!subs.length) return false;
-              const scheduledIdx = new Set();
-              Object.values(row.scheduledDates || {}).forEach((arr) => {
-                if (!Array.isArray(arr)) return;
-                arr.forEach((n) => {
-                  const idx = Number(n);
-                  if (Number.isFinite(idx)) {
-                    scheduledIdx.add(idx);
-                  }
-                });
-              });
-              return subs.some((_, idx) => !scheduledIdx.has(idx));
+              return remainingSubs.length > 0;
             })
           : [];
         setInProgressRuns(filteredInProgress);
@@ -72,26 +109,12 @@ function MasterQueueSidebar({ uid, refreshSignal = 0 }) {
     const out = [];
     let cur = null;
     for (const r of rows) {
-      const subs = Array.isArray(r.subtopics) ? r.subtopics : [];
-      const scheduledIdx = new Set();
-      Object.values(r.scheduledDates || {}).forEach((arr) => {
-        if (!Array.isArray(arr)) return;
-        arr.forEach((n) => {
-          const idx = Number(n);
-          if (Number.isFinite(idx)) {
-            scheduledIdx.add(idx);
-          }
-        });
-      });
-      const remainingSubs = subs.filter((_, idx) => !scheduledIdx.has(idx));
-      const totalMinutes = subs.reduce(
-        (sum, sub) => sum + Number(sub?.minutes || 0),
-        0,
-      );
-      const remainingMinutes = remainingSubs.reduce(
-        (sum, sub) => sum + Number(sub?.minutes || 0),
-        0,
-      );
+      const {
+        subs,
+        remainingSubs,
+        totalMinutes,
+        remainingMinutes,
+      } = collectSubtopicStats(r);
 
       const gkey = `${r.section}__${r.chapterId}`;
       if (!cur || cur.gkey !== gkey) {

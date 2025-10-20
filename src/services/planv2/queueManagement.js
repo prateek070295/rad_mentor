@@ -245,6 +245,11 @@ export async function listMasterQueueLinear(uid, { filter } = {}) {
     subtopicMinutesSum: NUM(d.subtopicMinutesSum, 0),
     scheduledMinutes: NUM(d.scheduledMinutes, 0),
     scheduledDates: d.scheduledDates || {},
+    completedSubIdx: Array.isArray(d.completedSubIdx)
+      ? d.completedSubIdx
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value))
+      : [],
   }));
 }
 
