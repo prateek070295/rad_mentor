@@ -607,6 +607,136 @@ export async function unscheduleTopicReturnToQueue(uid, seq) {
   return { removed };
 }
 
+export async function unscheduleTopicFromDay(uid, iso, seq) {
+  if (!uid || !iso || !seq) {
+    throw new Error("unscheduleTopicFromDay: missing args");
+  }
+
+  const weekKey = weekKeyFromDate(iso);
+  const weekRef = doc(db, "plans", uid, "weeks", weekKey);
+  const topicRef = doc(db, "plans", uid, "masterQueue", String(seq));
+
+  const col = collection(db, "plans", uid, "masterQueue");
+  let minSortKey = Infinity;
+  const minSnap = await getDocs(query(col, orderBy("sortKey", "asc"), limit(1)));
+  minSnap.forEach((s) => {
+    const data = s.data() || {};
+    minSortKey = Math.min(minSortKey, NUM(data.sortKey, 0));
+  });
+  const nextFrontKey = Number.isFinite(minSortKey) ? minSortKey - 1 : -1;
+
+  const output = await runTransaction(db, async (tx) => {
+    const weekSnap = await tx.get(weekRef);
+    const topicSnap = await tx.get(topicRef);
+
+    if (!weekSnap.exists()) {
+      return { removed: 0 };
+    }
+
+    const weekDoc = weekSnap.data() || {};
+    const assigned = Array.isArray(weekDoc.assigned?.[iso])
+      ? [...weekDoc.assigned[iso]]
+      : [];
+
+    if (!assigned.length) {
+      return { removed: 0 };
+    }
+
+    const remaining = [];
+    const removedSlices = [];
+    assigned.forEach((slice) => {
+      if (String(slice?.seq) === String(seq)) {
+        removedSlices.push(slice);
+      } else {
+        remaining.push(slice);
+      }
+    });
+
+    if (!removedSlices.length) {
+      return { removed: 0 };
+    }
+
+    tx.update(weekRef, { [`assigned.${iso}`]: remaining });
+
+    if (!topicSnap.exists()) {
+      return { removed: removedSlices.length };
+    }
+
+    const topic = topicSnap.data() || {};
+    const subs = Array.isArray(topic.subtopics) ? topic.subtopics : [];
+
+    const scheduledDates = {};
+    Object.entries(topic.scheduledDates || {}).forEach(([key, list]) => {
+      const normalized = Array.isArray(list)
+        ? list
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value))
+        : [];
+      if (normalized.length) {
+        scheduledDates[key] = normalized;
+      }
+    });
+
+    const removedIdx = new Set(
+      removedSlices
+        .map((slice) => Number(slice?.subIdx))
+        .filter((idx) => Number.isFinite(idx)),
+    );
+
+    if (scheduledDates[iso]) {
+      const filtered = scheduledDates[iso].filter(
+        (idx) => !removedIdx.has(Number(idx)),
+      );
+      if (filtered.length) {
+        scheduledDates[iso] = filtered;
+      } else {
+        delete scheduledDates[iso];
+      }
+    }
+
+    let scheduledMinutes = 0;
+    Object.values(scheduledDates).forEach((list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach((idx) => {
+        scheduledMinutes += NUM(subs[idx]?.minutes, 0);
+      });
+    });
+
+    const scheduledCount = Object.values(scheduledDates).reduce(
+      (acc, list) => acc + (Array.isArray(list) ? list.length : 0),
+      0,
+    );
+
+    const completedSet = new Set(
+      Array.isArray(topic.completedSubIdx)
+        ? topic.completedSubIdx
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value))
+        : [],
+    );
+
+    const totalSubCount = subs.length;
+
+    let queueState = "queued";
+    if (scheduledCount > 0) {
+      queueState = "inProgress";
+    } else if (totalSubCount > 0 && completedSet.size >= totalSubCount) {
+      queueState = "done";
+    }
+
+    tx.update(topicRef, {
+      scheduledDates,
+      scheduledMinutes,
+      queueState,
+      sortKey: nextFrontKey,
+    });
+
+    return { removed: removedSlices.length };
+  });
+
+  return output || { removed: 0 };
+}
+
 async function scheduleTopicSubIdxesBulk(uid, iso, seq, subIdxes) {
   if (!uid || !iso || !seq || !Array.isArray(subIdxes) || !subIdxes.length) {
     return { slices: [] };

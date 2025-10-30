@@ -95,6 +95,7 @@ export default function PlanTabV2() {
   const [masterTotals, setMasterTotals] = useState(null);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [isAutoFillingDay, setIsAutoFillingDay] = useState(false);
+  const [isPlannerUpdating, setIsPlannerUpdating] = useState(false);
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -334,6 +335,20 @@ export default function PlanTabV2() {
   const offDays = useMemo(() => weekDoc?.offDays ?? {}, [weekDoc]);
   const dayCaps = useMemo(() => weekDoc?.dayCaps ?? {}, [weekDoc]);
   const assigned = useMemo(() => weekDoc?.assigned ?? {}, [weekDoc]);
+  const plannerUpdatingPrevAssignedRef = useRef(assigned);
+  useEffect(() => {
+    if (isPlannerUpdating && plannerUpdatingPrevAssignedRef.current !== assigned) {
+      setIsPlannerUpdating(false);
+    }
+    plannerUpdatingPrevAssignedRef.current = assigned;
+  }, [assigned, isPlannerUpdating]);
+  useEffect(() => {
+    if (!isPlannerUpdating) return undefined;
+    const timeoutId = setTimeout(() => {
+      setIsPlannerUpdating(false);
+    }, 4000);
+    return () => clearTimeout(timeoutId);
+  }, [isPlannerUpdating]);
   const doneDays = useMemo(() => weekDoc?.doneDays ?? {}, [weekDoc]);
 
   const currentDayISO = useMemo(() => {
@@ -798,6 +813,7 @@ export default function PlanTabV2() {
   const autoFillSubtext = isAutoFilling
     ? "Hang tight - we'll refresh the planner once every day is packed."
     : "Hang tight - we'll refresh as soon as the new blocks are in place.";
+  const isOverlayActive = isAutoFillBusy || isPlannerUpdating;
 
   const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
   if (!uid) {
@@ -870,6 +886,7 @@ export default function PlanTabV2() {
               isAutoFilling={isAutoFillBusy}
               weekLabel={weekLabel}
               totalPlannedThisWeek={totalPlannedThisWeek}
+              onUpdatingChange={setIsPlannerUpdating}
             />
           </div>
         </main>
@@ -881,7 +898,7 @@ export default function PlanTabV2() {
     <div className="relative">
       <div
         className={`space-y-10 ${
-          isAutoFillBusy ? "pointer-events-none select-none opacity-40" : ""
+          isOverlayActive ? "pointer-events-none select-none opacity-40" : ""
         }`}
       >
         {shouldShowSkeleton ? <SkeletonLayout /> : <PlannerContent />}
@@ -912,6 +929,15 @@ export default function PlanTabV2() {
           />
         )}
       </div>
+
+      {isPlannerUpdating && !isAutoFillBusy && (
+        <div className="pointer-events-auto fixed inset-0 z-[1500] flex flex-col items-center justify-center bg-white/75 backdrop-blur-sm">
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          <span className="mt-3 text-sm font-semibold text-slate-700">
+            Updating planner...
+          </span>
+        </div>
+      )}
 
       {isAutoFillBusy && (
         <div className="pointer-events-auto fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">

@@ -84,6 +84,7 @@ export default function WeeklyBoard({
   onRefresh,
   weekLabel,
   totalPlannedThisWeek,
+  onUpdatingChange,
 }) {
   const [expandedISO, setExpandedISO] = useState(() => {
     const todayISO = toISO(new Date());
@@ -103,6 +104,23 @@ export default function WeeklyBoard({
 
   const [dragOverISO, setDragOverISO] = useState(null);
   const [capacityModalData, setCapacityModalData] = useState(null);
+
+  const reportUpdating = useCallback(
+    (value) => {
+      if (typeof onUpdatingChange === "function") {
+        onUpdatingChange(value);
+      }
+    },
+    [onUpdatingChange],
+  );
+
+  const requestRefresh = useCallback(() => {
+    if (typeof onRefresh === "function") {
+      onRefresh();
+      return true;
+    }
+    return false;
+  }, [onRefresh]);
 
   const weekIsoList = useMemo(
     () => weekDates.map((d) => toISO(d)),
@@ -298,6 +316,7 @@ export default function WeeklyBoard({
       if (!uid || !iso || !seq) return;
       if (doneDays?.[iso]) return;
       try {
+        reportUpdating(true);
         setUiMsg("Moving to next day...");
         const res = await moveTopicSlicesToNextDay(uid, iso, seq);
         if (res?.overflow) {
@@ -307,14 +326,18 @@ export default function WeeklyBoard({
           setUiMsg("Moved to next day");
           setTimeout(() => setUiMsg(""), 1500);
         }
-        onRefresh?.();
+        const didRefresh = requestRefresh();
+        if (!didRefresh) {
+          reportUpdating(false);
+        }
       } catch (err) {
         console.error(err);
         setUiMsg(err?.message || "Failed to move");
         setTimeout(() => setUiMsg(""), 2000);
+        reportUpdating(false);
       }
     },
-    [uid, onRefresh, doneDays],
+    [uid, requestRefresh, reportUpdating, doneDays],
   );
 
   const openSearchModal = useCallback(() => {
@@ -354,17 +377,22 @@ export default function WeeklyBoard({
       try {
         if (!uid || !seq) return;
         if (expandedIsDone) return;
+        reportUpdating(true);
         setUiMsg("Unscheduling...");
         await unscheduleTopicReturnToQueue(uid, seq);
-        onRefresh?.();
+        const didRefresh = requestRefresh();
+        if (!didRefresh) {
+          reportUpdating(false);
+        }
         setUiMsg("");
       } catch (err) {
         console.error(err);
         setUiMsg(err?.message || "Failed to unschedule");
         setTimeout(() => setUiMsg(""), 2000);
+        reportUpdating(false);
       }
     },
-    [uid, expandedIsDone, onRefresh],
+    [uid, expandedIsDone, requestRefresh, reportUpdating],
   );
 
   const handleSelectSearchResult = useCallback(
@@ -372,18 +400,23 @@ export default function WeeklyBoard({
       if (!uid || !expandedISO || !topic?.seq || doneDays?.[expandedISO])
         return;
       try {
+        reportUpdating(true);
         setUiMsg("Scheduling...");
         await scheduleTopicPackFromDay(uid, expandedISO, topic.seq);
         setShowSearchModal(false);
-        onRefresh?.();
+        const didRefresh = requestRefresh();
+        if (!didRefresh) {
+          reportUpdating(false);
+        }
         setUiMsg("");
       } catch (err) {
         console.error(err);
         setUiMsg(err?.message || "Failed to schedule");
         setTimeout(() => setUiMsg(""), 2000);
+        reportUpdating(false);
       }
     },
-    [uid, expandedISO, doneDays, onRefresh],
+    [uid, expandedISO, doneDays, requestRefresh, reportUpdating],
   );
 
   const expandedDate = useMemo(() => {
@@ -520,6 +553,7 @@ export default function WeeklyBoard({
 
       try {
         const canScheduleViaParent = typeof onScheduleQueueRun === "function";
+        reportUpdating(true);
         setUiMsg("Scheduling...");
         const result = canScheduleViaParent
           ? await onScheduleQueueRun(iso, payload.seq)
@@ -531,17 +565,24 @@ export default function WeeklyBoard({
         ) {
           setUiMsg("Day is at capacity.");
           setTimeout(() => setUiMsg(""), 1800);
+          reportUpdating(false);
           return;
         }
         setUiMsg("Scheduled from queue");
         setTimeout(() => setUiMsg(""), 1500);
         if (!canScheduleViaParent) {
-          onRefresh?.();
+          const didRefresh = requestRefresh();
+          if (!didRefresh) {
+            reportUpdating(false);
+          }
+        } else if (result && result.message === "No remaining capacity") {
+          reportUpdating(false);
         }
       } catch (err) {
         console.error(err);
         setUiMsg(err?.message || "Failed to schedule");
         setTimeout(() => setUiMsg(""), 2000);
+        reportUpdating(false);
       }
     },
     [
@@ -549,7 +590,8 @@ export default function WeeklyBoard({
       canAcceptDragPayload,
       doneDays,
       openCapacityModal,
-      onRefresh,
+      requestRefresh,
+      reportUpdating,
       onScheduleQueueRun,
     ],
   );
@@ -1018,10 +1060,23 @@ export default function WeeklyBoard({
             <div className="flex items-center justify-between border-b border-indigo-100 bg-gradient-to-r from-indigo-500/10 to-sky-400/10 px-4 py-3">
               <h3 className="text-base font-semibold text-slate-800">Search Master Queue</h3>
               <button
-                className="rounded-full border border-transparent p-1 text-sm text-slate-500 transition hover:bg-indigo-50"
+                className="rounded-full border border-transparent p-1 text-rose-500 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200"
                 onClick={closeSearchModal}
+                type="button"
+                aria-label="Close search"
+                title="Close search"
               >
-                ×
+                <svg
+                  viewBox="0 0 14 14"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M3 3 11 11" />
+                  <path d="M11 3 3 11" />
+                </svg>
               </button>
             </div>
             <div className="flex flex-1 flex-col gap-3 px-4 py-3 overflow-hidden">
@@ -1111,4 +1166,5 @@ export default function WeeklyBoard({
     </div>
   );
 }
+
 
