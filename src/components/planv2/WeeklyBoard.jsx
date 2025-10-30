@@ -5,6 +5,7 @@ import {
   scheduleTopicPackFromDay,
   moveTopicSlicesToNextDay,
   unscheduleTopicReturnToQueue,
+  unscheduleTopicFromDay,
   searchMasterQueueTopics,
   ensureMasterQueueBuilt,
 } from "../../services/planV2Api";
@@ -104,6 +105,7 @@ export default function WeeklyBoard({
 
   const [dragOverISO, setDragOverISO] = useState(null);
   const [capacityModalData, setCapacityModalData] = useState(null);
+  const [pendingRemovals, setPendingRemovals] = useState(() => new Map());
 
   const reportUpdating = useCallback(
     (value) => {
@@ -121,6 +123,59 @@ export default function WeeklyBoard({
     }
     return false;
   }, [onRefresh]);
+
+  const markPendingRemoval = useCallback((isoValue, seqValue) => {
+    setPendingRemovals((prev) => {
+      const next = new Map(prev);
+      const isoKey = String(isoValue);
+      const seqKey = String(seqValue);
+      const set = new Set(next.get(isoKey) || []);
+      set.add(seqKey);
+      next.set(isoKey, set);
+      return next;
+    });
+  }, []);
+
+  const clearPendingRemoval = useCallback((isoValue, seqValue) => {
+    setPendingRemovals((prev) => {
+      const isoKey = String(isoValue);
+      const seqKey = String(seqValue);
+      if (!prev.has(isoKey)) return prev;
+      const nextSet = new Set(prev.get(isoKey) || []);
+      if (!nextSet.delete(seqKey)) return prev;
+      const next = new Map(prev);
+      if (nextSet.size > 0) {
+        next.set(isoKey, nextSet);
+      } else {
+        next.delete(isoKey);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    setPendingRemovals((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Map();
+      prev.forEach((seqSet, isoKey) => {
+        const assignedSeqs = new Set(
+          (Array.isArray(assigned?.[isoKey]) ? assigned[isoKey] : []).map((item) =>
+            String(item?.seq),
+          ),
+        );
+        const remaining = [];
+        seqSet.forEach((seq) => {
+          if (assignedSeqs.has(seq)) {
+            remaining.push(seq);
+          }
+        });
+        if (remaining.length) {
+          next.set(isoKey, new Set(remaining));
+        }
+      });
+      return next;
+    });
+  }, [assigned]);
 
   const weekIsoList = useMemo(
     () => weekDates.map((d) => toISO(d)),
@@ -188,9 +243,16 @@ export default function WeeklyBoard({
             minutes: 0,
             totalSlices: 0,
             completedSlices: 0,
+            seq:
+              item?.seq != null && item.seq !== ""
+                ? String(item.seq)
+                : null,
           });
         }
         const entry = perTopic.get(topicKey);
+        if (!entry.seq && item?.seq != null && item.seq !== "") {
+          entry.seq = String(item.seq);
+        }
         entry.minutes += Number(item?.minutes || 0);
         entry.totalSlices += 1;
         if (item?.completed || item?.status === "completed") {
@@ -218,9 +280,15 @@ export default function WeeklyBoard({
     const items = Array.isArray(assigned?.[expandedISO])
       ? assigned[expandedISO]
       : [];
+    const suppressedSeqs = new Set(
+      Array.from(pendingRemovals.get(expandedISO) || []),
+    );
     const chapters = new Map();
 
     items.forEach((item, index) => {
+      if (item?.seq != null && suppressedSeqs.has(String(item.seq))) {
+        return;
+      }
       const chapterKey = String(
         item?.chapterId ?? item?.chapterName ?? `chapter-${index}`,
       );
@@ -301,7 +369,7 @@ export default function WeeklyBoard({
           })),
       })),
     }));
-  }, [assigned, expandedISO]);
+  }, [assigned, expandedISO, pendingRemovals]);
 
   const filteredSearchResults = useMemo(() => {
     if (!searchQuery.trim()) return searchResults;
@@ -340,6 +408,35 @@ export default function WeeklyBoard({
     [uid, requestRefresh, reportUpdating, doneDays],
   );
 
+  const unscheduleFromDay = useCallback(
+    async (iso, seq) => {
+      if (!uid || !iso || !seq) return;
+      if (doneDays?.[iso]) return;
+      try {
+        reportUpdating(true);
+        setUiMsg("Removing from day...");
+        markPendingRemoval(iso, seq);
+        const res = await unscheduleTopicFromDay(uid, iso, seq);
+        if (!res || !(res.removed > 0)) {
+          clearPendingRemoval(iso, seq);
+        }
+        const didRefresh = requestRefresh();
+        if (!didRefresh) {
+          reportUpdating(false);
+        }
+        setUiMsg("Returned to queue");
+        setTimeout(() => setUiMsg(""), 1500);
+      } catch (err) {
+        console.error(err);
+        setUiMsg(err?.message || "Failed to remove");
+        setTimeout(() => setUiMsg(""), 2000);
+        clearPendingRemoval(iso, seq);
+        reportUpdating(false);
+      }
+    },
+    [uid, doneDays, reportUpdating, requestRefresh, markPendingRemoval, clearPendingRemoval],
+  );
+
   const openSearchModal = useCallback(() => {
     setSearchQuery("");
     setSearchError("");
@@ -375,11 +472,15 @@ export default function WeeklyBoard({
   const unscheduleToQueue = useCallback(
     async (seq) => {
       try {
-        if (!uid || !seq) return;
+        if (!uid || !seq || !expandedISO) return;
         if (expandedIsDone) return;
         reportUpdating(true);
         setUiMsg("Unscheduling...");
-        await unscheduleTopicReturnToQueue(uid, seq);
+        markPendingRemoval(expandedISO, seq);
+        const res = await unscheduleTopicReturnToQueue(uid, seq);
+        if (!res || !(res.removed > 0)) {
+          clearPendingRemoval(expandedISO, seq);
+        }
         const didRefresh = requestRefresh();
         if (!didRefresh) {
           reportUpdating(false);
@@ -389,10 +490,19 @@ export default function WeeklyBoard({
         console.error(err);
         setUiMsg(err?.message || "Failed to unschedule");
         setTimeout(() => setUiMsg(""), 2000);
+        clearPendingRemoval(expandedISO, seq);
         reportUpdating(false);
       }
     },
-    [uid, expandedIsDone, requestRefresh, reportUpdating],
+    [
+      uid,
+      expandedIsDone,
+      requestRefresh,
+      reportUpdating,
+      expandedISO,
+      markPendingRemoval,
+      clearPendingRemoval,
+    ],
   );
 
   const handleSelectSearchResult = useCallback(
@@ -717,6 +827,15 @@ export default function WeeklyBoard({
               const summaryItems = Array.isArray(summaryByDay?.[iso])
                 ? summaryByDay[iso]
                 : [];
+              const pendingSet = pendingRemovals.get(iso) || new Set();
+              const filteredSummary = summaryItems.filter(
+                (item) => !item?.seq || !pendingSet.has(String(item.seq)),
+              );
+              const visibleSummary = filteredSummary.slice(0, 4);
+              const hiddenCount = Math.max(
+                0,
+                filteredSummary.length - visibleSummary.length,
+              );
               const used = Number(usedByDay?.[iso] || 0);
               const cap = Number(dayCaps?.[iso] || 0);
               const remaining = Number(
@@ -781,7 +900,7 @@ export default function WeeklyBoard({
                   </div>
 
                   <ul className="mt-4 space-y-2 text-xs text-slate-500">
-                    {summaryItems.slice(0, 4).map((item) => (
+                    {visibleSummary.map((item) => (
                       <li
                         key={`${iso}-${item.key}`}
                         className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-slate-600 shadow-sm"
@@ -790,17 +909,44 @@ export default function WeeklyBoard({
                           {item.isCompleted ? <CompletionBadge /> : null}
                           <span className="truncate">{item.label}</span>
                         </span>
-                        <span>{Number(item.minutes || 0)}m</span>
+                        <span className="flex items-center gap-2">
+                          <span>{Number(item.minutes || 0)}m</span>
+                          {item.seq ? (
+                            <button
+                              type="button"
+                              className="rounded-full border border-transparent p-1 text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={() => unscheduleFromDay(iso, item.seq)}
+                              disabled={isDone || !item.seq}
+                              aria-label={`Remove ${item.label} from ${formatDateDisplay(
+                                date,
+                                daySummaryFormat,
+                              )}`}
+                              title="Remove from day"
+                            >
+                              <svg
+                                viewBox="0 0 14 14"
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                              >
+                                <path d="M3 3 11 11" />
+                                <path d="M11 3 3 11" />
+                              </svg>
+                            </button>
+                          ) : null}
+                        </span>
                       </li>
                     ))}
-                    {summaryItems.length === 0 && (
+                    {filteredSummary.length === 0 && (
                       <li className="rounded-xl bg-white/70 px-3 py-2 text-center text-slate-400 shadow-inner">
                         No topics scheduled.
                       </li>
                     )}
-                    {summaryItems.length > 4 && (
+                    {hiddenCount > 0 && (
                       <li className="text-center text-slate-400">
-                        +{summaryItems.length - 4} more…
+                        +{hiddenCount} more…
                       </li>
                     )}
                   </ul>

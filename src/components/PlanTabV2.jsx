@@ -96,6 +96,7 @@ export default function PlanTabV2() {
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [isAutoFillingDay, setIsAutoFillingDay] = useState(false);
   const [isPlannerUpdating, setIsPlannerUpdating] = useState(false);
+  const [hasPendingRefresh, setHasPendingRefresh] = useState(false);
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -250,7 +251,7 @@ export default function PlanTabV2() {
   // choose active week based on currentDayISO (fall back to calendar week)
   useEffect(() => {
     if (!uid) return;
-    const sourceIso = meta?.currentDayISO || toISO(new Date());
+    const sourceIso = toISO(new Date());
     let baseDate = new Date(sourceIso);
     if (Number.isNaN(baseDate.getTime())) {
       baseDate = new Date();
@@ -339,6 +340,7 @@ export default function PlanTabV2() {
   useEffect(() => {
     if (isPlannerUpdating && plannerUpdatingPrevAssignedRef.current !== assigned) {
       setIsPlannerUpdating(false);
+      setHasPendingRefresh(false);
     }
     plannerUpdatingPrevAssignedRef.current = assigned;
   }, [assigned, isPlannerUpdating]);
@@ -346,9 +348,21 @@ export default function PlanTabV2() {
     if (!isPlannerUpdating) return undefined;
     const timeoutId = setTimeout(() => {
       setIsPlannerUpdating(false);
+      setHasPendingRefresh(false);
     }, 4000);
     return () => clearTimeout(timeoutId);
   }, [isPlannerUpdating]);
+  const handlePlannerUpdatingChange = useCallback(
+    (value) => {
+      setIsPlannerUpdating(value);
+      if (value) {
+        setHasPendingRefresh(true);
+      } else {
+        setHasPendingRefresh(false);
+      }
+    },
+    [],
+  );
   const doneDays = useMemo(() => weekDoc?.doneDays ?? {}, [weekDoc]);
 
   const currentDayISO = useMemo(() => {
@@ -439,34 +453,52 @@ export default function PlanTabV2() {
     };
   }, [uid, weekKey]);
 
-  const handleAutoFillWeek = useCallback(async () => {
-    if (!uid || !weekKey || isAutoFilling) return;
-    setIsAutoFilling(true);
-    try {
-      await runWithPending(async () => {
-        const updatedWeek = await autoFillWeekFromMaster(uid, weekKey);
-        const updatedQueueSummary = await listMasterQueueLinear(uid, {});
-        let nextWeek = updatedWeek;
-        if (!nextWeek) {
-          const fallback = await loadOrInitWeek(
-            uid,
-            weekKey,
-            defaultDailyMinutes,
+  const handleAutoFillWeek = useCallback(
+    async (event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      if (!uid || !weekKey || isAutoFilling) return;
+      setIsAutoFilling(true);
+      setHasPendingRefresh(true);
+      setIsPlannerUpdating(true);
+      try {
+        await runWithPending(async () => {
+          const updatedWeek = await autoFillWeekFromMaster(uid, weekKey);
+          const updatedQueueSummary = await listMasterQueueLinear(uid, {});
+          let nextWeek = updatedWeek;
+          if (!nextWeek) {
+            const fallback = await loadOrInitWeek(
+              uid,
+              weekKey,
+              defaultDailyMinutes,
+            );
+            nextWeek = fallback || {};
+          }
+          setWeekDoc(nextWeek);
+          setQueueSummaryRows(
+            Array.isArray(updatedQueueSummary) ? updatedQueueSummary : [],
           );
-          nextWeek = fallback || {};
-        }
-        setWeekDoc(nextWeek);
-        setQueueSummaryRows(
-          Array.isArray(updatedQueueSummary) ? updatedQueueSummary : [],
-        );
-        refreshQueue();
-      });
-    } catch (error) {
-      console.error("Auto-fill failed:", error);
-    } finally {
-      setIsAutoFilling(false);
-    }
-  }, [uid, weekKey, defaultDailyMinutes, runWithPending, isAutoFilling, refreshQueue]);
+          refreshQueue();
+          refreshWeekData();
+        });
+      } catch (error) {
+        console.error("Auto-fill failed:", error);
+      } finally {
+        setIsAutoFilling(false);
+        setIsPlannerUpdating(false);
+        setHasPendingRefresh(false);
+      }
+    },
+    [
+      uid,
+      weekKey,
+      defaultDailyMinutes,
+      runWithPending,
+      isAutoFilling,
+      refreshQueue,
+      refreshWeekData,
+    ],
+  );
 
   const handleResetPlan = useCallback(async () => {
     if (!uid) return;
@@ -813,7 +845,7 @@ export default function PlanTabV2() {
   const autoFillSubtext = isAutoFilling
     ? "Hang tight - we'll refresh the planner once every day is packed."
     : "Hang tight - we'll refresh as soon as the new blocks are in place.";
-  const isOverlayActive = isAutoFillBusy || isPlannerUpdating;
+  const isOverlayActive = isAutoFillBusy || hasPendingRefresh;
 
   const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
   if (!uid) {
@@ -886,7 +918,7 @@ export default function PlanTabV2() {
               isAutoFilling={isAutoFillBusy}
               weekLabel={weekLabel}
               totalPlannedThisWeek={totalPlannedThisWeek}
-              onUpdatingChange={setIsPlannerUpdating}
+              onUpdatingChange={handlePlannerUpdatingChange}
             />
           </div>
         </main>
@@ -898,7 +930,7 @@ export default function PlanTabV2() {
     <div className="relative">
       <div
         className={`space-y-10 ${
-          isOverlayActive ? "pointer-events-none select-none opacity-40" : ""
+          isOverlayActive ? "opacity-40" : ""
         }`}
       >
         {shouldShowSkeleton ? <SkeletonLayout /> : <PlannerContent />}
@@ -930,7 +962,7 @@ export default function PlanTabV2() {
         )}
       </div>
 
-      {isPlannerUpdating && !isAutoFillBusy && (
+      {hasPendingRefresh && !isAutoFillBusy && (
         <div className="pointer-events-auto fixed inset-0 z-[1500] flex flex-col items-center justify-center bg-white/75 backdrop-blur-sm">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
           <span className="mt-3 text-sm font-semibold text-slate-700">
