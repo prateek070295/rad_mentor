@@ -80,7 +80,7 @@ const SocraticTutorChat = ({
       isLastCard && card.type === 'OBJECTIVES_CARD';
 
     switch (card.type) {
-      case 'OBJECTIVES_CARD':
+      case 'OBJECTIVES_CARD': {
         const hasObjectivesArray =
           Array.isArray(card.objectives) && card.objectives.length > 0;
         const objectivesList = hasObjectivesArray
@@ -129,6 +129,7 @@ const SocraticTutorChat = ({
             </div>
           </div>
         );
+      }
       case 'TEACH_CARD':
         return (
           <div key={index} className={baseCardClass}>

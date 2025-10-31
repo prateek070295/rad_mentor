@@ -616,14 +616,7 @@ export async function unscheduleTopicFromDay(uid, iso, seq) {
   const weekRef = doc(db, "plans", uid, "weeks", weekKey);
   const topicRef = doc(db, "plans", uid, "masterQueue", String(seq));
 
-  const col = collection(db, "plans", uid, "masterQueue");
-  let minSortKey = Infinity;
-  const minSnap = await getDocs(query(col, orderBy("sortKey", "asc"), limit(1)));
-  minSnap.forEach((s) => {
-    const data = s.data() || {};
-    minSortKey = Math.min(minSortKey, NUM(data.sortKey, 0));
-  });
-  const nextFrontKey = Number.isFinite(minSortKey) ? minSortKey - 1 : -1;
+  const nextFrontKey = -1 * (Date.now() * 1000 + Math.floor(Math.random() * 1000));
 
   const output = await runTransaction(db, async (tx) => {
     const weekSnap = await tx.get(weekRef);

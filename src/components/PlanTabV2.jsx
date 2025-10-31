@@ -96,7 +96,8 @@ export default function PlanTabV2() {
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [isAutoFillingDay, setIsAutoFillingDay] = useState(false);
   const [isPlannerUpdating, setIsPlannerUpdating] = useState(false);
-  const [hasPendingRefresh, setHasPendingRefresh] = useState(false);
+  const [, setHasPendingRefresh] = useState(false);
+  console.log(`%c[PlanTabV2] RENDER`, "color: red; font-weight: bold;");
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -337,10 +338,10 @@ export default function PlanTabV2() {
   const dayCaps = useMemo(() => weekDoc?.dayCaps ?? {}, [weekDoc]);
   const assigned = useMemo(() => weekDoc?.assigned ?? {}, [weekDoc]);
   const plannerUpdatingPrevAssignedRef = useRef(assigned);
+  const isAutoFillBusy = isAutoFilling || isAutoFillingDay;
   useEffect(() => {
     if (isPlannerUpdating && plannerUpdatingPrevAssignedRef.current !== assigned) {
       setIsPlannerUpdating(false);
-      setHasPendingRefresh(false);
     }
     plannerUpdatingPrevAssignedRef.current = assigned;
   }, [assigned, isPlannerUpdating]);
@@ -348,17 +349,21 @@ export default function PlanTabV2() {
     if (!isPlannerUpdating) return undefined;
     const timeoutId = setTimeout(() => {
       setIsPlannerUpdating(false);
-      setHasPendingRefresh(false);
     }, 4000);
     return () => clearTimeout(timeoutId);
   }, [isPlannerUpdating]);
+
+  const isUpdatingOverlayActive =
+    isAutoFillBusy || isPlannerUpdating || queueSummaryLoading;
+  useEffect(() => {
+    setHasPendingRefresh(isUpdatingOverlayActive);
+  }, [isUpdatingOverlayActive]);
   const handlePlannerUpdatingChange = useCallback(
     (value) => {
+      console.log(`%c[PlanTabV2] handlePlannerUpdatingChange called with: ${value}`, "color: orange;");
       setIsPlannerUpdating(value);
       if (value) {
         setHasPendingRefresh(true);
-      } else {
-        setHasPendingRefresh(false);
       }
     },
     [],
@@ -376,6 +381,7 @@ export default function PlanTabV2() {
   }, []);
 
   const refreshWeekData = useCallback(() => {
+    console.log(`%c[PlanTabV2] REFRESH_WEEK_DATA called`, "color: purple;");
     setWeekRefreshKey((value) => value + 1);
   }, []);
 
@@ -453,6 +459,34 @@ export default function PlanTabV2() {
     };
   }, [uid, weekKey]);
 
+  const handleTopicUnscheduled = useCallback((iso, seq) => {
+    if (!iso || !seq) return;
+    setWeekDoc((prev) => {
+      if (!prev?.assigned) return prev;
+      const isoKey = String(iso);
+      const seqKey = String(seq);
+      const dayEntries = Array.isArray(prev.assigned[isoKey])
+        ? prev.assigned[isoKey]
+        : null;
+      if (!dayEntries || dayEntries.length === 0) {
+        return prev;
+      }
+      const nextEntries = dayEntries.filter(
+        (slice) => String(slice?.seq) !== seqKey,
+      );
+      if (nextEntries.length === dayEntries.length) {
+        return prev;
+      }
+      return {
+        ...prev,
+        assigned: {
+          ...(prev.assigned || {}),
+          [isoKey]: nextEntries,
+        },
+      };
+    });
+  }, []);
+
   const handleAutoFillWeek = useCallback(
     async (event) => {
       event?.preventDefault?.();
@@ -486,7 +520,6 @@ export default function PlanTabV2() {
       } finally {
         setIsAutoFilling(false);
         setIsPlannerUpdating(false);
-        setHasPendingRefresh(false);
       }
     },
     [
@@ -838,14 +871,7 @@ export default function PlanTabV2() {
     refreshQueue();
   }, [refreshWeekData, refreshQueue]);
 
-  const isAutoFillBusy = isAutoFilling || isAutoFillingDay;
-  const autoFillHeadline = isAutoFilling
-    ? "Auto-filling your week..."
-    : "Auto-filling your day...";
-  const autoFillSubtext = isAutoFilling
-    ? "Hang tight - we'll refresh the planner once every day is packed."
-    : "Hang tight - we'll refresh as soon as the new blocks are in place.";
-  const isOverlayActive = isAutoFillBusy || hasPendingRefresh;
+  const isOverlayActive = isUpdatingOverlayActive;
 
   const shouldShowSkeleton = metaLoading || (!weekDoc && !showWizard);
   if (!uid) {
@@ -919,6 +945,7 @@ export default function PlanTabV2() {
               weekLabel={weekLabel}
               totalPlannedThisWeek={totalPlannedThisWeek}
               onUpdatingChange={handlePlannerUpdatingChange}
+              onTopicUnscheduled={handleTopicUnscheduled}
             />
           </div>
         </main>
@@ -962,7 +989,7 @@ export default function PlanTabV2() {
         )}
       </div>
 
-      {hasPendingRefresh && !isAutoFillBusy && (
+      {isUpdatingOverlayActive && (
         <div className="pointer-events-auto fixed inset-0 z-[1500] flex flex-col items-center justify-center bg-white/75 backdrop-blur-sm">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
           <span className="mt-3 text-sm font-semibold text-slate-700">
@@ -970,21 +997,6 @@ export default function PlanTabV2() {
           </span>
         </div>
       )}
-
-      {isAutoFillBusy && (
-        <div className="pointer-events-auto fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
-          <span className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          <span className="mt-4 text-sm font-semibold text-slate-700">
-            {autoFillHeadline}
-          </span>
-          <span className="text-xs text-slate-500">{autoFillSubtext}</span>
-        </div>
-      )}
     </div>
   );
 }
-
-
-
-
-
