@@ -1,5 +1,5 @@
 // src/components/planv2/WeeklyBoard.jsx
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   scheduleTopicToDay,
   scheduleTopicPackFromDay,
@@ -86,6 +86,7 @@ export default function WeeklyBoard({
   weekLabel,
   totalPlannedThisWeek,
   onUpdatingChange,
+  onTopicUnscheduled,
 }) {
   const [expandedISO, setExpandedISO] = useState(() => {
     const todayISO = toISO(new Date());
@@ -106,6 +107,12 @@ export default function WeeklyBoard({
   const [dragOverISO, setDragOverISO] = useState(null);
   const [capacityModalData, setCapacityModalData] = useState(null);
   const [pendingRemovals, setPendingRemovals] = useState(() => new Map());
+  const inFlightUnschedulesRef = useRef(new Map());
+  console.log(
+    "%c[WeeklyBoard] RENDER",
+    "color: blue; font-weight: bold;",
+    { pendingRemovals: Array.from(pendingRemovals.entries()) },
+  );
 
   const reportUpdating = useCallback(
     (value) => {
@@ -412,29 +419,83 @@ export default function WeeklyBoard({
     async (iso, seq) => {
       if (!uid || !iso || !seq) return;
       if (doneDays?.[iso]) return;
+      const isoKey = String(iso);
+      const seqKey = String(seq);
+      const inFlightMap = inFlightUnschedulesRef.current;
+      const existingSet = inFlightMap.get(isoKey);
+      if (existingSet?.has(seqKey)) {
+        return;
+      }
+      const nextSet = existingSet || new Set();
+      nextSet.add(seqKey);
+      inFlightMap.set(isoKey, nextSet);
       try {
-        reportUpdating(true);
-        setUiMsg("Removing from day...");
+        console.log(
+          "%c[WeeklyBoard] unscheduleFromDay -> markPendingRemoval",
+          "color: green;",
+          { iso, seq },
+        );
         markPendingRemoval(iso, seq);
+        console.log(
+          "%c[WeeklyBoard] unscheduleFromDay -> reportUpdating(true)",
+          "color: green;",
+          { iso, seq },
+        );
+        setTimeout(() => reportUpdating(true), 50);
+        setUiMsg("Removing from day...");
+        console.log(
+          "%c[WeeklyBoard] unscheduleFromDay -> calling API",
+          "color: green;",
+          { iso, seq },
+        );
         const res = await unscheduleTopicFromDay(uid, iso, seq);
-        if (!res || !(res.removed > 0)) {
+        console.log(
+          "%c[WeeklyBoard] unscheduleFromDay -> API resolved",
+          "color: green;",
+          { iso, seq, res },
+        );
+        if (res?.removed > 0) {
+          onTopicUnscheduled?.(iso, seq);
+          clearPendingRemoval(iso, seq);
+        } else {
           clearPendingRemoval(iso, seq);
         }
-        const didRefresh = requestRefresh();
-        if (!didRefresh) {
-          reportUpdating(false);
-        }
+        setTimeout(() => {
+          const didRefresh = requestRefresh();
+          console.log(
+            "%c[WeeklyBoard] unscheduleFromDay -> requestRefresh result",
+            "color: green;",
+            { iso, seq, didRefresh },
+          );
+          if (!didRefresh) {
+            reportUpdating(false);
+          }
+        }, 50);
         setUiMsg("Returned to queue");
         setTimeout(() => setUiMsg(""), 1500);
       } catch (err) {
-        console.error(err);
+        console.error("[WeeklyBoard] unscheduleFromDay CATCH", err);
         setUiMsg(err?.message || "Failed to remove");
         setTimeout(() => setUiMsg(""), 2000);
         clearPendingRemoval(iso, seq);
         reportUpdating(false);
+      } finally {
+        nextSet.delete(seqKey);
+        if (nextSet.size === 0) {
+          inFlightMap.delete(isoKey);
+        }
       }
     },
-    [uid, doneDays, reportUpdating, requestRefresh, markPendingRemoval, clearPendingRemoval],
+    [
+      uid,
+      doneDays,
+      reportUpdating,
+      requestRefresh,
+      markPendingRemoval,
+      clearPendingRemoval,
+      onTopicUnscheduled,
+      inFlightUnschedulesRef,
+    ],
   );
 
   const openSearchModal = useCallback(() => {
@@ -474,24 +535,77 @@ export default function WeeklyBoard({
       try {
         if (!uid || !seq || !expandedISO) return;
         if (expandedIsDone) return;
-        reportUpdating(true);
-        setUiMsg("Unscheduling...");
+        const isoKey = String(expandedISO);
+        const seqKey = String(seq);
+        const inFlightMap = inFlightUnschedulesRef.current;
+        const existingSet = inFlightMap.get(isoKey);
+        if (existingSet?.has(seqKey)) {
+          return;
+        }
+        const nextSet = existingSet || new Set();
+        nextSet.add(seqKey);
+        inFlightMap.set(isoKey, nextSet);
+        console.log(
+          "%c[WeeklyBoard] unscheduleToQueue -> markPendingRemoval",
+          "color: green;",
+          { iso: expandedISO, seq },
+        );
         markPendingRemoval(expandedISO, seq);
+        console.log(
+          "%c[WeeklyBoard] unscheduleToQueue -> reportUpdating(true)",
+          "color: green;",
+          { iso: expandedISO, seq },
+        );
+        setTimeout(() => reportUpdating(true), 50);
+        setUiMsg("Unscheduling...");
+        console.log(
+          "%c[WeeklyBoard] unscheduleToQueue -> calling API",
+          "color: green;",
+          { iso: expandedISO, seq },
+        );
         const res = await unscheduleTopicReturnToQueue(uid, seq);
-        if (!res || !(res.removed > 0)) {
+        console.log(
+          "%c[WeeklyBoard] unscheduleToQueue -> API resolved",
+          "color: green;",
+          { iso: expandedISO, seq, res },
+        );
+        if (res?.removed > 0) {
+          onTopicUnscheduled?.(expandedISO, seq);
+          clearPendingRemoval(expandedISO, seq);
+        } else {
           clearPendingRemoval(expandedISO, seq);
         }
-        const didRefresh = requestRefresh();
-        if (!didRefresh) {
-          reportUpdating(false);
-        }
+        setTimeout(() => {
+          const didRefresh = requestRefresh();
+          console.log(
+            "%c[WeeklyBoard] unscheduleToQueue -> requestRefresh result",
+            "color: green;",
+            { iso: expandedISO, seq, didRefresh },
+          );
+          if (!didRefresh) {
+            reportUpdating(false);
+          }
+        }, 50);
         setUiMsg("");
       } catch (err) {
-        console.error(err);
+        console.error("[WeeklyBoard] unscheduleToQueue CATCH", err);
         setUiMsg(err?.message || "Failed to unschedule");
         setTimeout(() => setUiMsg(""), 2000);
         clearPendingRemoval(expandedISO, seq);
         reportUpdating(false);
+      } finally {
+        if (expandedISO) {
+          const isoKey = String(expandedISO);
+          const seqKey = String(seq);
+          const inFlightMap = inFlightUnschedulesRef.current;
+          const isoSet = inFlightMap.get(isoKey);
+          if (isoSet) {
+            isoSet.delete(seqKey);
+            if (isoSet.size === 0) {
+              inFlightMap.delete(isoKey);
+            }
+          }
+        }
       }
     },
     [
@@ -502,6 +616,8 @@ export default function WeeklyBoard({
       expandedISO,
       markPendingRemoval,
       clearPendingRemoval,
+      onTopicUnscheduled,
+      inFlightUnschedulesRef,
     ],
   );
 
@@ -533,6 +649,13 @@ export default function WeeklyBoard({
     if (!expandedISO) return null;
     return weekDates.find((date) => toISO(date) === expandedISO) || null;
   }, [weekDates, expandedISO]);
+
+  const pendingSeqsForExpanded = useMemo(() => {
+    if (!expandedISO) return new Set();
+    const seqSet = pendingRemovals.get(expandedISO);
+    if (!seqSet || seqSet.size === 0) return new Set();
+    return new Set(Array.from(seqSet, (value) => String(value)));
+  }, [pendingRemovals, expandedISO]);
 
   const openCapacityModal = useCallback(
     (iso) => {
@@ -916,7 +1039,11 @@ export default function WeeklyBoard({
                               type="button"
                               className="rounded-full border border-transparent p-1 text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={() => unscheduleFromDay(iso, item.seq)}
-                              disabled={isDone || !item.seq}
+                              disabled={
+                                isDone ||
+                                !item.seq ||
+                                pendingSet.has(String(item.seq))
+                              }
                               aria-label={`Remove ${item.label} from ${formatDateDisplay(
                                 date,
                                 daySummaryFormat,
@@ -946,7 +1073,7 @@ export default function WeeklyBoard({
                     )}
                     {hiddenCount > 0 && (
                       <li className="text-center text-slate-400">
-                        +{hiddenCount} more…
+                        +{hiddenCount} moreâ€¦
                       </li>
                     )}
                   </ul>
@@ -1120,67 +1247,76 @@ export default function WeeklyBoard({
                         </div>
 
                         <div className="mt-3 space-y-3">
-                          {chapter.topics.map((topic) => (
-                            <div
-                              key={topic.key}
-                              className="rounded-2xl border border-indigo-100 bg-white px-4 py-3 shadow-sm shadow-indigo-100/40"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 font-semibold text-slate-800">
-                                    {topic.completed ? <CompletionBadge /> : null}
-                                    <span className="truncate">{topic.name}</span>
-                                  </div>
-                                  {topic.section && (
-                                    <div className="text-xs uppercase tracking-wide text-slate-500">
-                                      {topic.section}
+                          {chapter.topics.map((topic) => {
+                            const isTopicPending =
+                              topic.seq != null &&
+                              pendingSeqsForExpanded.has(String(topic.seq));
+                            return (
+                              <div
+                                key={topic.key}
+                                className="rounded-2xl border border-indigo-100 bg-white px-4 py-3 shadow-sm shadow-indigo-100/40"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 font-semibold text-slate-800">
+                                      {topic.completed ? <CompletionBadge /> : null}
+                                      <span className="truncate">{topic.name}</span>
                                     </div>
-                                  )}
+                                    {topic.section && (
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">
+                                        {topic.section}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="text-sm font-semibold text-slate-600">
+                                    {Number(topic.totalMinutes || 0)} min
+                                  </div>
                                 </div>
-                                <div className="text-sm font-semibold text-slate-600">
-                                  {Number(topic.totalMinutes || 0)} min
+
+                                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                                  <button
+                                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() =>
+                                      removeFromDay(expandedISO, topic.seq)
+                                    }
+                                    disabled={
+                                      !topic.seq || expandedIsDone || isTopicPending
+                                    }
+                                  >
+                                    Move to next day
+                                  </button>
+                                  <button
+                                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() => unscheduleToQueue(topic.seq)}
+                                    disabled={
+                                      !topic.seq || expandedIsDone || isTopicPending
+                                    }
+                                  >
+                                    Return to queue
+                                  </button>
                                 </div>
-                              </div>
 
-                              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                                <button
-                                  className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                  onClick={() =>
-                                    removeFromDay(expandedISO, topic.seq)
-                                  }
-                                  disabled={!topic.seq || expandedIsDone}
-                                >
-                                  Move to next day
-                                </button>
-                                <button
-                                  className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                  onClick={() => unscheduleToQueue(topic.seq)}
-                                  disabled={!topic.seq || expandedIsDone}
-                                >
-                                  Return to queue
-                                </button>
+                                {topic.subtopics.length > 0 && (
+                                  <ul className="mt-3 space-y-1 text-xs text-slate-500">
+                                    {topic.subtopics.map((sub) => (
+                                      <li
+                                        key={sub.key}
+                                        className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-1.5 text-slate-600"
+                                      >
+                                        <span className="flex items-center gap-2 truncate">
+                                          {sub.completed ? <CompletionBadge /> : null}
+                                          <span className="truncate">{sub.name}</span>
+                                        </span>
+                                        <span>
+                                          {Number(sub.minutes || 0)} min
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
                               </div>
-
-                              {topic.subtopics.length > 0 && (
-                                <ul className="mt-3 space-y-1 text-xs text-slate-500">
-                                  {topic.subtopics.map((sub) => (
-                                    <li
-                                      key={sub.key}
-                                      className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-1.5 text-slate-600"
-                                    >
-                                      <span className="flex items-center gap-2 truncate">
-                                        {sub.completed ? <CompletionBadge /> : null}
-                                        <span className="truncate">{sub.name}</span>
-                                      </span>
-                                      <span>
-                                        {Number(sub.minutes || 0)} min
-                                      </span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))
@@ -1312,5 +1448,4 @@ export default function WeeklyBoard({
     </div>
   );
 }
-
 
