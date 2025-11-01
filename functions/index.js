@@ -89,11 +89,34 @@ const db = getFirestore();
 
 const app = express();
 
-const allowedOrigins = new Set([
+const defaultAllowedOrigins = [
   "https://radmentor-app.web.app",
+  "https://radmentor-app.firebaseapp.com",
+  "https://radmentor-admin.web.app",
+  "https://radmentor-admin.firebaseapp.com",
+  "https://radmentor.web.app",
+  "https://radmentor.firebaseapp.com",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-]);
+];
+
+const normalizeOrigin = (value) => {
+  if (!value) return "";
+  try {
+    return new URL(value).origin;
+  } catch (_) {
+    return value.trim();
+  }
+};
+
+const envAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => normalizeOrigin(origin))
+  .filter(Boolean);
+
+const allowedOrigins = new Set(
+  [...defaultAllowedOrigins, ...envAllowedOrigins].map(normalizeOrigin),
+);
 
 app.use(
   cors({
@@ -102,12 +125,14 @@ app.use(
         callback(null, true);
         return;
       }
-      if (allowedOrigins.has(origin)) {
+      const normalized = normalizeOrigin(origin);
+      if (allowedOrigins.has(normalized)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
+    credentials: true,
   }),
 );
 

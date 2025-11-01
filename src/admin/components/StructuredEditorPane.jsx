@@ -14,6 +14,9 @@ import {
   hasMeaningfulChanges,
 } from './structured-editor';
 import { useAdminToasts } from '../context/AdminToastContext';
+import { auth } from '../../firebase';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
 const LOCAL_STORAGE_DRAFT_KEY = 'admin_structured_drafts';
 const LOCAL_STORAGE_VERSIONS_KEY = 'admin_structured_versions';
@@ -74,6 +77,43 @@ const StructuredEditorPane = ({
   const topic = selectTopic(editorState);
 
   const isDirty = useMemo(() => hasMeaningfulChanges(editorState), [editorState]);
+
+  const callAdminEndpoint = useCallback(
+    async (path, init = {}) => {
+      if (!auth.currentUser) {
+        const authError = new Error('You must be signed in as an admin to perform this action.');
+        authError.code = 'auth/missing-user';
+        throw authError;
+      }
+
+      const token = await auth.currentUser.getIdToken();
+      const endpoint = API_BASE ? `${API_BASE}${path}` : path;
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(init.headers || {}),
+        Authorization: `Bearer ${token}`,
+      };
+
+      const response = await fetch(endpoint, {
+        ...init,
+        headers,
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        const message =
+          details.error ||
+          details.message ||
+          `Failed with status ${response.status}`;
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+      }
+
+      return response;
+    },
+    [],
+  );
 
   const draftKey = useMemo(() => `${topicId}`, [topicId]);
   const versionKey = useMemo(() => `${organId}:${topicId}`, [organId, topicId]);
@@ -240,19 +280,14 @@ const StructuredEditorPane = ({
     }
     setIsGenerating(true);
     try {
-      const response = await fetch('/structure', {
+      const response = await callAdminEndpoint('/structure', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawText,
           organId,
           topicId,
         }),
       });
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new Error(details.error || `Failed with status ${response.status}`);
-      }
       const result = await response.json();
       if (!result?.structured) {
         throw new Error('No structured content returned by pipeline');
@@ -269,7 +304,10 @@ const StructuredEditorPane = ({
       pushToast({
         type: 'error',
         title: 'Failed to generate',
-        message: error.message || 'Unknown error occurred while generating structure.',
+        message:
+          error.code === 'auth/missing-user'
+            ? 'Sign in to an admin account before generating structured content.'
+            : error.message || 'Unknown error occurred while generating structure.',
       });
     } finally {
       setIsGenerating(false);
@@ -308,15 +346,10 @@ const StructuredEditorPane = ({
       rawText,
     };
     try {
-      const response = await fetch('/admin/save', {
+      const response = await callAdminEndpoint('/admin/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(publishPayload),
       });
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new Error(details.error || `Failed with status ${response.status}`);
-      }
       const result = await response.json();
       appendVersion(versionSnapshot);
       removeDraft();
@@ -335,7 +368,10 @@ const StructuredEditorPane = ({
       pushToast({
         type: 'error',
         title: 'Failed to publish',
-        message: error.message || 'Unknown error occurred while saving content.',
+        message:
+          error.code === 'auth/missing-user'
+            ? 'Sign in to an admin account before publishing.'
+            : error.message || 'Unknown error occurred while saving content.',
       });
     } finally {
       setIsPublishing(false);

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAdminPanel } from '../context/AdminPanelContext';
 import { useAdminToasts } from '../context/AdminToastContext';
 import StructuredEditorPane from './StructuredEditorPane';
@@ -88,6 +89,7 @@ const formatCardType = (value) =>
 
 
 const ContentWorkspace = () => {
+  const queryClient = useQueryClient();
   const { sectionsQuery, sectionNodesQuery, activeSectionId, selectedNodeId } = useAdminPanel();
   const { pushToast } = useAdminToasts();
 
@@ -522,6 +524,11 @@ const ContentWorkspace = () => {
         initialStructuredContent={structuredContentQuery.data}
         onPublishSuccess={() => {
           structuredContentQuery.refetch();
+          if (section?.id) {
+            queryClient.invalidateQueries({
+              queryKey: ['admin', 'section-nodes', section.id],
+            });
+          }
         }}
       />
 

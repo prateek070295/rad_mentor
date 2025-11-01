@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import ReviewAndSave from './ReviewAndSave';
+import { auth } from '../firebase';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
 const StructuredContentEditor = ({ organ, topicId, topicName, path, initialContent, onNotify }) => {
   const [rawText, setRawText] = useState('');
@@ -9,6 +12,43 @@ const StructuredContentEditor = ({ organ, topicId, topicName, path, initialConte
   // The structuredContent state is now initialized from the new prop
   const [structuredContent, setStructuredContent] = useState(initialContent || null); 
   const [error, setError] = useState('');
+
+  const callAdminEndpoint = useCallback(
+    async (endpointPath, init = {}) => {
+      if (!auth.currentUser) {
+        const authError = new Error('You must be signed in as an admin to continue.');
+        authError.code = 'auth/missing-user';
+        throw authError;
+      }
+
+      const token = await auth.currentUser.getIdToken();
+      const endpoint = API_BASE ? `${API_BASE}${endpointPath}` : endpointPath;
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(init.headers || {}),
+        Authorization: `Bearer ${token}`,
+      };
+
+      const response = await fetch(endpoint, {
+        ...init,
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const message =
+          errorData.error ||
+          errorData.message ||
+          `Failed with status ${response.status}`;
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+      }
+
+      return response;
+    },
+    [],
+  );
 
   // NEW: This effect listens for changes to the initialContent prop.
   // When you select a new topic in the Admin Panel, this will update the editor.
@@ -39,22 +79,21 @@ const StructuredContentEditor = ({ organ, topicId, topicName, path, initialConte
     setError('');
     setIsLoading(true);
     try {
-      const response = await fetch('/structure', {
+      const response = await callAdminEndpoint('/structure', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawText }),
       });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Something went wrong on the server.');
-      }
       const data = await response.json();
       setStructuredContent(data.structured);
       notify('success', 'Structured outline generated. Review and refine before saving.');
     } catch (err) {
       console.error('Failed to generate structure:', err);
       setError(err.message);
-      notify('error', err.message || 'Failed to generate structured content.');
+      const message =
+        err.code === 'auth/missing-user'
+          ? 'Sign in to an admin account before generating structured content.'
+          : err.message || 'Failed to generate structured content.';
+      notify('error', message);
     } finally {
       setIsLoading(false);
     }
@@ -63,16 +102,10 @@ const StructuredContentEditor = ({ organ, topicId, topicName, path, initialConte
   const handleSave = async (finalContent) => {
     console.log("Saving this content:", finalContent);
     try {
-      const response = await fetch('/admin/save', {
+      const response = await callAdminEndpoint('/admin/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalContent),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save content.');
-      }
 
       const result = await response.json();
       notify('success', result.message || 'Structured content saved.');
@@ -83,7 +116,11 @@ const StructuredContentEditor = ({ organ, topicId, topicName, path, initialConte
     } catch (err) {
       console.error('Failed to save content:', err);
       setError(err.message);
-      notify('error', err.message || 'Failed to save structured content.');
+      const message =
+        err.code === 'auth/missing-user'
+          ? 'Sign in to an admin account before saving structured content.'
+          : err.message || 'Failed to save structured content.';
+      notify('error', message);
     }
   };
 

@@ -100,7 +100,9 @@ const computeStatusMap = (nodes, childrenByTopicId) => {
     const hasContent =
       !!node.mainContent?.ops?.[0]?.insert?.trim() ||
       !!node.structuredContent?.length ||
-      !!node.contentSections?.length;
+      !!node.contentSections?.length ||
+      node.hasStructuredContent === true ||
+      Number(node.contentSectionsCount ?? 0) > 0;
 
     if (children.length === 0) {
       statusMemo[topicId] = hasContent ? 'green' : 'grey';

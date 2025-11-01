@@ -229,12 +229,19 @@ router.post("/", requireAdmin, express.json(), async (req, res) => {
 
     const enqueue = (op) => mutations.push(op);
 
+    const sanitizedObjectives = sanitizeObjectives(structured.objectives);
+    const sanitizedKeyPoints = sanitizeObjectives(structured.key_points);
+    const hasSections = Array.isArray(structured.sections) && structured.sections.length > 0;
+
     enqueue({
       type: "set",
       ref: nodeRef,
       data: {
-        objectives: sanitizeObjectives(structured.objectives),
-        key_points: sanitizeObjectives(structured.key_points),
+        objectives: sanitizedObjectives,
+        key_points: sanitizedKeyPoints,
+        hasStructuredContent: hasSections,
+        contentSectionsCount: hasSections ? structured.sections.length : 0,
+        publishedAt: Date.now(),
       },
       options: { merge: true },
     });
