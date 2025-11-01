@@ -97,7 +97,6 @@ export default function PlanTabV2() {
   const [isAutoFillingDay, setIsAutoFillingDay] = useState(false);
   const [isPlannerUpdating, setIsPlannerUpdating] = useState(false);
   const [, setHasPendingRefresh] = useState(false);
-  console.log(`%c[PlanTabV2] RENDER`, "color: red; font-weight: bold;");
 
   const flags = useSchedulerFlags?.() || {};
   const { beginPending, endPending, markDirty, markClean } =
@@ -360,7 +359,6 @@ export default function PlanTabV2() {
   }, [isUpdatingOverlayActive]);
   const handlePlannerUpdatingChange = useCallback(
     (value) => {
-      console.log(`%c[PlanTabV2] handlePlannerUpdatingChange called with: ${value}`, "color: orange;");
       setIsPlannerUpdating(value);
       if (value) {
         setHasPendingRefresh(true);
@@ -381,7 +379,6 @@ export default function PlanTabV2() {
   }, []);
 
   const refreshWeekData = useCallback(() => {
-    console.log(`%c[PlanTabV2] REFRESH_WEEK_DATA called`, "color: purple;");
     setWeekRefreshKey((value) => value + 1);
   }, []);
 

@@ -108,12 +108,6 @@ export default function WeeklyBoard({
   const [capacityModalData, setCapacityModalData] = useState(null);
   const [pendingRemovals, setPendingRemovals] = useState(() => new Map());
   const inFlightUnschedulesRef = useRef(new Map());
-  console.log(
-    "%c[WeeklyBoard] RENDER",
-    "color: blue; font-weight: bold;",
-    { pendingRemovals: Array.from(pendingRemovals.entries()) },
-  );
-
   const reportUpdating = useCallback(
     (value) => {
       if (typeof onUpdatingChange === "function") {
@@ -430,30 +424,10 @@ export default function WeeklyBoard({
       nextSet.add(seqKey);
       inFlightMap.set(isoKey, nextSet);
       try {
-        console.log(
-          "%c[WeeklyBoard] unscheduleFromDay -> markPendingRemoval",
-          "color: green;",
-          { iso, seq },
-        );
         markPendingRemoval(iso, seq);
-        console.log(
-          "%c[WeeklyBoard] unscheduleFromDay -> reportUpdating(true)",
-          "color: green;",
-          { iso, seq },
-        );
         setTimeout(() => reportUpdating(true), 50);
         setUiMsg("Removing from day...");
-        console.log(
-          "%c[WeeklyBoard] unscheduleFromDay -> calling API",
-          "color: green;",
-          { iso, seq },
-        );
         const res = await unscheduleTopicFromDay(uid, iso, seq);
-        console.log(
-          "%c[WeeklyBoard] unscheduleFromDay -> API resolved",
-          "color: green;",
-          { iso, seq, res },
-        );
         if (res?.removed > 0) {
           onTopicUnscheduled?.(iso, seq);
           clearPendingRemoval(iso, seq);
@@ -462,11 +436,6 @@ export default function WeeklyBoard({
         }
         setTimeout(() => {
           const didRefresh = requestRefresh();
-          console.log(
-            "%c[WeeklyBoard] unscheduleFromDay -> requestRefresh result",
-            "color: green;",
-            { iso, seq, didRefresh },
-          );
           if (!didRefresh) {
             reportUpdating(false);
           }
@@ -545,30 +514,10 @@ export default function WeeklyBoard({
         const nextSet = existingSet || new Set();
         nextSet.add(seqKey);
         inFlightMap.set(isoKey, nextSet);
-        console.log(
-          "%c[WeeklyBoard] unscheduleToQueue -> markPendingRemoval",
-          "color: green;",
-          { iso: expandedISO, seq },
-        );
         markPendingRemoval(expandedISO, seq);
-        console.log(
-          "%c[WeeklyBoard] unscheduleToQueue -> reportUpdating(true)",
-          "color: green;",
-          { iso: expandedISO, seq },
-        );
         setTimeout(() => reportUpdating(true), 50);
         setUiMsg("Unscheduling...");
-        console.log(
-          "%c[WeeklyBoard] unscheduleToQueue -> calling API",
-          "color: green;",
-          { iso: expandedISO, seq },
-        );
         const res = await unscheduleTopicReturnToQueue(uid, seq);
-        console.log(
-          "%c[WeeklyBoard] unscheduleToQueue -> API resolved",
-          "color: green;",
-          { iso: expandedISO, seq, res },
-        );
         if (res?.removed > 0) {
           onTopicUnscheduled?.(expandedISO, seq);
           clearPendingRemoval(expandedISO, seq);
@@ -577,11 +526,6 @@ export default function WeeklyBoard({
         }
         setTimeout(() => {
           const didRefresh = requestRefresh();
-          console.log(
-            "%c[WeeklyBoard] unscheduleToQueue -> requestRefresh result",
-            "color: green;",
-            { iso: expandedISO, seq, didRefresh },
-          );
           if (!didRefresh) {
             reportUpdating(false);
           }

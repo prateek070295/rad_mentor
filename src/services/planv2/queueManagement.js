@@ -28,6 +28,7 @@ import {
   completeDayAndAdvance,
   ensureNextWeekInitialized,
 } from "./planMutations";
+import { generateFrontSortKey } from "./sortKeyUtils";
 export async function ensureMasterQueueBuilt(uid) {
   if (!uid) throw new Error("ensureMasterQueueBuilt: missing uid");
   const col = collection(db, "plans", uid, "masterQueue");
@@ -616,7 +617,7 @@ export async function unscheduleTopicFromDay(uid, iso, seq) {
   const weekRef = doc(db, "plans", uid, "weeks", weekKey);
   const topicRef = doc(db, "plans", uid, "masterQueue", String(seq));
 
-  const nextFrontKey = -1 * (Date.now() * 1000 + Math.floor(Math.random() * 1000));
+  const nextFrontKey = generateFrontSortKey();
 
   const output = await runTransaction(db, async (tx) => {
     const weekSnap = await tx.get(weekRef);
