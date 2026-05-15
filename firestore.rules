@@ -62,6 +62,16 @@ service cloud.firestore {
       match /nodes/{nodeId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
+
+        match /contentSections/{contentSectionId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+
+          match /checkpoints/{checkpointId} {
+            allow read: if isSignedIn();
+            allow write: if isAdmin();
+          }
+        }
       }
     }
 

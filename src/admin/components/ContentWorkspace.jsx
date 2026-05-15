@@ -7,8 +7,18 @@ import { useStructuredContent, useUpdateNodeMetadata } from '../hooks/useAdminDa
 import ReactMarkdown from 'react-markdown';
 import { auth, db } from '../../firebase';
 import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import {
+  deltaToText,
+  getStudyItemPath,
+  getStructuredContentPath,
+  hasLegacyContent,
+  hasLocalStructuredDraft,
+  hasPublishedStructuredContent,
+  hasStructuredContent,
+} from '../utils/contentStatus';
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
+const EMPTY_CONTENT_DIAGNOSTICS = {};
 
 const CATEGORY_OPTIONS = [
   { label: 'Must Know', value: 'Must Know' },
@@ -120,6 +130,10 @@ const ContentWorkspace = () => {
     topicId: selectedNode?.id,
     enabled: !!section && !!selectedNode,
   });
+  const loadedStructuredContent = structuredContentQuery.data?.structuredContent ?? null;
+  const fallbackLegacyText = structuredContentQuery.data?.legacyText ?? '';
+  const contentSource = structuredContentQuery.data?.source ?? 'none';
+  const contentDiagnostics = structuredContentQuery.data?.diagnostics ?? EMPTY_CONTENT_DIAGNOSTICS;
 
   const [dryRunCards, setDryRunCards] = useState([]);
   const [isDryRunModalOpen, setIsDryRunModalOpen] = useState(false);
@@ -187,9 +201,62 @@ const ContentWorkspace = () => {
     setShowLegacyPanel(false);
   }, [selectedNodeId]);
 
-  const status = selectedNode
-    ? sectionNodesQuery.statusMap?.[selectedNode.topicId || selectedNode.id] ?? 'grey'
+  const editorLoadedSectionCount = loadedStructuredContent?.sections?.length || 0;
+  const selectedStatus = selectedNode
+    ? hasStructuredContent(selectedNode, { [selectedNode.id]: editorLoadedSectionCount })
+      ? 'green'
+      : fallbackLegacyText
+        ? 'yellow'
+      : sectionNodesQuery.statusMap?.[selectedNode.topicId || selectedNode.id] ?? 'grey'
     : null;
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || !section || !selectedNode) return;
+    if (structuredContentQuery.isLoading || structuredContentQuery.isFetching) return;
+
+    const editorTopicId = selectedNode.id;
+    const navTopicKey = selectedNode.topicId || selectedNode.id;
+    const nodePath = `sections/${section.id}/nodes/${selectedNode.id}`;
+    const editorContentPath = getStructuredContentPath(section.id, editorTopicId);
+    const studyItemPath = getStudyItemPath(section.id, editorTopicId);
+
+    // eslint-disable-next-line no-console
+    console.info('[Admin content debug]', {
+      selectedTitle: selectedNode.name || selectedNode.title,
+      selectedNodeId: selectedNode.id,
+      selectedTopicId: selectedNode.topicId || null,
+      parentId: selectedNode.parentId || null,
+      navIndicatorKey: navTopicKey,
+      navIndicatorDocPath: nodePath,
+      navIndicatorSource: 'node.hasStructuredContent/contentSectionsCount',
+      navComputedStatus: sectionNodesQuery.statusMap?.[navTopicKey] || 'grey',
+      editorTopicId,
+      editorContentPath,
+      studyItemPath,
+      contentEndpoint: contentDiagnostics.endpoint || null,
+      contentSource,
+      usedFallback: contentDiagnostics.usedFallback === true,
+      structuredExistsInNavMetadata: hasPublishedStructuredContent(selectedNode),
+      editorLoadedSectionCount,
+      structuredExistsInEditorPayload: editorLoadedSectionCount > 0,
+      metadataDisagreesWithEditorContent:
+        !hasPublishedStructuredContent(selectedNode) && editorLoadedSectionCount > 0,
+      legacyExists: hasLegacyContent(selectedNode),
+      fallbackLegacyExists: Boolean(fallbackLegacyText),
+      localDraftExists: hasLocalStructuredDraft(editorTopicId),
+    });
+  }, [
+    contentDiagnostics,
+    contentSource,
+    editorLoadedSectionCount,
+    fallbackLegacyText,
+    section,
+    sectionNodesQuery.statusMap,
+    selectedNode,
+    structuredContentQuery.data,
+    structuredContentQuery.isFetching,
+    structuredContentQuery.isLoading,
+  ]);
 
   const breadcrumbTrail = useMemo(() => {
     if (!selectedNode) return [];
@@ -211,21 +278,10 @@ const ContentWorkspace = () => {
     return chain;
   }, [section, nodeIndex, selectedNode]);
 
-  const legacyText = useMemo(() => {
-    if (!selectedNode?.mainContent?.ops) return '';
-    const fragments = selectedNode.mainContent.ops
-      .map((op) => {
-        if (typeof op.insert === 'string') {
-          return op.insert;
-        }
-        if (op.insert?.image) {
-          return `[Image:${op.insert.image}]`;
-        }
-        return '';
-      })
-      .join('');
-    return fragments.trim();
-  }, [selectedNode?.mainContent]);
+  const legacyText = useMemo(
+    () => deltaToText(selectedNode?.mainContent) || fallbackLegacyText,
+    [fallbackLegacyText, selectedNode?.mainContent],
+  );
 
   const handleMetadataSubmit = async (event) => {
     event.preventDefault();
@@ -399,13 +455,13 @@ const ContentWorkspace = () => {
               ))}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              {status ? (
+              {selectedStatus ? (
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1">
                   <span
-                    className={`h-2.5 w-2.5 rounded-full ${statusColorClass(status)}`}
-                    title={`Status ${status}`}
+                    className={`h-2.5 w-2.5 rounded-full ${statusColorClass(selectedStatus)}`}
+                    title={`Status ${selectedStatus}`}
                   >
-                    <span className="sr-only">{status}</span>
+                    <span className="sr-only">{selectedStatus}</span>
                   </span>
                 </span>
               ) : null}
@@ -521,7 +577,7 @@ const ContentWorkspace = () => {
         topicId={selectedNode.id}
         topicName={selectedNode.name || selectedNode.title}
         legacyText={legacyText}
-        initialStructuredContent={structuredContentQuery.data}
+        initialStructuredContent={loadedStructuredContent}
         onPublishSuccess={() => {
           structuredContentQuery.refetch();
           if (section?.id) {

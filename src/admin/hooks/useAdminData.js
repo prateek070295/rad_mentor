@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   collection,
   doc,
+  getCountFromServer,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -10,8 +12,17 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
+import {
+  adaptStudyItemContent,
+  computeStatusMap,
+  getStudyItemPath,
+  getStructuredContentPath,
+  hasPublishedStructuredContent,
+} from '../utils/contentStatus';
 
 const SECTIONS_QUERY_KEY = ['admin', 'sections'];
+const EMPTY_DISCOVERED_COUNTS = {};
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 
 const fetchSections = async () => {
   const sectionsRef = collection(db, 'sections');
@@ -83,54 +94,6 @@ const buildNodeIndex = (nodes) => {
   };
 };
 
-const computeStatusMap = (nodes, childrenByTopicId) => {
-  const statusMemo = {};
-  const byTopicId = new Map(nodes.map((node) => [node.topicId || node.id, node]));
-
-  const determineStatus = (topicId) => {
-    if (statusMemo[topicId]) return statusMemo[topicId];
-
-    const node = byTopicId.get(topicId);
-    if (!node) {
-      statusMemo[topicId] = 'grey';
-      return statusMemo[topicId];
-    }
-
-    const children = childrenByTopicId.get(topicId) || [];
-    const hasContent =
-      !!node.mainContent?.ops?.[0]?.insert?.trim() ||
-      !!node.structuredContent?.length ||
-      !!node.contentSections?.length ||
-      node.hasStructuredContent === true ||
-      Number(node.contentSectionsCount ?? 0) > 0;
-
-    if (children.length === 0) {
-      statusMemo[topicId] = hasContent ? 'green' : 'grey';
-      return statusMemo[topicId];
-    }
-
-    const childStatuses = children.map((child) => determineStatus(child.topicId || child.id));
-    const allGreen = childStatuses.every((status) => status === 'green');
-    const anyGreen = childStatuses.some((status) => status === 'green');
-    const anyYellow = childStatuses.some((status) => status === 'yellow');
-
-    if ((allGreen && hasContent) || (allGreen && children.length === 0)) {
-      statusMemo[topicId] = 'green';
-    } else if (anyGreen || anyYellow || hasContent) {
-      statusMemo[topicId] = 'yellow';
-    } else {
-      statusMemo[topicId] = 'grey';
-    }
-    return statusMemo[topicId];
-  };
-
-  nodes.forEach((node) => {
-    determineStatus(node.topicId || node.id);
-  });
-
-  return statusMemo;
-};
-
 const fetchSectionNodes = async ({ sectionId }) => {
   if (!sectionId) return [];
   const nodesRef = collection(db, 'sections', sectionId, 'nodes');
@@ -155,7 +118,7 @@ const fetchSectionNodes = async ({ sectionId }) => {
   });
 };
 
-export const useSectionNodes = (sectionId) => {
+export const useSectionNodes = (sectionId, discoveredCounts = EMPTY_DISCOVERED_COUNTS) => {
   const queryResult = useQuery({
     queryKey: ['admin', 'section-nodes', sectionId],
     queryFn: () => fetchSectionNodes({ sectionId }),
@@ -180,7 +143,7 @@ export const useSectionNodes = (sectionId) => {
     }
 
     const index = buildNodeIndex(nodes);
-    const statusMap = computeStatusMap(nodes, index.childrenByTopicId);
+    const statusMap = computeStatusMap(nodes, index.childrenByTopicId, discoveredCounts);
 
     return {
       nodes,
@@ -188,7 +151,7 @@ export const useSectionNodes = (sectionId) => {
       statusMap,
       index,
     };
-  }, [queryResult.data]);
+  }, [queryResult.data, discoveredCounts]);
 
   return {
     ...queryResult,
@@ -218,6 +181,88 @@ export const useNodeChildren = (sectionId, topicId) =>
     staleTime: 2 * 60 * 1000,
   });
 
+const fetchStructuredContentCounts = async ({ sectionId, nodes }) => {
+  if (!sectionId || !nodes?.length) return {};
+
+  const entries = await Promise.all(
+    nodes.map(async (node) => {
+      if (!node?.id || hasPublishedStructuredContent(node)) {
+        return [node?.id, null];
+      }
+
+      try {
+        const contentSectionsRef = collection(
+          db,
+          'sections',
+          sectionId,
+          'nodes',
+          node.id,
+          'contentSections',
+        );
+        const snapshot = await getCountFromServer(contentSectionsRef);
+        const structuredCount = snapshot.data().count || 0;
+        if (structuredCount > 0) {
+          return [node.id, { structuredCount, legacy: false, source: 'contentSections' }];
+        }
+
+        const studyItemSnap = await getDoc(doc(db, 'study_items', `${sectionId}__${node.id}`));
+        if (!studyItemSnap.exists()) {
+          return [node.id, { structuredCount: 0, legacy: false, source: 'none' }];
+        }
+
+        const adapted = adaptStudyItemContent(studyItemSnap.data() || {});
+        return [
+          node.id,
+          {
+            structuredCount: adapted.structuredContent?.sections?.length || 0,
+            legacy: Boolean(adapted.legacyText),
+            source: `study_items:${adapted.schemaType}`,
+          },
+        ];
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('[Admin content status] contentSections count failed', {
+            title: node.name || node.title,
+            nodeId: node.id,
+            topicId: node.topicId || null,
+            path: getStructuredContentPath(sectionId, node.id),
+            studyItemPath: getStudyItemPath(sectionId, node.id),
+            code: error?.code || null,
+            message: error?.message || String(error),
+          });
+        }
+        return [node.id, null];
+      }
+    }),
+  );
+
+  return entries.reduce((acc, [nodeId, count]) => {
+    if (nodeId && count != null) {
+      acc[nodeId] = count;
+    }
+    return acc;
+  }, {});
+};
+
+export const useStructuredContentCounts = (sectionId, nodes = []) => {
+  const missingMetadataNodes = useMemo(
+    () => nodes.filter((node) => node?.id && !hasPublishedStructuredContent(node)),
+    [nodes],
+  );
+  const ids = useMemo(
+    () => missingMetadataNodes.map((node) => node.id).sort(),
+    [missingMetadataNodes],
+  );
+
+  return useQuery({
+    queryKey: ['admin', 'structured-content-counts', sectionId, ids],
+    queryFn: () => fetchStructuredContentCounts({ sectionId, nodes: missingMetadataNodes }),
+    enabled: !!sectionId && missingMetadataNodes.length > 0,
+    staleTime: 60 * 1000,
+  });
+};
+
 export const useUpdateNodeMetadata = (sectionId) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -244,13 +289,78 @@ export const useUpdateNodeMetadata = (sectionId) => {
 };
 
 const fetchStructuredContent = async ({ organId, topicId }) => {
-  if (!organId || !topicId) return null;
-  const response = await fetch(`/content?organ=${organId}&topicId=${topicId}`);
+  if (!organId || !topicId) {
+    return {
+      structuredContent: null,
+      legacyText: '',
+      source: 'none',
+      diagnostics: {},
+    };
+  }
+
+  const params = new URLSearchParams({ organ: organId, topicId });
+  const endpoint = API_BASE ? `${API_BASE}/content?${params}` : `/content?${params}`;
+  const diagnostics = {
+    endpoint,
+    contentPath: getStructuredContentPath(organId, topicId),
+    studyItemPath: getStudyItemPath(organId, topicId),
+    usedFallback: false,
+  };
+
+  const response = await fetch(endpoint);
   if (!response.ok) {
     throw new Error(`Failed to load structured content (${response.status})`);
   }
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(
+      `Structured content endpoint returned ${contentType || 'unknown content type'}; check REACT_APP_API_BASE_URL.`,
+    );
+  }
   const payload = await response.json();
-  return payload?.structuredContent ?? null;
+  const structuredContent = payload?.structuredContent ?? null;
+  if (structuredContent?.sections?.length) {
+    return {
+      structuredContent,
+      legacyText: '',
+      source: 'contentSections',
+      diagnostics: {
+        ...diagnostics,
+        sectionCount: structuredContent.sections.length,
+        objectiveCount: structuredContent.objectives?.length || 0,
+        keyPointCount: structuredContent.key_points?.length || 0,
+      },
+    };
+  }
+
+  const studyItemSnap = await getDoc(doc(db, 'study_items', `${organId}__${topicId}`));
+  if (studyItemSnap.exists()) {
+    const studyItem = studyItemSnap.data() || {};
+    const adapted = adaptStudyItemContent(studyItem);
+    if (adapted.structuredContent?.sections?.length || adapted.legacyText) {
+      return {
+        structuredContent: adapted.structuredContent,
+        legacyText: adapted.legacyText,
+        source: `study_items:${adapted.schemaType}`,
+        diagnostics: {
+          ...diagnostics,
+          usedFallback: true,
+          studyItemFieldNames: Object.keys(studyItem).sort(),
+          sectionCount: adapted.structuredContent?.sections?.length || 0,
+          objectiveCount: adapted.structuredContent?.objectives?.length || 0,
+          keyPointCount: adapted.structuredContent?.key_points?.length || 0,
+          legacyTextLength: adapted.legacyText.length,
+        },
+      };
+    }
+  }
+
+  return {
+    structuredContent: null,
+    legacyText: '',
+    source: 'none',
+    diagnostics,
+  };
 };
 
 export const useStructuredContent = ({ organId, topicId, enabled = true }) =>

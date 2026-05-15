@@ -1,5 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useAdminPanel } from '../context/AdminPanelContext';
+import { useStructuredContentCounts } from '../hooks/useAdminData';
+import {
+  computeStatusMap,
+  getDiscoveredStructuredCount,
+  getStructuredContentPath,
+  hasLegacyContent,
+  hasPublishedStructuredContent,
+} from '../utils/contentStatus';
+
+const EMPTY_DISCOVERED_COUNTS = {};
 
 const statusColorClass = (status) => {
   switch ((status || '').toLowerCase()) {
@@ -37,8 +47,6 @@ const NavigationPanel = ({ onCollapse }) => {
       },
     [sectionNodesQuery.index],
   );
-  const statusMap = sectionNodesQuery.statusMap ?? {};
-
   const activeChapter = selectedChapterId ? index.byDocId?.get(selectedChapterId) : null;
   const activeTopic = selectedTopicId ? index.byDocId?.get(selectedTopicId) : null;
 
@@ -55,6 +63,61 @@ const NavigationPanel = ({ onCollapse }) => {
     const key = activeTopic.topicId || activeTopic.id;
     return index.childrenByTopicId?.get(key) ?? [];
   }, [activeTopic, index]);
+
+  const visibleItems = !activeChapter ? chapters : !activeTopic ? topics : subtopics;
+  const structuredCountsQuery = useStructuredContentCounts(activeSectionId, visibleItems);
+  const discoveredCounts = structuredCountsQuery.data ?? EMPTY_DISCOVERED_COUNTS;
+
+  const statusMap = useMemo(
+    () =>
+      computeStatusMap(
+        sectionNodesQuery.nodes ?? [],
+        index.childrenByTopicId ?? new Map(),
+        discoveredCounts,
+      ),
+    [sectionNodesQuery.nodes, index.childrenByTopicId, discoveredCounts],
+  );
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || !activeSectionId || !visibleItems.length) return;
+    if (structuredCountsQuery.isLoading || structuredCountsQuery.isFetching) return;
+
+    // eslint-disable-next-line no-console
+    console.info('[Admin nav content status]', {
+      sectionId: activeSectionId,
+      level: !activeChapter ? 'chapters' : !activeTopic ? 'topics' : 'subtopics',
+      items: visibleItems.map((item) => {
+        const topicKey = item.topicId || item.id;
+        const metadataExists = hasPublishedStructuredContent(item);
+        const discoveredCount = getDiscoveredStructuredCount(item, discoveredCounts);
+        const computedStatus = statusMap[topicKey] || 'grey';
+        return {
+          title: item.name || item.title,
+          nodeId: item.id,
+          topicId: item.topicId || null,
+          parentId: item.parentId || null,
+          path: `sections/${activeSectionId}/nodes/${item.id}`,
+          contentSectionsPath: getStructuredContentPath(activeSectionId, item.id),
+          hasStructuredContent: item.hasStructuredContent ?? null,
+          contentSectionsCount: item.contentSectionsCount ?? null,
+          metadataExists,
+          discoveredCount,
+          legacyExists: hasLegacyContent(item),
+          computedStatus,
+          metadataDisagreesWithDiscoveredContent: !metadataExists && discoveredCount > 0,
+        };
+      }),
+    });
+  }, [
+    activeChapter,
+    activeSectionId,
+    activeTopic,
+    discoveredCounts,
+    statusMap,
+    structuredCountsQuery.isFetching,
+    structuredCountsQuery.isLoading,
+    visibleItems,
+  ]);
 
   return (
     <aside className="flex w-[320px] flex-shrink-0 flex-col border-r border-indigo-100 bg-white shadow-lg shadow-indigo-100/40">
