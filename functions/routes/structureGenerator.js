@@ -395,17 +395,6 @@ const tokenize = (text) =>
     .split(/\s+/)
     .filter((token) => token && !STOP_WORDS.has(token));
 
-const scoreOptionAgainstRationale = (option, rationaleTokens) => {
-  if (!option) return 0;
-  const optionTokens = tokenize(option);
-  if (!optionTokens.length) return 0;
-  const rationaleSet = new Set(rationaleTokens);
-  return optionTokens.reduce(
-    (score, token) => score + (rationaleSet.has(token) ? 1 : 0),
-    0,
-  );
-};
-
 const sanitizeStructuredContent = (content) => {
   const debugLogs = [];
   if (!content || typeof content !== "object") {
@@ -633,37 +622,23 @@ const sanitizeStructuredContent = (content) => {
 
       const aiIndex = Number.isInteger(sanitized.correct_index)
         ? sanitized.correct_index
-        : 0;
-      const rationaleTokens = tokenize(sanitized.rationale_md || sanitized.question_md || "");
-
-      let bestIndex = aiIndex;
-      if (sanitized.options.length) {
-        const scores = sanitized.options.map((option) =>
-          scoreOptionAgainstRationale(option, rationaleTokens),
-        );
-        let bestScore =
-          aiIndex >= 0 && aiIndex < sanitized.options.length ? scores[aiIndex] ?? -1 : -1;
-        scores.forEach((score, idx) => {
-          if (score > bestScore) {
-            bestScore = score;
-            bestIndex = idx;
-          }
-        });
-        if (bestIndex < 0 || bestIndex >= sanitized.options.length) {
-          bestIndex = 0;
-        }
-      } else {
-        bestIndex = 0;
-      }
+        : Number.isInteger(checkpoint?.correct_index)
+          ? checkpoint.correct_index
+          : 0;
+      const boundedIndex =
+        sanitized.options.length > 0
+          ? Math.min(Math.max(aiIndex, 0), sanitized.options.length - 1)
+          : 0;
 
       debugLogs.push({
         sectionOrder: nextSection.order ?? sectionIndex + 1,
         checkpointIndex: cpIndex,
         aiCorrectIndex: aiIndex,
-        selectedIndex: bestIndex,
+        selectedIndex: boundedIndex,
+        rationale: "trusted-ai-index",
       });
 
-      sanitized.correct_index = bestIndex;
+      sanitized.correct_index = boundedIndex;
       return sanitized;
     });
 

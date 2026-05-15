@@ -33,3 +33,4 @@ SetupWizar copy.jsx
 # Firebase / Google Cloud
 *.log
 firebase-debug.log
+.firebase/

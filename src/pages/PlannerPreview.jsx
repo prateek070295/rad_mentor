@@ -1,6 +1,5 @@
 // src/pages/PlannerPreview.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { getAuth } from "firebase/auth";
 import {
   collection,
   getDocs,
@@ -10,7 +9,7 @@ import {
   writeBatch,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
 import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
 
 /* ======================= helpers ======================= */
@@ -280,7 +279,6 @@ function SectionOrderEditor({ prefs, setPrefs, allSections, onApply }) {
 /* ======================= component ======================= */
 export default function PlannerPreview() {
   const { flags, loading: flagsLoading } = useSchedulerFlags();
-  const auth = getAuth();
 
   // Inputs
   const [startDate, setStartDate] = useState(todayISO());

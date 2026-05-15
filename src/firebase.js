@@ -19,10 +19,73 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+const maskApiKey = (apiKey = "") => {
+  if (!apiKey) return "<missing>";
+  if (apiKey.length <= 12) return "<too-short>";
+  return `${apiKey.slice(0, 8)}...${apiKey.slice(-6)}`;
+};
 
-export const db = getFirestore(app);
+const logFirebaseConfigDiagnostics = (config) => {
+  if (process.env.NODE_ENV === "production") return;
+
+  const requiredFields = [
+    "apiKey",
+    "authDomain",
+    "projectId",
+    "storageBucket",
+    "messagingSenderId",
+    "appId",
+  ];
+  const missingFields = requiredFields.filter((field) => !config[field]);
+  const warnings = [];
+
+  if (missingFields.length) {
+    warnings.push(`missing required field(s): ${missingFields.join(", ")}`);
+  }
+
+  if (
+    config.projectId &&
+    config.authDomain &&
+    !config.authDomain.startsWith(`${config.projectId}.`)
+  ) {
+    warnings.push("authDomain does not match projectId");
+  }
+
+  if (
+    config.projectId &&
+    config.storageBucket &&
+    !config.storageBucket.startsWith(`${config.projectId}.`)
+  ) {
+    warnings.push("storageBucket does not match projectId");
+  }
+
+  if (
+    config.messagingSenderId &&
+    config.appId &&
+    !config.appId.startsWith(`1:${config.messagingSenderId}:`)
+  ) {
+    warnings.push("appId does not match messagingSenderId");
+  }
+
+  // eslint-disable-next-line no-console
+  console.info("[Firebase config]", {
+    projectId: config.projectId || "<missing>",
+    authDomain: config.authDomain || "<missing>",
+    apiKey: maskApiKey(config.apiKey),
+  });
+
+  if (warnings.length) {
+    // eslint-disable-next-line no-console
+    console.warn("[Firebase config warnings]", warnings);
+  }
+};
+
+logFirebaseConfigDiagnostics(firebaseConfig);
+
+// Initialize Firebase
+export const firebaseApp = initializeApp(firebaseConfig);
+
+export const db = getFirestore(firebaseApp);
 
 const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
 
@@ -53,7 +116,7 @@ let authInstance;
 if (isBrowser) {
   clearPersistedAuthState();
   try {
-    authInstance = initializeAuth(app, {
+    authInstance = initializeAuth(firebaseApp, {
       persistence: browserSessionPersistence,
     });
   } catch (error) {
@@ -61,13 +124,13 @@ if (isBrowser) {
       // eslint-disable-next-line no-console
       console.warn("initializeAuth failed, falling back to default persistence", error);
     }
-    authInstance = getAuth(app);
+    authInstance = getAuth(firebaseApp);
   }
   if (window.location.hostname === "localhost") {
     window.auth = authInstance;
   }
 } else {
-  authInstance = getAuth(app);
+  authInstance = getAuth(firebaseApp);
 }
 
 export const auth = authInstance;

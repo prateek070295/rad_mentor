@@ -1,6 +1,7 @@
 // src/components/PlanTabV2.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
 
 // Optional flags hook (kept because it exists in your project)
 import { useSchedulerFlags } from "../hooks/useSchedulerFlags";
@@ -162,7 +163,6 @@ export default function PlanTabV2() {
 
   // auth -> uid
   useEffect(() => {
-    const auth = getAuth();
     const off = onAuthStateChanged(auth, (u) => {
       setUid(u?.uid || "");
     });
